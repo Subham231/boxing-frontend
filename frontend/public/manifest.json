@@ -1,0 +1,11 @@
+{
+    "name": "SPARAI - AI Combat & Boxing Coach",
+    "short_name": "SPARAI",
+    "description": "High-performance AI boxing coach, reflex enhancer, and weekly training roadmap.",
+    "start_url": "/dashboard",
+    "display": "standalone",
+    "background_color": "#000000",
+    "theme_color": "#000000",
+    "orientation": "portrait",
+    "icons": []
+}

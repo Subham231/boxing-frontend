@@ -1,0 +1,91 @@
+# Dependencies
+node_modules/
+/pnp
+.pnp.js
+
+# Testing
+/coverage
+
+# Production
+/build
+
+# Misc
+.DS_Store
+*.pem
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local env files
+.env*.local
+.env
+.env.example
+
+# Logs
+logs
+*.log
+
+# Runtime data
+pids
+*.pid
+*.seed
+
+# Instrumented libs
+lib-cov
+
+# Coverage directory used by tools like istanbul
+ coverage
+
+# nyc test coverage
+.nyc_output
+
+# Grunt intermediate storage (https://gruntjs.com/creating-plugins#task-configuration)
+.grunt
+
+# Bower dependency directory (https://bower.io/)
+bower_components
+
+# node-waf configuration
+.lock-wscript
+
+# Compiled binary addons (https://nodejs.org/api/addons.html)
+build/Release
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# TypeScript v1 declaration files
+typings/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Optional stylelint cache
+.stylelintcache
+
+# Microbundle cache
+.rpt2_cache
+.rts2_cache
+.tsbuildinfo
+
+# Package lock files (keep these in repos, but ignore local changes)
+# NOTE: Uncomment the following line if you prefer NOT to commit package locks
+# package-lock.json
+# yarn.lock
+
+# Environment variables
+.env
+.env.*
+
+# Build outputs
+dist/
+build/
