@@ -21,7 +21,7 @@ const GearCheck: React.FC = () => {
     return (
         <div className="flex flex-col min-h-[85vh] justify-between py-2">
             <header className="text-left mb-6">
-                <div className="text-[10px] font-black tracking-[4px] text-primary mb-3 uppercase">ONBOARDING 06/10</div>
+                <div className="text-[10px] font-black tracking-[4px] text-primary mb-3 uppercase">ONBOARDING 06/14</div>
                 <h1 className="text-4xl font-bold leading-tight uppercase">
                     Battle <br /> <span className="text-primary italic font-black">Gear Check</span>
                 </h1>
@@ -39,11 +39,10 @@ const GearCheck: React.FC = () => {
                                 key={item}
                                 type="button"
                                 onClick={() => toggleEquipment(item)}
-                                className={`px-6 py-3 rounded-full text-[10px] font-black uppercase border transition-all ${
-                                    selectedEquipment.includes(item)
+                                className={`px-6 py-3 rounded-full text-[10px] font-black uppercase border transition-all ${selectedEquipment.includes(item)
                                         ? 'bg-primary text-black border-primary shadow-[0_0_15px_rgba(var(--primary-rgb),0.3)]'
                                         : 'bg-white/5 text-white/40 border-white/10'
-                                }`}
+                                    }`}
                             >
                                 {item}
                             </button>

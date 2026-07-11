@@ -3,6 +3,11 @@ export interface OnboardingConstraints {
   injuries?: string;
 }
 
+export interface FitnessBaseline {
+  pushupMax?: string; // '<15' | '15-30' | '30-50' | '50+'
+  boxingExperience?: string; // 'Novice' | 'Intermediate' | 'Contender'
+}
+
 export interface OnboardingData {
   ringName: string;
   phone: string;
@@ -20,6 +25,9 @@ export interface OnboardingData {
   trigger: string;
   intensity: number;
   frequency: number;
+  daysPerWeek?: number;
+  combatFocus?: string;
+  fitnessBaseline?: FitnessBaseline;
 }
 
 export interface Drill {

@@ -15,6 +15,9 @@ import FightingStance from './components/FightingStance';
 import CoreDriver from './components/CoreDriver';
 import Intensity from './components/Intensity';
 import Frequency from './components/Frequency';
+import TrainingFrequency from './components/TrainingFrequency';
+import CombatFocus from './components/CombatFocus';
+import FatigueThreshold from './components/FatigueThreshold';
 import PromiseStep from './components/Promise';
 
 const OnboardingFlow: React.FC = () => {
@@ -31,6 +34,9 @@ const OnboardingFlow: React.FC = () => {
         <CoreDriver key="driver" />,
         <Intensity key="intensity" />,
         <Frequency key="frequency" />,
+        <TrainingFrequency key="trainingfrequency" />,
+        <CombatFocus key="combatfocus" />,
+        <FatigueThreshold key="fatiguethreshold" />,
         <PromiseStep key="promise" />,
     ];
 
@@ -62,9 +68,8 @@ const OnboardingFlow: React.FC = () => {
                 {Array.from({ length: totalSteps }).map((_, i) => (
                     <div
                         key={i}
-                        className={`h-[2px] flex-1 transition-all duration-500 ${
-                            i + 1 <= Math.min(currentStep, totalSteps) ? 'bg-primary' : 'bg-white/10'
-                        }`}
+                        className={`h-[2px] flex-1 transition-all duration-500 ${i + 1 <= Math.min(currentStep, totalSteps) ? 'bg-primary' : 'bg-white/10'
+                            }`}
                     />
                 ))}
             </div>

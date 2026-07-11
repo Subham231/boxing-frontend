@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import type { FitnessBaseline } from '@/types';
 
 export interface OnboardingConstraints {
     equipment?: string[];
@@ -24,6 +25,9 @@ export interface OnboardingData {
     trigger: string;
     intensity: number;
     frequency: number;
+    daysPerWeek: number;
+    combatFocus: string;
+    fitnessBaseline: FitnessBaseline;
 }
 
 interface OnboardingContextType {
@@ -55,6 +59,9 @@ const defaultData: OnboardingData = {
     trigger: 'Pro Ambitions',
     intensity: 3,
     frequency: 3,
+    daysPerWeek: 3,
+    combatFocus: '',
+    fitnessBaseline: { pushupMax: '', boxingExperience: '' },
 };
 
 function serializeOnboarding(data: OnboardingData): Record<string, unknown> {
@@ -80,6 +87,9 @@ function serializeOnboarding(data: OnboardingData): Record<string, unknown> {
         trigger: data.trigger,
         intensity: data.intensity,
         frequency: data.frequency,
+        daysPerWeek: data.daysPerWeek,
+        combatFocus: data.combatFocus,
+        fitnessBaseline: data.fitnessBaseline,
         promise: data.promiseWord,
     };
 }
@@ -112,6 +122,9 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                     trigger: stored.trigger || defaultData.trigger,
                     intensity: stored.intensity ?? defaultData.intensity,
                     frequency: stored.frequency ?? defaultData.frequency,
+                    daysPerWeek: stored.daysPerWeek ?? defaultData.daysPerWeek,
+                    combatFocus: stored.combatFocus || defaultData.combatFocus,
+                    fitnessBaseline: stored.fitnessBaseline || defaultData.fitnessBaseline,
                     hasCompletedOnboarding: !!stored.onboarding_completed,
                 });
             }
@@ -122,7 +135,7 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         }
     }, []);
 
-    const totalSteps = 11;
+    const totalSteps = 14;
 
     const updateData = (newData: Partial<OnboardingData>) => {
         setData(prev => {

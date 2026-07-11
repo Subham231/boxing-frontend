@@ -16,7 +16,7 @@ const CoreDriver: React.FC = () => {
     return (
         <div className="flex flex-col min-h-[85vh] justify-between py-2">
             <header className="text-left mb-6">
-                <div className="text-[10px] font-black tracking-[4px] text-primary mb-3 uppercase">ONBOARDING 08/10</div>
+                <div className="text-[10px] font-black tracking-[4px] text-primary mb-3 uppercase">ONBOARDING 08/14</div>
                 <h1 className="text-4xl font-bold leading-tight uppercase">
                     What is your <br /> <span className="text-primary italic font-black">Core Driver?</span>
                 </h1>
@@ -31,23 +31,20 @@ const CoreDriver: React.FC = () => {
                         key={driver.id}
                         type="button"
                         onClick={() => updateData({ trigger: driver.id })}
-                        className={`flex flex-col items-center gap-3 p-8 rounded-2xl border transition-all duration-300 ${
-                            selectedTrigger === driver.id
+                        className={`flex flex-col items-center gap-3 p-8 rounded-2xl border transition-all duration-300 ${selectedTrigger === driver.id
                                 ? 'border-primary bg-primary/5 shadow-[0_0_20px_rgba(var(--primary-rgb),0.1)]'
                                 : 'border-white/5 bg-white/[0.02]'
-                        }`}
+                            }`}
                     >
                         <div
-                            className={`transition-all ${
-                                selectedTrigger === driver.id ? 'text-primary scale-125' : 'text-primary/50'
-                            }`}
+                            className={`transition-all ${selectedTrigger === driver.id ? 'text-primary scale-125' : 'text-primary/50'
+                                }`}
                         >
                             {driver.icon}
                         </div>
                         <span
-                            className={`text-[10px] font-black tracking-widest ${
-                                selectedTrigger === driver.id ? 'text-primary' : 'text-white/40'
-                            }`}
+                            className={`text-[10px] font-black tracking-widest ${selectedTrigger === driver.id ? 'text-primary' : 'text-white/40'
+                                }`}
                         >
                             {driver.label}
                         </span>

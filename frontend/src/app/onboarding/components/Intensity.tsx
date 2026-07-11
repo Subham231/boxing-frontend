@@ -15,7 +15,7 @@ const Intensity: React.FC = () => {
     return (
         <div className="flex flex-col min-h-[85vh] justify-between py-2">
             <header className="text-left mb-6">
-                <div className="text-[10px] font-black tracking-[4px] text-primary mb-3 uppercase">ONBOARDING 09/10</div>
+                <div className="text-[10px] font-black tracking-[4px] text-primary mb-3 uppercase">ONBOARDING 09/14</div>
                 <h1 className="text-4xl font-bold leading-tight uppercase">How deep are <br /> <span className="text-primary italic font-black">We going today?</span></h1>
                 <p className="text-text-muted mt-4 text-sm leading-relaxed pr-10">
                     Configure engine output level for your initial sessions.
@@ -28,8 +28,8 @@ const Intensity: React.FC = () => {
                         key={opt.id}
                         onClick={() => updateData({ intensity: opt.id } as any)}
                         className={`p-6 rounded-3xl border transition-all duration-300 text-center flex flex-col items-center justify-center ${selectedLvl === opt.id
-                                ? 'border-primary bg-primary/5 scale-[1.02] shadow-[0_0_30px_rgba(var(--primary-rgb),0.2)]'
-                                : 'border-white/5 opacity-60'
+                            ? 'border-primary bg-primary/5 scale-[1.02] shadow-[0_0_30px_rgba(var(--primary-rgb),0.2)]'
+                            : 'border-white/5 opacity-60'
                             }`}
                     >
                         <span className={`text-[10px] font-black tracking-widest mb-1 ${selectedLvl === opt.id ? 'text-primary' : 'text-white/40'}`}>

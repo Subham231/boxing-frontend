@@ -19,7 +19,7 @@ const Dominance: React.FC = () => {
             <div>
                 <header className="flex justify-between items-center mb-6">
                     <div className="text-[10px] font-black tracking-[3px] text-primary uppercase">Strategy Deployed</div>
-                    <div className="text-[10px] font-bold tracking-[2px] text-white/40 uppercase">Step 03 / 10</div>
+                    <div className="text-[10px] font-bold tracking-[2px] text-white/40 uppercase">Step 03 / 14</div>
                 </header>
 
                 <section className="text-left mb-8">
@@ -38,11 +38,10 @@ const Dominance: React.FC = () => {
                         key={goal.id}
                         type="button"
                         onClick={() => updateData({ primary_goal: goal.id, goals: [goal.id] })}
-                        className={`relative flex flex-col items-center justify-center h-44 rounded-[30px] border transition-all duration-300 ${
-                            selectedGoal === goal.id
+                        className={`relative flex flex-col items-center justify-center h-44 rounded-[30px] border transition-all duration-300 ${selectedGoal === goal.id
                                 ? 'border-primary bg-white/5 opacity-100 scale-100 shadow-[0_0_40px_rgba(var(--primary-rgb),0.2)]'
                                 : 'border-white/5 bg-white/[0.02] opacity-60 scale-95'
-                        }`}
+                            }`}
                     >
                         {goal.recommended && (
                             <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-primary text-[8px] font-black px-3 py-1 rounded-full text-black uppercase tracking-wider">
@@ -50,18 +49,16 @@ const Dominance: React.FC = () => {
                             </div>
                         )}
                         <div
-                            className={`w-12 h-12 rounded-full border flex items-center justify-center mb-4 transition-all ${
-                                selectedGoal === goal.id
+                            className={`w-12 h-12 rounded-full border flex items-center justify-center mb-4 transition-all ${selectedGoal === goal.id
                                     ? 'border-primary bg-primary/10 shadow-[0_0_20px_rgba(var(--primary-rgb),0.3)] w-14 h-14'
                                     : 'border-white/5 bg-white/5'
-                            }`}
+                                }`}
                         >
                             {goal.icon}
                         </div>
                         <span
-                            className={`text-[10px] font-black italic tracking-widest uppercase ${
-                                selectedGoal === goal.id ? 'text-primary' : 'text-white'
-                            }`}
+                            className={`text-[10px] font-black italic tracking-widest uppercase ${selectedGoal === goal.id ? 'text-primary' : 'text-white'
+                                }`}
                         >
                             {goal.label}
                         </span>

@@ -59,7 +59,7 @@ const Welcome: React.FC = () => {
     return (
         <div className="flex flex-col min-h-[80vh] justify-between py-4">
             <header className="text-left mb-8">
-                <div className="text-[10px] font-black tracking-[4px] text-primary mb-3 uppercase">ONBOARDING 01/10</div>
+                <div className="text-[10px] font-black tracking-[4px] text-primary mb-3 uppercase">ONBOARDING 01/14</div>
                 <h1 className="text-5xl font-bold leading-tight">
                     Fighter <br /> <span className="text-primary italic font-black">Identity</span>
                 </h1>

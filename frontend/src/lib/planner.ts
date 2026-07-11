@@ -1,5 +1,6 @@
 import { API_BASE_URL } from './api';
 import type {
+    FitnessBaseline,
     GeminiGenerateContentResponse,
     GeminiTextPart,
     PlannerDay,
@@ -19,6 +20,90 @@ export const DAY_TYPES = [
     { key: 'push', label: 'PUSH DAY' },
     { key: 'recovery', label: 'ACTIVE RECOVERY' },
 ];
+
+// -----------------------------------------------------------------------
+// Boxing split injection — maps the onboarding combatFocus + fitnessBaseline
+// into a real, dynamically-scaled boxing workload string for every day.
+// This is pure client-side math, no external calls.
+// -----------------------------------------------------------------------
+const PUSHUP_MULTIPLIER: Record<string, number> = {
+    '<15': 0.7,
+    '15-30': 0.9,
+    '30-50': 1.1,
+    '50+': 1.3,
+};
+
+const EXPERIENCE_MULTIPLIER: Record<string, number> = {
+    Novice: 0.85,
+    Intermediate: 1.0,
+    Contender: 1.2,
+};
+
+export function getPrescriptionMultiplier(fitnessBaseline?: FitnessBaseline): number {
+    const p = PUSHUP_MULTIPLIER[fitnessBaseline?.pushupMax || '15-30'] ?? 1;
+    const e = EXPERIENCE_MULTIPLIER[fitnessBaseline?.boxingExperience || 'Novice'] ?? 1;
+    return (p + e) / 2;
+}
+
+function roundToStep(value: number, step: number): number {
+    return Math.max(step, Math.round(value / step) * step);
+}
+
+export function buildBoxingWorkload(
+    combatFocus: string | undefined,
+    fitnessBaseline: FitnessBaseline | undefined,
+    dayIndex: number
+): string {
+    const mult = getPrescriptionMultiplier(fitnessBaseline);
+    const focus = (combatFocus || 'stamina').toLowerCase();
+    const variant = dayIndex % 2;
+
+    switch (focus) {
+        case 'endurance': {
+            const reps = roundToStep(200 * mult, 25);
+            const rounds = Math.max(2, Math.round(4 * mult));
+            return variant === 0
+                ? `${reps}-Rep Pace-Track Straight Jabs`
+                : `${rounds} Rounds Continuous Hand-Speed Shadow-Boxing`;
+        }
+        case 'explosive': {
+            const reps = roundToStep(100 * mult, 10);
+            const rounds = Math.max(2, Math.round(3 * mult));
+            return variant === 0
+                ? `${reps} Max-Torque Power Crosses (Full Rotation Focus)`
+                : `${rounds} Rounds Explosive Lead-Hook Burst`;
+        }
+        case 'conditioning': {
+            const rounds = Math.max(3, Math.round(5 * mult));
+            const seconds = roundToStep(30 * mult, 5);
+            return variant === 0
+                ? `${rounds} Rounds High-Intensity Anaerobic Combo Bursts`
+                : `${seconds}s Max-Output Punch Sprints w/ Active Recovery`;
+        }
+        case 'stamina':
+        default: {
+            const minutes = Math.max(1.5, Math.round(3 * mult * 2) / 2);
+            const rounds = Math.max(2, Math.round(4 * mult));
+            return variant === 0
+                ? `${minutes}-Minute Non-Stop Combination Blitz Cycles`
+                : `${rounds} Rounds Level-Change Heavy Bodyshot Intervals`;
+        }
+    }
+}
+
+// Picks a day-type rotation of the requested length. Full weeks (7) use the
+// existing DAY_TYPES order as-is; shorter weeks cycle through the five
+// unique movement patterns so no single pattern gets skipped unfairly.
+function selectDayPlan(daysPerWeek?: number) {
+    const n = Math.min(7, Math.max(1, Math.round(daysPerWeek || 7)));
+    if (n >= 7) return DAY_TYPES;
+    const uniquePool = DAY_TYPES.slice(0, 5); // push, pull, leg, endurance, strength
+    const out: typeof DAY_TYPES = [];
+    for (let i = 0; i < n; i++) {
+        out.push(uniquePool[i % uniquePool.length]);
+    }
+    return out;
+}
 
 export const EXERCISES: Record<string, string[]> = {
     push: [
@@ -156,15 +241,31 @@ export function pickExercises(dayKey: string, blockIndex: number, count: number)
     return out;
 }
 
-export function buildProtocolsForDay(dayKey: string, dayLabel: string, preferredTime: string): PlannerProtocolBlock[] {
-    return PROTOCOL_BLOCKS.map((block, i) => ({
-        time: addMinutes(preferredTime, block.offsetMin),
-        duration: block.duration,
-        title: `${dayLabel}: ${block.title}`,
-        impact: dayLabel,
-        day_type: dayLabel,
-        exercises: pickExercises(dayKey, i, EXERCISES_PER_BLOCK),
-    }));
+export function buildProtocolsForDay(
+    dayKey: string,
+    dayLabel: string,
+    preferredTime: string,
+    combatFocus?: string,
+    fitnessBaseline?: FitnessBaseline,
+    dayIndex: number = 0
+): PlannerProtocolBlock[] {
+    return PROTOCOL_BLOCKS.map((block, i) => {
+        const exercises = pickExercises(dayKey, i, EXERCISES_PER_BLOCK);
+        // Every day gets one core bodyweight pattern (already in exercises[0])
+        // plus one contextual boxing workload mapped to the user's combat
+        // focus, injected into the Primary Block.
+        if (block.title === 'PRIMARY BLOCK' && combatFocus) {
+            exercises[exercises.length - 1] = buildBoxingWorkload(combatFocus, fitnessBaseline, dayIndex);
+        }
+        return {
+            time: addMinutes(preferredTime, block.offsetMin),
+            duration: block.duration,
+            title: `${dayLabel}: ${block.title}`,
+            impact: dayLabel,
+            day_type: dayLabel,
+            exercises,
+        };
+    });
 }
 
 export function recoveryForDay(dayKey: string): string {
@@ -182,23 +283,27 @@ export function recoveryForDay(dayKey: string): string {
 export function buildWeeklyPlan(userData: PlannerUserData): WeeklyPlan {
     const start = new Date();
     const preferred = getPreferredTime(userData);
+    const combatFocus = userData?.combatFocus;
+    const fitnessBaseline = userData?.fitnessBaseline;
+    const dayPlan = selectDayPlan(userData?.daysPerWeek ?? userData?.frequency);
+
     const end = new Date(start);
-    end.setDate(start.getDate() + 6);
+    end.setDate(start.getDate() + Math.max(0, dayPlan.length - 1));
 
     const week_range = `${start.toLocaleString('en-US', { month: 'short' }).toUpperCase()} ${start.getDate()} - ${end.getDate()}`;
 
-    const days = DAY_TYPES.map((dt, i) => {
+    const days = dayPlan.map((dt, i) => {
         const d = new Date(start);
         d.setDate(start.getDate() + i);
         const intensity =
             dt.key === 'recovery' ? 35 : 55 + (i % 4) * 8 + (dt.key === 'strength' ? 10 : 0);
 
         return {
-            day_name: DAY_NAMES[i],
+            day_name: DAY_NAMES[i % DAY_NAMES.length],
             date: String(d.getDate()),
             day_type: dt.label,
             intensity: Math.min(intensity, 98),
-            protocol: buildProtocolsForDay(dt.key, dt.label, preferred),
+            protocol: buildProtocolsForDay(dt.key, dt.label, preferred, combatFocus, fitnessBaseline, i),
             recovery: recoveryForDay(dt.key),
         };
     });
@@ -220,9 +325,12 @@ export function buildWeeklyPlan(userData: PlannerUserData): WeeklyPlan {
 }
 
 export function normalizePlan(plan: Partial<WeeklyPlan> | null | undefined, userData: PlannerUserData): WeeklyPlan {
-    const local = buildWeeklyPlan(userData);
+    // This fallback exists purely to pad/reconcile a 7-day AI-generated plan,
+    // so it always needs 7 days regardless of the user's own daysPerWeek
+    // preference (which only governs the direct local-engine path below).
+    const local = buildWeeklyPlan({ ...userData, daysPerWeek: 7 });
     if (!plan || !Array.isArray(plan.days) || plan.days.length < 7) {
-        return local;
+        return buildWeeklyPlan(userData);
     }
 
     const normalized = {
@@ -404,12 +512,12 @@ export async function generatePlanViaGeminiDirect(apiKey: string, userData: Plan
 
 export async function fetchPlan(userData: PlannerUserData): Promise<WeeklyPlan> {
     const backendUrl = `${API_BASE_URL}/api/generate-plan`;
-    
+
     try {
         console.log('[Planner] Requesting plan from Gemini via backend:', backendUrl);
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 30000);
-        
+
         const requestBody = {
             experience: userData.experience_level || userData.experienceLevel || 'Novice',
             focus: userData.primary_goal || userData.primaryGoal || 'All-Rounder',
@@ -422,14 +530,14 @@ export async function fetchPlan(userData: PlannerUserData): Promise<WeeklyPlan> 
                 height: userData.height || 180
             }
         };
-        
+
         const response = await fetch(backendUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestBody),
             signal: controller.signal
         });
-        
+
         clearTimeout(timeout);
 
         if (response.status === 429) {
