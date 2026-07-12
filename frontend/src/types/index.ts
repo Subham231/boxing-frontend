@@ -40,6 +40,7 @@ export interface Drill {
   sets?: number;
   isPlanner?: boolean;
   impact?: string;
+  videoUrl?: string;
 }
 
 export interface Workout {

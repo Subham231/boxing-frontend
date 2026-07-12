@@ -3,18 +3,24 @@
 import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Play, 
-  Pause, 
-  Check, 
-  Heart, 
-  Flame, 
-  Mic, 
-  Target
+import {
+  Play,
+  Pause,
+  Check,
+  Heart,
+  Flame,
+  Mic,
+  Target,
+  Maximize2,
+  X,
+  Plus,
+  Minus
 } from 'lucide-react';
 import { getDailyWorkout } from '@/lib/workout-data';
 import { getProtocolBlock, loadCachedDrills, markDrillComplete, markProtocolFullyComplete } from '@/lib/protocol-session';
 import type { ProtocolSessionDrill, Workout } from '@/types';
+import { NeonButton } from '@/components/ui/NeonButton';
+import { ExerciseVisualGuide } from '@/components/ui/ExerciseVisualGuide';
 
 interface SpeechRecognitionLike {
   continuous: boolean;
@@ -45,28 +51,34 @@ interface SessionWorkout extends Omit<Workout, 'drills' | 'focus'> {
 function SessionTimerContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  
+
   const drillIndex = parseInt(searchParams.get('index') || '0', 10);
   const source = searchParams.get('source') || 'daily';
   const dayIdx = searchParams.get('day');
   const pIdx = searchParams.get('p');
   const autostart = searchParams.get('autostart') === '1';
-  
+
   const isProtocol = source === 'protocol' && dayIdx !== null && pIdx !== null;
 
   const [workout, setWorkout] = useState<SessionWorkout | null>(null);
   const [currentDrill, setCurrentDrill] = useState<ProtocolSessionDrill | null>(null);
-  
+
   // Game loops
   const [phase, setPhase] = useState<'idle' | 'prep' | 'active' | 'rest'>('idle');
   const [timeLeft, setTimeLeft] = useState(0);
   const [totalTime, setTotalTime] = useState(60);
   const [isPaused, setIsPaused] = useState(false);
-  
+
   // Simulated stats
   const [bpm, setBpm] = useState(90);
   const [calories, setCalories] = useState(0);
-  
+
+  // Manual rep counter for reps-type drills
+  const [repsCompleted, setRepsCompleted] = useState(0);
+
+  // Fullscreen reference guide modal
+  const [isGuideExpanded, setIsGuideExpanded] = useState(false);
+
   // Voice Telemetry
   const [voiceActive, setVoiceActive] = useState(false);
   const [voiceSupported, setVoiceSupported] = useState(false);
@@ -111,6 +123,7 @@ function SessionTimerContent() {
     setWorkout(sessionWorkout);
     const drill = sessionWorkout.drills[drillIndex];
     setCurrentDrill(drill);
+    setRepsCompleted(0);
 
     if (drill.type === 'timer') {
       const dur = drill.duration || 60;
@@ -166,7 +179,7 @@ function SessionTimerContent() {
       if (recognitionRef.current) {
         try {
           recognitionRef.current.stop();
-        } catch {}
+        } catch { }
       }
     };
   }, [drillIndex, source, dayIdx, pIdx, autostart, router]);
@@ -177,7 +190,7 @@ function SessionTimerContent() {
     if (voiceActive) {
       try {
         recognitionRef.current.stop();
-      } catch {}
+      } catch { }
       setVoiceActive(false);
     } else {
       try {
@@ -286,7 +299,7 @@ function SessionTimerContent() {
 
   const handleDrillDone = () => {
     if (intervalRef.current) clearInterval(intervalRef.current);
-    
+
     // Save completion index in local storage
     if (!isProtocol) {
       const progressKey = 'workout_progress_' + new Date().toDateString();
@@ -398,31 +411,37 @@ function SessionTimerContent() {
 
       {/* Progress Bar top */}
       <div className="w-full h-1.5 bg-white/5 border border-white/10 rounded-full overflow-hidden mb-4">
-        <div 
+        <div
           className="h-full bg-gradient-to-r from-primary to-white transition-all duration-300"
           style={{ width: `${((drillIndex) / (workout?.drills.length || 1)) * 100}%` }}
         />
       </div>
 
-      {/* Main card visual display */}
-      <div className="relative rounded-3xl h-36 border border-white/10 bg-black/40 overflow-hidden shadow-2xl mb-4">
-        <div 
-          className="absolute inset-0 bg-cover bg-center opacity-25 scale-105 transition-all duration-1000"
-          style={{ backgroundImage: `url('https://placehold.co/600x400/0c0c0e/18181b/png?text=${encodeURIComponent(currentDrill.name)}')` }}
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/80 to-transparent" />
+      {/* Main exercise reference visual — video/animated guide, click to expand */}
+      <button
+        type="button"
+        onClick={() => setIsGuideExpanded(true)}
+        className="relative rounded-3xl h-56 border border-white/10 bg-black/40 overflow-hidden shadow-2xl mb-4 w-full text-left group"
+      >
+        <div className="absolute inset-0">
+          <ExerciseVisualGuide name={currentDrill.name} instruction={currentDrill.instruction} videoUrl={currentDrill.videoUrl} />
+        </div>
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent pointer-events-none" />
         <div className="absolute top-4 right-4 bg-primary text-black font-black text-[8px] px-2 py-0.5 rounded-full tracking-widest">
           LIVE
         </div>
-        <div className="absolute bottom-4 left-5 right-5">
-          <h2 className="text-base font-black uppercase text-white truncate mb-0.5">
+        <div className="absolute top-4 left-4 w-8 h-8 rounded-full bg-black/60 border border-white/20 flex items-center justify-center text-white/70 group-hover:text-primary group-hover:border-primary/50 transition-all">
+          <Maximize2 className="w-3.5 h-3.5" />
+        </div>
+        <div className="absolute bottom-4 left-5 right-5 pointer-events-none">
+          <h2 className="text-lg font-black uppercase text-white truncate mb-0.5">
             {currentDrill.name}
           </h2>
           <p className="text-[10px] text-primary font-bold uppercase tracking-wider">
             {currentDrill.instruction}
           </p>
         </div>
-      </div>
+      </button>
 
       {/* Circle Timer */}
       <div className="flex-1 flex flex-col items-center justify-center relative py-6">
@@ -441,26 +460,26 @@ function SessionTimerContent() {
         {/* Big Ring */}
         <div className="relative w-64 h-64 flex items-center justify-center">
           <svg className="w-full h-full transform -rotate-90" viewBox="0 0 260 260">
-            <circle 
-              className="text-white/[0.02]" 
-              stroke="currentColor" 
-              strokeWidth="10" 
-              fill="transparent" 
-              r="120" 
-              cx="130" 
-              cy="130" 
+            <circle
+              className="text-white/[0.02]"
+              stroke="currentColor"
+              strokeWidth="10"
+              fill="transparent"
+              r="120"
+              cx="130"
+              cy="130"
             />
-            <circle 
-              className="text-primary transition-all duration-300 ease-out" 
-              stroke="currentColor" 
-              strokeWidth="10" 
+            <circle
+              className="text-primary transition-all duration-300 ease-out"
+              stroke="currentColor"
+              strokeWidth="10"
               strokeDasharray={circumference}
               strokeDashoffset={ringOffset}
               strokeLinecap="round"
-              fill="transparent" 
-              r="120" 
-              cx="130" 
-              cy="130" 
+              fill="transparent"
+              r="120"
+              cx="130"
+              cy="130"
               style={{ filter: 'drop-shadow(0 0 10px rgba(226, 255, 59, 0.6))' }}
             />
           </svg>
@@ -470,27 +489,46 @@ function SessionTimerContent() {
             <div className="w-20 h-20 rounded-full border border-primary/20 bg-black/80 flex items-center justify-center mb-2 overflow-hidden shadow-inner scanline">
               <Target className="w-7 h-7 text-primary/40" />
             </div>
-            
+
             <span className={`font-mono text-3xl font-black tracking-tighter text-white leading-none ${currentDrill.type === 'reps' && phase === 'idle' ? 'text-lg px-2' : ''}`}>
-              {formattedTime}
+              {currentDrill.type === 'reps' && phase === 'active' ? repsCompleted : formattedTime}
             </span>
             <span className="text-[8px] font-black tracking-widest text-white/40 uppercase mt-1">
-              {phase === 'active' && currentDrill.type === 'reps' ? 'REPS SET' : statusLabel}
+              {phase === 'active' && currentDrill.type === 'reps' ? `OF ${currentDrill.reps}` : statusLabel}
             </span>
           </div>
         </div>
+
+        {currentDrill.type === 'reps' && phase === 'active' && (
+          <div className="flex items-center gap-4 mt-5">
+            <button
+              type="button"
+              onClick={() => setRepsCompleted((r) => Math.max(0, r - 1))}
+              className="w-11 h-11 rounded-full border border-white/15 bg-white/5 text-white/60 flex items-center justify-center active:scale-95 transition-all"
+            >
+              <Minus className="w-4 h-4" />
+            </button>
+            <span className="text-[9px] font-black text-white/40 uppercase tracking-widest">Tap To Log Reps</span>
+            <button
+              type="button"
+              onClick={() => setRepsCompleted((r) => r + 1)}
+              className="w-11 h-11 rounded-full border border-primary/40 bg-primary/10 text-primary flex items-center justify-center active:scale-95 transition-all shadow-[0_0_12px_rgba(226,255,59,0.15)]"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Voice engine trigger button */}
       {voiceSupported && (
         <div className="flex justify-center mb-4">
-          <button 
+          <button
             onClick={toggleVoice}
-            className={`px-4 py-1.5 rounded-full border text-[10px] font-black tracking-widest flex items-center gap-1.5 transition-all ${
-              voiceActive 
-                ? 'bg-primary text-black border-primary shadow-[0_0_12px_rgba(226,255,59,0.3)]' 
+            className={`px-4 py-1.5 rounded-full border text-[10px] font-black tracking-widest flex items-center gap-1.5 transition-all ${voiceActive
+                ? 'bg-primary text-black border-primary shadow-[0_0_12px_rgba(226,255,59,0.3)]'
                 : 'bg-white/5 border-white/10 text-white/50 hover:text-white'
-            }`}
+              }`}
           >
             <Mic className="w-3 h-3" />
             <span>{voiceActive ? 'VOICE COMMANDS ACTIVE' : 'ENABLE VOICE COMMANDS'}</span>
@@ -506,15 +544,15 @@ function SessionTimerContent() {
           </NeonButton>
         ) : (
           <div className="flex gap-3">
-            <button 
+            <button
               onClick={() => setIsPaused(p => !p)}
               className="flex-1 h-14 rounded-full border border-white/20 bg-transparent text-white font-black tracking-widest uppercase hover:bg-white/5 transition-all active:scale-95 flex items-center justify-center gap-2"
             >
               {isPaused ? <Play className="w-4 h-4 fill-white" /> : <Pause className="w-4 h-4 fill-white" />}
               <span>{isPaused ? 'RESUME' : 'PAUSE'}</span>
             </button>
-            
-            <button 
+
+            <button
               onClick={handleMainAction}
               className="flex-1 h-14 rounded-full bg-primary text-black font-black tracking-widest uppercase hover:bg-primary/95 shadow-[0_0_20px_rgba(226,255,59,0.3)] transition-all active:scale-95 flex items-center justify-center gap-2"
             >
@@ -525,7 +563,7 @@ function SessionTimerContent() {
         )}
 
         {phase !== 'idle' && (
-          <button 
+          <button
             onClick={handleTerminate}
             className="w-full h-10 border border-red-500/20 text-red-500 hover:bg-red-500/5 transition-all rounded-full font-black text-xs uppercase tracking-widest"
           >
@@ -533,6 +571,41 @@ function SessionTimerContent() {
           </button>
         )}
       </footer>
+
+      <AnimatePresence>
+        {isGuideExpanded && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center p-4"
+            onClick={() => setIsGuideExpanded(false)}
+          >
+            <button
+              type="button"
+              onClick={() => setIsGuideExpanded(false)}
+              className="absolute top-6 right-6 w-10 h-10 rounded-full border border-white/20 bg-white/5 flex items-center justify-center text-white/70 hover:text-white z-10"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <div
+              className="w-full max-w-md aspect-square rounded-3xl border border-primary/20 overflow-hidden bg-black/60"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ExerciseVisualGuide
+                name={currentDrill.name}
+                instruction={currentDrill.instruction}
+                videoUrl={currentDrill.videoUrl}
+                expanded
+              />
+            </div>
+            <div className="text-center mt-6">
+              <h2 className="text-xl font-black uppercase text-white">{currentDrill.name}</h2>
+              <p className="text-xs text-primary font-bold uppercase tracking-wider mt-1">{currentDrill.instruction}</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
