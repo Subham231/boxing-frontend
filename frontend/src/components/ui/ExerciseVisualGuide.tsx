@@ -41,6 +41,22 @@ export function detectMotionCategory(name: string, instruction?: string): Motion
     return 'default';
 }
 
+const TARGET_MUSCLE_BY_CATEGORY: Record<MotionCategory, string> = {
+    punch: 'Shoulders, Core & Reflexes',
+    push: 'Chest, Shoulders & Triceps',
+    core: 'Abdominals & Core Stability',
+    pull: 'Back & Posterior Chain',
+    legs: 'Quads, Glutes & Calves',
+    cardio: 'Full-Body Conditioning',
+    stretch: 'Mobility & Recovery',
+    default: 'Full-Body',
+};
+
+export function getTargetMuscle(name: string, instruction?: string): string {
+    const category = detectMotionCategory(name, instruction);
+    return TARGET_MUSCLE_BY_CATEGORY[category];
+}
+
 function MotionFigure({ category }: { category: MotionCategory }) {
     // A shared abstract figure (head + torso + two limbs). Only the transform
     // animations differ per category, keeping this compact.

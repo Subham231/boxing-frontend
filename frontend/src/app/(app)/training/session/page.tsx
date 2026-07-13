@@ -14,13 +14,42 @@ import {
   Maximize2,
   X,
   Plus,
-  Minus
+  Minus,
+  Layers,
+  Info,
+  ChevronRight
 } from 'lucide-react';
 import { getDailyWorkout } from '@/lib/workout-data';
 import { getProtocolBlock, loadCachedDrills, markDrillComplete, markProtocolFullyComplete } from '@/lib/protocol-session';
 import type { ProtocolSessionDrill, Workout } from '@/types';
 import { NeonButton } from '@/components/ui/NeonButton';
-import { ExerciseVisualGuide } from '@/components/ui/ExerciseVisualGuide';
+import { ExerciseVisualGuide, getTargetMuscle } from '@/components/ui/ExerciseVisualGuide';
+
+// Reps-type drills store their prescription as a string like "3 sets of 12 reps".
+// This pulls the real numbers back out so we can drive an actual set-by-set flow.
+function parseSetsAndReps(drill: ProtocolSessionDrill | null): { totalSets: number; repsPerSet: number | null } {
+  if (!drill) return { totalSets: 1, repsPerSet: null };
+  if (drill.type === 'timer') {
+    return { totalSets: Math.max(1, drill.sets || 1), repsPerSet: null };
+  }
+  const match = drill.reps?.match(/(\d+)\s*sets?\s*of\s*(\d+)/i);
+  if (match) {
+    return { totalSets: Math.max(1, parseInt(match[1], 10)), repsPerSet: parseInt(match[2], 10) };
+  }
+  return { totalSets: 1, repsPerSet: null };
+}
+
+const SET_REST_SECONDS = 10;
+const PREP_SECONDS = 15;
+const SECONDS_PER_REP_ESTIMATE = 3;
+const MIN_ACTIVE_SECONDS = 20;
+
+function computeActiveDuration(drill: ProtocolSessionDrill | null, repsPerSet: number | null): number {
+  if (!drill) return MIN_ACTIVE_SECONDS;
+  if (drill.type === 'timer') return drill.duration || 60;
+  if (repsPerSet) return Math.max(MIN_ACTIVE_SECONDS, repsPerSet * SECONDS_PER_REP_ESTIMATE);
+  return MIN_ACTIVE_SECONDS;
+}
 
 interface SpeechRecognitionLike {
   continuous: boolean;
@@ -64,10 +93,13 @@ function SessionTimerContent() {
   const [currentDrill, setCurrentDrill] = useState<ProtocolSessionDrill | null>(null);
 
   // Game loops
-  const [phase, setPhase] = useState<'idle' | 'prep' | 'active' | 'rest'>('idle');
+  const [phase, setPhase] = useState<'idle' | 'prep' | 'active' | 'set_rest' | 'drill_confirm'>('idle');
   const [timeLeft, setTimeLeft] = useState(0);
   const [totalTime, setTotalTime] = useState(60);
   const [isPaused, setIsPaused] = useState(false);
+
+  // Set tracking within the current drill
+  const [currentSetIndex, setCurrentSetIndex] = useState(0);
 
   // Simulated stats
   const [bpm, setBpm] = useState(90);
@@ -89,6 +121,8 @@ function SessionTimerContent() {
 
   // Speech synthesis voice setting
   const synthRef = useRef<SpeechSynthesis | null>(null);
+
+  const { totalSets, repsPerSet } = useMemo(() => parseSetsAndReps(currentDrill), [currentDrill]);
 
   useEffect(() => {
     // Check speech synthesis
@@ -124,16 +158,13 @@ function SessionTimerContent() {
     const drill = sessionWorkout.drills[drillIndex];
     setCurrentDrill(drill);
     setRepsCompleted(0);
+    setCurrentSetIndex(0);
+    setPhase('idle');
 
-    if (drill.type === 'timer') {
-      const dur = drill.duration || 60;
-      setTotalTime(dur);
-      setTimeLeft(dur);
-    } else {
-      // Reps based
-      setTotalTime(0);
-      setTimeLeft(0);
-    }
+    const { repsPerSet } = parseSetsAndReps(drill);
+    const dur = computeActiveDuration(drill, repsPerSet);
+    setTotalTime(dur);
+    setTimeLeft(0);
 
     // Autostart sequence
     if (autostart) {
@@ -212,13 +243,13 @@ function SessionTimerContent() {
           return prev + Math.sign(target - prev) * 2;
         });
         setCalories(prev => prev + 0.22);
-      } else if (phase === 'prep' || phase === 'rest') {
+      } else if (phase === 'prep' || phase === 'set_rest') {
         setBpm(prev => {
           const target = Math.floor(Math.random() * (110 - 95 + 1)) + 95;
           return prev + Math.sign(target - prev) * 2;
         });
       } else {
-        // Idle
+        // Idle / confirm
         setBpm(prev => {
           const target = Math.floor(Math.random() * (95 - 80 + 1)) + 80;
           return prev + Math.sign(target - prev) * 2;
@@ -229,32 +260,32 @@ function SessionTimerContent() {
     return () => clearInterval(timer);
   }, [phase, isPaused]);
 
-  // Main countdown timer
+  // Main countdown timer — drives prep -> active (per set) -> set_rest -> active
+  // (next set) -> drill_confirm (only once ALL sets of this drill are done).
   useEffect(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
 
-    if (isPaused || phase === 'idle') return;
+    if (isPaused || phase === 'idle' || phase === 'drill_confirm') return;
 
     intervalRef.current = setInterval(() => {
       setTimeLeft(prev => {
         if (prev <= 1) {
           clearInterval(intervalRef.current!);
           if (phase === 'prep') {
-            // Transition from prep to active
+            // First set of this drill is starting
             setPhase('active');
-            return currentDrill?.type === 'timer' ? currentDrill.duration || 60 : 0;
+            setRepsCompleted(0);
+            return computeActiveDuration(currentDrill, repsPerSet);
           }
           if (phase === 'active') {
-            // Transition from active to rest
-            handleDrillDone();
+            handleSetDone();
             return 0;
           }
-          if (phase === 'rest') {
-            // Transition from rest to next drill
-            const nextIdx = drillIndex + 1;
-            const query = `index=${nextIdx}&source=${source}${dayIdx ? `&day=${dayIdx}` : ''}${pIdx ? `&p=${pIdx}` : ''}&autostart=1`;
-            router.replace(`/training/session?${query}`);
-            return 0;
+          if (phase === 'set_rest') {
+            // Next set of the SAME drill
+            setPhase('active');
+            setRepsCompleted(0);
+            return computeActiveDuration(currentDrill, repsPerSet);
           }
         }
         return prev - 1;
@@ -264,7 +295,7 @@ function SessionTimerContent() {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [phase, isPaused, currentDrill, drillIndex, source, dayIdx, pIdx]);
+  }, [phase, isPaused, currentDrill, repsPerSet, drillIndex, source, dayIdx, pIdx]);
 
   // Say verbal tips
   const speakInstruction = (text: string) => {
@@ -285,22 +316,20 @@ function SessionTimerContent() {
 
   const handleStart = () => {
     setPhase('prep');
-    setTimeLeft(15);
-    speakInstruction("Get ready. Next drill: " + currentDrill?.name);
+    setTimeLeft(PREP_SECONDS);
+    speakInstruction("Get ready. Next up: " + currentDrill?.name);
   };
 
   const handleMainAction = () => {
     if (phase === 'idle') {
       handleStart();
-    } else {
-      handleDrillDone();
+    } else if (phase === 'active') {
+      handleSetDone();
     }
   };
 
-  const handleDrillDone = () => {
-    if (intervalRef.current) clearInterval(intervalRef.current);
-
-    // Save completion index in local storage
+  // Persists completion for the CURRENT drill (called once, when its last set finishes)
+  const saveDrillCompletion = () => {
     if (!isProtocol) {
       const progressKey = 'workout_progress_' + new Date().toDateString();
       try {
@@ -328,13 +357,31 @@ function SessionTimerContent() {
         console.error('Failed to save completion:', e);
       }
     } else {
-      // Protocol specific completion (if needed)
       try {
         markDrillComplete(dayIdx!, pIdx!, drillIndex);
       } catch (e) {
         console.error('Failed to save protocol progress:', e);
       }
     }
+  };
+
+  // Called when a single SET's active countdown finishes (or the user taps Finish).
+  const handleSetDone = () => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+
+    const isLastSet = currentSetIndex + 1 >= totalSets;
+
+    if (!isLastSet) {
+      // More sets of the SAME exercise remain — short rest, then straight into the next set.
+      setCurrentSetIndex(i => i + 1);
+      setPhase('set_rest');
+      setTimeLeft(SET_REST_SECONDS);
+      speakInstruction(`Set complete. ${SET_REST_SECONDS} second rest.`);
+      return;
+    }
+
+    // All sets of this drill are done.
+    saveDrillCompletion();
 
     const nextIdx = drillIndex + 1;
     if (workout && nextIdx >= workout.drills.length) {
@@ -348,10 +395,26 @@ function SessionTimerContent() {
       return;
     }
 
-    // Set Phase to rest
-    setPhase('rest');
-    setTimeLeft(15); // Rest period
-    speakInstruction("Rest period. Take fifteen seconds to reset.");
+    // Gate on an explicit confirmation instead of auto-advancing — shows the
+    // next exercise's full details before it starts.
+    setPhase('drill_confirm');
+    speakInstruction('Set complete. Review your next exercise when ready.');
+  };
+
+  const nextDrillPreview = workout?.drills[drillIndex + 1] || null;
+
+  const handleContinueToNextDrill = () => {
+    const nextIdx = drillIndex + 1;
+    const query = `index=${nextIdx}&source=${source}${dayIdx ? `&day=${dayIdx}` : ''}${pIdx ? `&p=${pIdx}` : ''}&autostart=1`;
+    router.replace(`/training/session?${query}`);
+  };
+
+  const handleEndFromConfirm = () => {
+    if (isProtocol) {
+      router.replace('/planner');
+    } else {
+      router.replace('/training');
+    }
   };
 
   const handleTerminate = () => {
@@ -362,9 +425,12 @@ function SessionTimerContent() {
 
   // Compute circular ring stroke metrics
   const progressRingPercent = useMemo(() => {
-    if (phase === 'idle') return 100;
-    if (phase === 'prep' || phase === 'rest') {
-      return (timeLeft / 15) * 100;
+    if (phase === 'idle' || phase === 'drill_confirm') return 100;
+    if (phase === 'prep') {
+      return (timeLeft / PREP_SECONDS) * 100;
+    }
+    if (phase === 'set_rest') {
+      return (timeLeft / SET_REST_SECONDS) * 100;
     }
     if (totalTime === 0) return 100;
     return (timeLeft / totalTime) * 100;
@@ -378,10 +444,10 @@ function SessionTimerContent() {
   // Display labels based on phase
   const statusLabel = useMemo(() => {
     if (phase === 'prep') return 'GET READY';
-    if (phase === 'active') return 'ACTIVE SET';
-    if (phase === 'rest') return 'REST PERIOD';
+    if (phase === 'active') return `SET ${currentSetIndex + 1} OF ${totalSets}`;
+    if (phase === 'set_rest') return `REST — SET ${currentSetIndex + 2} OF ${totalSets} NEXT`;
     return 'READY';
-  }, [phase]);
+  }, [phase, currentSetIndex, totalSets]);
 
   const formattedTime = useMemo(() => {
     if (phase === 'idle' && currentDrill?.type === 'reps') {
@@ -493,11 +559,25 @@ function SessionTimerContent() {
             <span className={`font-mono text-3xl font-black tracking-tighter text-white leading-none ${currentDrill.type === 'reps' && phase === 'idle' ? 'text-lg px-2' : ''}`}>
               {currentDrill.type === 'reps' && phase === 'active' ? repsCompleted : formattedTime}
             </span>
-            <span className="text-[8px] font-black tracking-widest text-white/40 uppercase mt-1">
-              {phase === 'active' && currentDrill.type === 'reps' ? `OF ${currentDrill.reps}` : statusLabel}
+            <span className="text-[8px] font-black tracking-widest text-white/40 uppercase mt-1 px-2 text-center">
+              {phase === 'active' && currentDrill.type === 'reps' && repsPerSet
+                ? `TARGET ${repsPerSet} REPS`
+                : statusLabel}
             </span>
           </div>
         </div>
+
+        {totalSets > 1 && (phase === 'active' || phase === 'set_rest' || phase === 'prep') && (
+          <div className="flex items-center gap-1.5 mt-3">
+            {Array.from({ length: totalSets }).map((_, i) => (
+              <span
+                key={i}
+                className={`w-2 h-2 rounded-full ${i < currentSetIndex ? 'bg-primary' : i === currentSetIndex ? 'bg-primary/60 ring-2 ring-primary/20' : 'bg-white/10'
+                  }`}
+              />
+            ))}
+          </div>
+        )}
 
         {currentDrill.type === 'reps' && phase === 'active' && (
           <div className="flex items-center gap-4 mt-5">
@@ -542,7 +622,7 @@ function SessionTimerContent() {
           <NeonButton onClick={handleStart} className="w-full h-14">
             START SET
           </NeonButton>
-        ) : (
+        ) : phase === 'drill_confirm' ? null : (
           <div className="flex gap-3">
             <button
               onClick={() => setIsPaused(p => !p)}
@@ -557,12 +637,12 @@ function SessionTimerContent() {
               className="flex-1 h-14 rounded-full bg-primary text-black font-black tracking-widest uppercase hover:bg-primary/95 shadow-[0_0_20px_rgba(226,255,59,0.3)] transition-all active:scale-95 flex items-center justify-center gap-2"
             >
               <Check className="w-4 h-4 stroke-[3]" />
-              <span>FINISH</span>
+              <span>FINISH SET</span>
             </button>
           </div>
         )}
 
-        {phase !== 'idle' && (
+        {phase !== 'idle' && phase !== 'drill_confirm' && (
           <button
             onClick={handleTerminate}
             className="w-full h-10 border border-red-500/20 text-red-500 hover:bg-red-500/5 transition-all rounded-full font-black text-xs uppercase tracking-widest"
@@ -571,6 +651,72 @@ function SessionTimerContent() {
           </button>
         )}
       </footer>
+
+      {phase === 'drill_confirm' && nextDrillPreview && (() => {
+        const nextPlan = parseSetsAndReps(nextDrillPreview);
+        return (
+          <div className="fixed inset-0 z-[90] bg-black/95 flex flex-col p-5 overflow-y-auto">
+            <div className="text-center mb-4">
+              <span className="text-[9px] font-black text-primary tracking-widest uppercase block mb-1">
+                Set Complete — Up Next
+              </span>
+              <h2 className="text-xl font-black uppercase text-white">{nextDrillPreview.name}</h2>
+            </div>
+
+            <div className="rounded-3xl h-40 border border-white/10 bg-black/40 overflow-hidden mb-4">
+              <ExerciseVisualGuide
+                name={nextDrillPreview.name}
+                instruction={nextDrillPreview.instruction}
+                videoUrl={nextDrillPreview.videoUrl}
+              />
+            </div>
+
+            <div className="flex flex-col gap-3 mb-6">
+              <div className="flex items-start gap-3 bg-white/[0.02] border border-white/5 rounded-2xl p-4">
+                <Target className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+                <div>
+                  <span className="text-[8px] font-black text-white/40 uppercase tracking-widest block mb-0.5">Target Muscle</span>
+                  <span className="text-xs font-bold text-white">{getTargetMuscle(nextDrillPreview.name, nextDrillPreview.instruction)}</span>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 bg-white/[0.02] border border-white/5 rounded-2xl p-4">
+                <Info className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+                <div>
+                  <span className="text-[8px] font-black text-white/40 uppercase tracking-widest block mb-0.5">Form</span>
+                  <span className="text-xs font-bold text-white leading-relaxed">{nextDrillPreview.instruction}</span>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 bg-white/[0.02] border border-white/5 rounded-2xl p-4">
+                <Layers className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+                <div>
+                  <span className="text-[8px] font-black text-white/40 uppercase tracking-widest block mb-0.5">Sets &amp; Reps</span>
+                  <span className="text-xs font-bold text-white">
+                    {nextDrillPreview.type === 'timer'
+                      ? `${nextPlan.totalSets} ${nextPlan.totalSets === 1 ? 'round' : 'rounds'} of ${nextDrillPreview.duration || 60}s`
+                      : nextPlan.repsPerSet
+                        ? `${nextPlan.totalSets} sets of ${nextPlan.repsPerSet} reps`
+                        : nextDrillPreview.reps}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-auto flex flex-col gap-3">
+              <NeonButton onClick={handleContinueToNextDrill} className="w-full h-14">
+                CONTINUE <ChevronRight className="w-4 h-4 ml-1 inline" />
+              </NeonButton>
+              <button
+                onClick={handleEndFromConfirm}
+                className="w-full h-11 border border-red-500/20 text-red-500 hover:bg-red-500/5 transition-all rounded-full font-black text-xs uppercase tracking-widest"
+              >
+                END SESSION HERE
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       <AnimatePresence>
         {isGuideExpanded && (
