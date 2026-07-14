@@ -49,14 +49,65 @@ function roundToStep(value: number, step: number): number {
     return Math.max(step, Math.round(value / step) * step);
 }
 
+// -----------------------------------------------------------------------
+// Seeded randomization engine
+// -----------------------------------------------------------------------
+// A fresh seed is generated on every call to buildWeeklyPlan(), so every
+// regeneration produces a genuinely different shuffle — while exercises
+// picked *within* one generation stay internally deterministic (no
+// re-shuffle mid-build). We also persist which exercises were used in the
+// last generation so the NEXT regeneration actively avoids repeating them.
+export function mulberry32(seed: number): () => number {
+    let s = seed | 0;
+    return function () {
+        s = (s + 0x6d2b79f5) | 0;
+        let t = Math.imul(s ^ (s >>> 15), 1 | s);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
+export function shuffle<T>(arr: T[], rng: () => number = Math.random): T[] {
+    const out = arr.slice();
+    for (let i = out.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [out[i], out[j]] = [out[j], out[i]];
+    }
+    return out;
+}
+
+const RECENT_EXERCISE_HISTORY_KEY = 'planner_exercise_history_v1';
+const RECENT_EXERCISE_HISTORY_LIMIT = 64;
+
+function loadRecentExerciseHistory(): Set<string> {
+    if (typeof window === 'undefined') return new Set();
+    try {
+        const raw = JSON.parse(localStorage.getItem(RECENT_EXERCISE_HISTORY_KEY) || '[]');
+        return new Set(Array.isArray(raw) ? raw : []);
+    } catch {
+        return new Set();
+    }
+}
+
+function saveRecentExerciseHistory(usedThisGeneration: Set<string>): void {
+    if (typeof window === 'undefined') return;
+    try {
+        const list = Array.from(usedThisGeneration).slice(0, RECENT_EXERCISE_HISTORY_LIMIT);
+        localStorage.setItem(RECENT_EXERCISE_HISTORY_KEY, JSON.stringify(list));
+    } catch {
+        // Storage quota errors shouldn't block plan generation.
+    }
+}
+
 export function buildBoxingWorkload(
     combatFocus: string | undefined,
     fitnessBaseline: FitnessBaseline | undefined,
-    dayIndex: number
+    dayIndex: number,
+    rng: () => number = Math.random
 ): string {
     const mult = getPrescriptionMultiplier(fitnessBaseline);
     const focus = (combatFocus || 'stamina').toLowerCase();
-    const variant = dayIndex % 2;
+    const variant = Math.floor(rng() * 2);
 
     switch (focus) {
         case 'endurance': {
@@ -232,13 +283,26 @@ export function applyUserSchedule(plan: WeeklyPlan, userData: PlannerUserData): 
     return plan;
 }
 
-export function pickExercises(dayKey: string, blockIndex: number, count: number): string[] {
+export function pickExercises(
+    dayKey: string,
+    blockIndex: number,
+    count: number,
+    rng: () => number = Math.random,
+    usedThisGeneration: Set<string> = new Set(),
+    recentHistory: Set<string> = new Set()
+): string[] {
     const pool = EXERCISES[dayKey] || EXERCISES.push;
-    const out: string[] = [];
-    for (let i = 0; i < count; i++) {
-        out.push(pool[(blockIndex * 3 + i) % pool.length]);
-    }
-    return out;
+
+    // Tier the pool so we prefer exercises that are BOTH new to this week's
+    // generation AND weren't used in the previous regeneration. Fall back a
+    // tier at a time so a small pool never leaves us short on exercises.
+    const tierBoth = pool.filter((n) => !usedThisGeneration.has(n) && !recentHistory.has(n));
+    const tierGenerationOnly = pool.filter((n) => !usedThisGeneration.has(n));
+    const candidates = tierBoth.length >= count ? tierBoth : tierGenerationOnly.length >= count ? tierGenerationOnly : pool;
+
+    const picked = shuffle(candidates, rng).slice(0, count);
+    picked.forEach((n) => usedThisGeneration.add(n));
+    return picked;
 }
 
 export function buildProtocolsForDay(
@@ -247,15 +311,18 @@ export function buildProtocolsForDay(
     preferredTime: string,
     combatFocus?: string,
     fitnessBaseline?: FitnessBaseline,
-    dayIndex: number = 0
+    dayIndex: number = 0,
+    rng: () => number = Math.random,
+    usedThisGeneration: Set<string> = new Set(),
+    recentHistory: Set<string> = new Set()
 ): PlannerProtocolBlock[] {
     return PROTOCOL_BLOCKS.map((block, i) => {
-        const exercises = pickExercises(dayKey, i, EXERCISES_PER_BLOCK);
+        const exercises = pickExercises(dayKey, i, EXERCISES_PER_BLOCK, rng, usedThisGeneration, recentHistory);
         // Every day gets one core bodyweight pattern (already in exercises[0])
         // plus one contextual boxing workload mapped to the user's combat
         // focus, injected into the Primary Block.
         if (block.title === 'PRIMARY BLOCK' && combatFocus) {
-            exercises[exercises.length - 1] = buildBoxingWorkload(combatFocus, fitnessBaseline, dayIndex);
+            exercises[exercises.length - 1] = buildBoxingWorkload(combatFocus, fitnessBaseline, dayIndex, rng);
         }
         return {
             time: addMinutes(preferredTime, block.offsetMin),
@@ -287,6 +354,14 @@ export function buildWeeklyPlan(userData: PlannerUserData): WeeklyPlan {
     const fitnessBaseline = userData?.fitnessBaseline;
     const dayPlan = selectDayPlan(userData?.daysPerWeek ?? userData?.frequency);
 
+    // New seed every generation => genuinely different exercise selection
+    // each time the user regenerates, instead of the old deterministic
+    // modulo cycling that always produced (near) identical plans.
+    const seed = (Date.now() % 0xffffffff) ^ Math.floor(Math.random() * 0xffffffff);
+    const rng = mulberry32(seed);
+    const recentHistory = loadRecentExerciseHistory();
+    const usedThisGeneration = new Set<string>();
+
     const end = new Date(start);
     end.setDate(start.getDate() + Math.max(0, dayPlan.length - 1));
 
@@ -303,7 +378,7 @@ export function buildWeeklyPlan(userData: PlannerUserData): WeeklyPlan {
             date: String(d.getDate()),
             day_type: dt.label,
             intensity: Math.min(intensity, 98),
-            protocol: buildProtocolsForDay(dt.key, dt.label, preferred, combatFocus, fitnessBaseline, i),
+            protocol: buildProtocolsForDay(dt.key, dt.label, preferred, combatFocus, fitnessBaseline, i, rng, usedThisGeneration, recentHistory),
             recovery: recoveryForDay(dt.key),
         };
     });
@@ -311,6 +386,8 @@ export function buildWeeklyPlan(userData: PlannerUserData): WeeklyPlan {
     const intensity_score = Math.round(
         days.reduce((s, d) => s + d.intensity, 0) / days.length
     );
+
+    saveRecentExerciseHistory(usedThisGeneration);
 
     return {
         week_range,
@@ -321,7 +398,32 @@ export function buildWeeklyPlan(userData: PlannerUserData): WeeklyPlan {
             preferred_time_display: addMinutes(preferred, 0),
             peak_window: userData?.planner_config?.peak_window || userData?.plannerConfig?.peakWindow || 'MORNING',
         },
+        generated_at: start.toISOString(),
+        generation_seed: seed,
     };
+}
+
+// -----------------------------------------------------------------------
+// Planner -> Daily Grind linkage
+// -----------------------------------------------------------------------
+// Given a generated plan, figures out which day of the plan corresponds to
+// "today" (or any target date), by counting whole days elapsed since the
+// plan was generated and wrapping around its length. This is the single
+// source of truth Daily Grind uses to know which day to display, instead of
+// generating its own independent workout.
+export function getPlanDayIndex(plan: WeeklyPlan | null | undefined, targetDate: Date = new Date()): number {
+    if (!plan || !Array.isArray(plan.days) || !plan.days.length) return 0;
+    if (!plan.generated_at) return 0;
+
+    const start = new Date(plan.generated_at);
+    if (Number.isNaN(start.getTime())) return 0;
+
+    const startMidnight = new Date(start.getFullYear(), start.getMonth(), start.getDate()).getTime();
+    const targetMidnight = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate()).getTime();
+    const daysSinceStart = Math.round((targetMidnight - startMidnight) / 86400000);
+
+    const len = plan.days.length;
+    return ((daysSinceStart % len) + len) % len;
 }
 
 export function normalizePlan(plan: Partial<WeeklyPlan> | null | undefined, userData: PlannerUserData): WeeklyPlan {
@@ -400,6 +502,8 @@ export function normalizePlan(plan: Partial<WeeklyPlan> | null | undefined, user
 
     const scheduled = applyUserSchedule(normalized, userData);
     scheduled.generated_by = plan.generated_by || 'gemini';
+    scheduled.generated_at = plan.generated_at || local.generated_at;
+    scheduled.generation_seed = local.generation_seed;
     return scheduled;
 }
 

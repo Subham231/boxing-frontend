@@ -92,6 +92,7 @@ export interface WeeklyPlan {
   planner_schedule?: PlannerSchedule;
   generated_by?: string;
   generated_at?: string;
+  generation_seed?: number;
   version?: string;
 }
 

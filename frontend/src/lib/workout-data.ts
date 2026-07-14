@@ -1,4 +1,6 @@
 import { Drill, Workout } from '@/types';
+import { getPlan } from './protocol-session';
+import { getPlanDayIndex } from './planner';
 
 export const bodyweightExercises: Record<string, any[]> = {
     "Legs": [
@@ -128,15 +130,74 @@ export function generateDailyWorkout(dateInput?: Date): Workout {
     };
 }
 
+// Builds the Daily Grind workout directly from the user's active planner
+// program, if one exists. The Planner is the source of truth: this reads
+// today's assigned protocol blocks rather than generating anything of its
+// own. Returns null when there's no active plan yet, so callers can fall
+// back to the old independent generator for brand-new users.
+function getWorkoutFromActivePlan(targetDate: Date): Workout | null {
+    const plan = getPlan();
+    if (!plan || !Array.isArray(plan.days) || !plan.days.length) return null;
+
+    const dayIdx = getPlanDayIndex(plan, targetDate);
+    const day = plan.days[dayIdx];
+    if (!day || !Array.isArray(day.protocol) || !day.protocol.length) return null;
+
+    const drills: Drill[] = [];
+    day.protocol.forEach((block, pIdx) => {
+        const exercises = block.exercises && block.exercises.length ? block.exercises : ['Bodyweight Flow'];
+        exercises.forEach((name, i) => {
+            drills.push({
+                name,
+                instruction: `${block.title} — Set ${i + 1} of ${exercises.length}. Bodyweight only.`,
+                type: 'timer',
+                duration: 45,
+                isPlanner: true,
+                impact: block.impact || day.day_type,
+            });
+        });
+    });
+
+    if (!drills.length) return null;
+
+    return {
+        title: `${day.day_type} — TACTICAL PROTOCOL`,
+        focus: `Day ${dayIdx + 1} of your active planner program.`,
+        drills,
+    };
+}
+
 export function getDailyWorkout(dateInput?: Date): Workout {
     const targetDate = dateInput || new Date();
+
+    if (typeof window !== 'undefined') {
+        const plannerWorkout = getWorkoutFromActivePlan(targetDate);
+        if (plannerWorkout) {
+            // A live tactical/vision session can still stack extra drills on
+            // top of the planner-assigned day.
+            const tactical = localStorage.getItem('tactical_session');
+            if (tactical) {
+                try {
+                    const tact = JSON.parse(tactical);
+                    plannerWorkout.drills = [...plannerWorkout.drills, ...(tact.drills || [])];
+                    plannerWorkout.title = tact.title || plannerWorkout.title;
+                } catch (e) {
+                    console.error("DATA_LINK_FAILURE: Could not parse tactical session.");
+                }
+            }
+            return plannerWorkout;
+        }
+    }
+
+    // No active planner program yet — fall back to the old independently
+    // generated workout so brand-new users still have something to train.
     let baseWorkout = generateDailyWorkout(targetDate);
 
     if (typeof window === 'undefined') {
         return baseWorkout;
     }
 
-    // Merge Deployed Planner Drills
+    // Merge Deployed Planner Drills (legacy carry-over from completed protocol blocks)
     const todayKey = targetDate.toDateString();
     const plannerDrillsRaw = localStorage.getItem('deployed_planner_drills_' + todayKey);
     if (plannerDrillsRaw) {
