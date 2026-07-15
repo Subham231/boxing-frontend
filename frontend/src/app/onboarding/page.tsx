@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
 
 import Welcome from './components/Welcome';
-import Problem from './components/Problem';
+import Problem from './components/Identity';
 import FocusGoals from './components/FocusGoals';
 import Solution from './components/Solution';
 import TimeSlot from './components/TimeSlot';
