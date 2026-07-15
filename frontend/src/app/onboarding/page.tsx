@@ -6,18 +6,16 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
 
 import Welcome from './components/Welcome';
-import Problem from './components/Identity';
-import FocusGoals from './components/FocusGoals';
-import Solution from './components/Solution';
-import TimeSlot from './components/TimeSlot';
-import GearCheck from './components/GearCheck';
-import FightingStance from './components/FightingStance';
-import CoreDriver from './components/CoreDriver';
-import Intensity from './components/Intensity';
-import Frequency from './components/Frequency';
-import TrainingFrequency from './components/TrainingFrequency';
-import CombatFocus from './components/CombatFocus';
-import FatigueThreshold from './components/FatigueThreshold';
+import TrainingProblem from './components/TrainingProblem';
+import FutureProgress from './components/FutureProgress';
+import TrainingCategories from './components/TrainingCategories';
+import StructuredProgram from './components/StructuredProgram';
+import PerformanceTracking from './components/PerformanceTracking';
+import Personalization from './components/Personalization';
+import DailyConsistency from './components/DailyConsistency';
+import Ecosystem from './components/Ecosystem';
+import JourneyStart from './components/JourneyStart';
+import Identity from './components/Problem';
 import PromiseStep from './components/Promise';
 
 const OnboardingFlow: React.FC = () => {
@@ -25,18 +23,16 @@ const OnboardingFlow: React.FC = () => {
 
     const screens = [
         <Welcome key="welcome" />,
-        <Problem key="problem" />,
-        <FocusGoals key="focusgoals" />,
-        <Solution key="solution" />,
-        <TimeSlot key="timeslot" />,
-        <GearCheck key="gearcheck" />,
-        <FightingStance key="stance" />,
-        <CoreDriver key="driver" />,
-        <Intensity key="intensity" />,
-        <Frequency key="frequency" />,
-        <TrainingFrequency key="trainingfrequency" />,
-        <CombatFocus key="combatfocus" />,
-        <FatigueThreshold key="fatiguethreshold" />,
+        <TrainingProblem key="problem" />,
+        <FutureProgress key="progress" />,
+        <TrainingCategories key="categories" />,
+        <StructuredProgram key="program" />,
+        <PerformanceTracking key="tracking" />,
+        <Personalization key="personalization" />,
+        <DailyConsistency key="consistency" />,
+        <Ecosystem key="ecosystem" />,
+        <JourneyStart key="journey" />,
+        <Identity key="identity" />,
         <PromiseStep key="promise" />,
     ];
 
