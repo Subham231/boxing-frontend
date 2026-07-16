@@ -96,6 +96,26 @@ export interface WeeklyPlan {
   version?: string;
 }
 
+export interface PlannerProfile {
+  age?: number;
+  height?: number;
+  weight?: number;
+  gender?: string;
+  boxingProfile?: string; // Amateur | Intermediate | Advanced | Professional
+  goals?: string[];
+  daysPerWeek?: number;
+  trainingDays?: string[]; // specific weekdays e.g. ['MON','WED','FRI']
+  minutesPerSession?: number;
+  restDays?: number;
+  equipment?: string[];
+  injuries?: string[];
+  preferredStyle?: string; // Tactical | Technical | Conditioning | Hybrid
+  intensityPreference?: string; // Light | Moderate | High | Elite
+  peakWindow?: string;
+  preferredTime?: string;
+  lastUpdated?: number;
+}
+
 export interface PlannerUserData extends Partial<OnboardingData> {
   primaryGoal?: string;
   experienceLevel?: string;
@@ -103,6 +123,7 @@ export interface PlannerUserData extends Partial<OnboardingData> {
   planner_config?: PlannerConfig;
   plannerConfig?: PlannerConfig;
   gear?: string[];
+  selectedWeekdays?: string[];
 }
 
 export interface GeminiTextPart {

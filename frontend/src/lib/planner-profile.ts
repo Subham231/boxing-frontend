@@ -127,6 +127,7 @@ export function plannerProfileToUserData(profile: PlannerProfile): PlannerUserDa
         available_time: profile.minutesPerSession || 30,
         daysPerWeek: profile.daysPerWeek || 3,
         frequency: profile.daysPerWeek || 3,
+        selectedWeekdays: profile.trainingDays && profile.trainingDays.length ? profile.trainingDays : undefined,
         constraints: {
             equipment: profile.equipment || [],
             injuries: (profile.injuries || []).filter((i) => i && i !== 'None').join(', '),

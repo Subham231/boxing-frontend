@@ -4,11 +4,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Clock, 
-  Sun, 
-  CloudSun, 
-  Moon, 
-  Ghost, 
   Play, 
   Check, 
   Lock, 
@@ -27,7 +22,9 @@ import {
 } from 'lucide-react';
 import { fetchPlan } from '@/lib/planner';
 import { completeKey, progressKey } from '@/lib/protocol-session';
-import type { PlannerUserData, WeeklyPlan } from '@/types';
+import { plannerProfileToUserData } from '@/lib/planner-profile';
+import PlannerOnboardingWizard from '@/components/planner/PlannerOnboardingWizard';
+import type { PlannerProfile, PlannerUserData, WeeklyPlan } from '@/types';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
 // @ts-ignore — JS utility modules
@@ -53,6 +50,7 @@ export default function PlannerPage() {
   const [isOnboarded, setIsOnboarded] = useState(false);
   const [isConfigured, setIsConfigured] = useState(false);
   const [isConfiguring, setIsConfiguring] = useState(false);
+  const [wizardMode, setWizardMode] = useState<'create' | 'regenerate'>('create');
   const [loading, setLoading] = useState(false);
   const [plan, setPlan] = useState<WeeklyPlan | null>(null);
   const [activeDayIdx, setActiveDayIdx] = useState(0);
@@ -186,84 +184,73 @@ export default function PlannerPage() {
     }
   };
 
-  const handleDeployPlanner = async () => {
-    setLoading(true);
-    try {
-      const onboardingRaw = localStorage.getItem('boxing_onboarding_data') || '{}';
-      const onboardingData = JSON.parse(onboardingRaw) as PlannerUserData;
-
-      // Save calibration to onboarding
-      onboardingData.planner_config = {
-        peak_window: peakWindow,
-        preferred_time: preferredTime,
-      };
-      localStorage.setItem('boxing_onboarding_data', JSON.stringify(onboardingData));
-
-      // Generate the weekly plan (will try backend API first, then fallback to local templates)
-      const newPlan = await fetchPlan(onboardingData);
-      setPlan(newPlan);
-      localStorage.setItem('active_boxing_plan_v2', JSON.stringify(newPlan));
-      localStorage.setItem('last_plan_gen_date_v2', new Date().toDateString());
-      
-      // Also generate the local bodyweight split
-      const localPlan = generateLocalPlanner({
-        daysPerWeek: userFrequency,
-        availableMinutes: userAvailableTime,
-        experienceLevel: userExperience,
-      });
-      setLocalSchedule(localPlan);
-
-      // Store the local split for other components to consume
-      localStorage.setItem('local_bodyweight_split', JSON.stringify(localPlan));
-
-      // Setup notifications if allowed
-      if (notificationsEnabled) {
-        scheduleLocalWorkoutReminder(preferredTime, fighterName);
+  // Single generation path — called once the Planner Onboarding Wizard
+  // finishes (both for the very first protocol AND every regeneration), so
+  // the Planner never generates a workout without fresh, user-confirmed data.
+  // Called by the wizard's fingerprint ceremony once the user confirms —
+  // does the real work and returns the plan (or throws), while the wizard
+  // itself owns showing the generation ceremony/progress UI.
+  const handleGenerate = async (profile: PlannerProfile): Promise<WeeklyPlan> => {
+    if (wizardMode === 'regenerate') {
+      // Fresh protocol incoming — clear old completion history so Daily
+      // Grind doesn't show stale "done" states against new exercises.
+      for (let i = 0; i < 7; i++) {
+        for (let j = 0; j < 5; j++) {
+          localStorage.removeItem(progressKey(String(i), String(j)));
+          localStorage.removeItem(completeKey(String(i), String(j)));
+        }
       }
-      
-      setIsConfigured(true);
-      setIsConfiguring(false);
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'Calibration failed');
-    } finally {
-      setLoading(false);
     }
+
+    const userData = plannerProfileToUserData(profile);
+
+    setPeakWindow(profile.peakWindow || 'MORNING');
+    setPreferredTime(profile.preferredTime || '07:30');
+    setUserFrequency(profile.daysPerWeek || 3);
+    setUserAvailableTime(profile.minutesPerSession || 30);
+    const expMap: Record<string, string> = {
+      Amateur: 'beginner',
+      Intermediate: 'intermediate',
+      Advanced: 'advanced',
+      Professional: 'advanced',
+    };
+    const localExperience = expMap[profile.boxingProfile || 'Intermediate'] || 'intermediate';
+    setUserExperience(localExperience);
+
+    // Generate the weekly plan (will try backend API first, then fallback to local templates)
+    const newPlan = await fetchPlan(userData);
+    setPlan(newPlan);
+    localStorage.setItem('active_boxing_plan_v2', JSON.stringify(newPlan));
+    localStorage.setItem('last_plan_gen_date_v2', new Date().toDateString());
+    setActiveDayIdx(0);
+
+    // Also generate the local bodyweight split
+    const localPlan = generateLocalPlanner({
+      daysPerWeek: profile.daysPerWeek || 3,
+      availableMinutes: profile.minutesPerSession || 30,
+      experienceLevel: localExperience,
+    });
+    setLocalSchedule(localPlan);
+    localStorage.setItem('local_bodyweight_split', JSON.stringify(localPlan));
+
+    // Setup notifications if allowed
+    if (notificationsEnabled) {
+      scheduleLocalWorkoutReminder(profile.preferredTime || '07:30', fighterName);
+    }
+
+    return newPlan;
   };
 
-  const handleRegenerate = async () => {
+  // Called when the user taps "Start My First Workout" on the success screen
+  const handleLaunch = () => {
+    setIsConfigured(true);
+    setIsConfiguring(false);
+  };
+
+  const handleRegenerate = () => {
     if (confirm('Regenerate weekly plan? Completed protocol history for this week will reset.')) {
-      setLoading(true);
-      try {
-        const onboardingRaw = localStorage.getItem('boxing_onboarding_data') || '{}';
-        const onboardingData = JSON.parse(onboardingRaw) as PlannerUserData;
-        
-        // Remove completed cache for protocols
-        for (let i = 0; i < 7; i++) {
-          for (let j = 0; j < 5; j++) {
-            localStorage.removeItem(progressKey(String(i), String(j)));
-            localStorage.removeItem(completeKey(String(i), String(j)));
-          }
-        }
-
-        const newPlan = await fetchPlan(onboardingData);
-        setPlan(newPlan);
-        localStorage.setItem('active_boxing_plan_v2', JSON.stringify(newPlan));
-        localStorage.setItem('last_plan_gen_date_v2', new Date().toDateString());
-        setActiveDayIdx(0);
-
-        // Regenerate local split too
-        const localPlan = generateLocalPlanner({
-          daysPerWeek: userFrequency,
-          availableMinutes: userAvailableTime,
-          experienceLevel: userExperience,
-        });
-        setLocalSchedule(localPlan);
-        localStorage.setItem('local_bodyweight_split', JSON.stringify(localPlan));
-      } catch (e) {
-        alert('Plan generation failed.');
-      } finally {
-        setLoading(false);
-      }
+      setWizardMode('regenerate');
+      setIsConfiguring(true);
     }
   };
 
@@ -273,14 +260,6 @@ export default function PlannerPage() {
     const stored = localStorage.getItem(completeKey(String(dayIdx), String(pIdx)));
     return stored === '1' || stored === 'true';
   };
-
-  // Peak Window choices
-  const peakChoices = [
-    { key: 'MORNING', icon: Sun, label: 'MORNING', time: '05:00 - 11:00' },
-    { key: 'AFTERNOON', icon: CloudSun, label: 'AFTERNOON', time: '12:00 - 16:00' },
-    { key: 'EVENING', icon: Moon, label: 'EVENING', time: '17:00 - 21:00' },
-    { key: 'NIGHT', icon: Ghost, label: 'NIGHT', time: '22:00 - 02:00' },
-  ];
 
   // Active day's data
   const activeDay = useMemo(() => {
@@ -337,134 +316,17 @@ export default function PlannerPage() {
     );
   }
 
-  // CALIBRATION CONFIGURING VIEW
+  // PLANNER ONBOARDING WIZARD — shown on first-time setup AND every
+  // regeneration/edit, per the Planner Profile being the single source of
+  // truth for workout generation.
   if (!isConfigured || isConfiguring) {
     return (
-      <div className="flex flex-col gap-6 anim-fade-in select-none pb-12">
-        <header className="text-left">
-          <span className="text-[10px] font-black text-primary tracking-[3px] uppercase block mb-1">
-            PLANNER SETUP
-          </span>
-          <h1 className="text-2xl font-black italic uppercase text-white leading-none mb-1">
-            NEURAL CALIBRATION
-          </h1>
-          <p className="text-xs text-white/50 font-semibold leading-relaxed">
-            Sync your session timing with your biological performance peak.
-          </p>
-        </header>
-
-        <main className="flex flex-col gap-6 mt-2">
-          {/* Productivity Peak Select */}
-          <div className="flex flex-col gap-3">
-            <label className="text-[9px] font-black text-primary tracking-widest uppercase">
-              PRODUCTIVITY PEAK
-            </label>
-            <div className="grid grid-cols-2 gap-3.5">
-              {peakChoices.map((choice) => {
-                const Icon = choice.icon;
-                const active = peakWindow === choice.key;
-                return (
-                  <div
-                    key={choice.key}
-                    onClick={() => setPeakWindow(choice.key)}
-                    className={`flex flex-col items-center gap-1.5 p-4 rounded-3xl border cursor-pointer transition-all duration-300 ${
-                      active 
-                        ? 'bg-primary/10 border-primary shadow-[0_0_15px_rgba(226,255,59,0.15)]' 
-                        : 'bg-black/30 border-white/5 hover:border-white/10'
-                    }`}
-                  >
-                    <Icon className={`w-5 h-5 ${active ? 'text-primary' : 'text-white/40'}`} />
-                    <span className={`text-[10px] font-black uppercase ${active ? 'text-primary' : 'text-white/60'}`}>
-                      {choice.label}
-                    </span>
-                    <span className="text-[8px] text-white/30 font-semibold">
-                      {choice.time}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Session Time Picker */}
-          <div className="flex flex-col gap-3">
-            <label className="text-[9px] font-black text-primary tracking-widest uppercase">
-              PREFERRED SESSION START
-            </label>
-            <div className="glass-card flex items-center justify-between p-5 border-white/5 bg-black/40 rounded-3xl">
-              <input 
-                type="time" 
-                value={preferredTime}
-                onChange={(e) => setPreferredTime(e.target.value)}
-                className="bg-transparent border-none text-2xl font-black text-white outline-none cursor-pointer w-full focus:ring-0"
-              />
-              <Clock className="w-5 h-5 text-primary opacity-50" />
-            </div>
-          </div>
-
-          {/* Notification Opt-In */}
-          <div className="flex flex-col gap-3">
-            <label className="text-[9px] font-black text-primary tracking-widest uppercase">
-              DAILY REMINDER ALARM
-            </label>
-            <div 
-              onClick={handleToggleNotifications}
-              className={`glass-card flex items-center justify-between p-5 rounded-3xl border cursor-pointer transition-all duration-300 ${
-                notificationsEnabled
-                  ? 'border-primary/30 bg-primary/5'
-                  : 'border-white/5 bg-black/40 hover:border-white/10'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${
-                  notificationsEnabled ? 'bg-primary/15 text-primary' : 'bg-white/5 text-white/40'
-                }`}>
-                  {notificationsEnabled ? <Bell className="w-5 h-5" /> : <BellOff className="w-5 h-5" />}
-                </div>
-                <div>
-                  <span className="text-xs font-black text-white uppercase block">
-                    {notificationsEnabled ? 'ALARM ACTIVE' : 'ENABLE ALARM'}
-                  </span>
-                  <span className="text-[9px] text-white/40 font-semibold">
-                    {notificationsEnabled 
-                      ? `Fires daily at ${preferredTime}` 
-                      : 'Get browser alerts at your session time'}
-                  </span>
-                </div>
-              </div>
-              <div className={`w-12 h-6 rounded-full relative transition-all duration-300 ${
-                notificationsEnabled ? 'bg-primary' : 'bg-white/10'
-              }`}>
-                <div className={`absolute top-0.5 w-5 h-5 rounded-full shadow transition-all duration-300 ${
-                  notificationsEnabled 
-                    ? 'right-0.5 bg-black' 
-                    : 'left-0.5 bg-white/40'
-                }`} />
-              </div>
-            </div>
-            {notificationStatus === 'denied' && (
-              <p className="text-[9px] text-red-400 font-bold uppercase tracking-wider px-1">
-                ⚠ Browser blocked notifications. Enable in browser settings.
-              </p>
-            )}
-          </div>
-        </main>
-
-        <footer className="mt-8 flex flex-col gap-4">
-          <NeonButton onClick={handleDeployPlanner} className="w-full h-14">
-            DEPLOY PLANNER
-          </NeonButton>
-          
-          {isConfigured && (
-            <button 
-              onClick={() => setIsConfiguring(false)} 
-              className="text-[10px] font-black text-white/40 hover:text-white uppercase tracking-widest py-2"
-            >
-              CANCEL
-            </button>
-          )}
-        </footer>
-      </div>
+      <PlannerOnboardingWizard
+        mode={wizardMode}
+        onGenerate={handleGenerate}
+        onLaunch={handleLaunch}
+        onCancel={isConfigured ? () => setIsConfiguring(false) : undefined}
+      />
     );
   }
 
@@ -512,7 +374,7 @@ export default function PlannerPage() {
             <RotateCcw className="w-4 h-4" />
           </button>
           <button 
-            onClick={() => setIsConfiguring(true)}
+            onClick={() => { setWizardMode('regenerate'); setIsConfiguring(true); }}
             title="Configure Calibration"
             className="w-10 h-10 rounded-full border border-white/10 bg-white/5 flex items-center justify-center text-white/60 hover:text-white transition-all active:scale-95"
           >

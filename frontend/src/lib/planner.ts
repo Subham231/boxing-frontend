@@ -99,34 +99,62 @@ function saveRecentExerciseHistory(usedThisGeneration: Set<string>): void {
     }
 }
 
+// Exercises known to load a given joint/area heavily enough that they should
+// be skipped when the user has reported an injury there. This is a light,
+// curated safety net — not a substitute for physiotherapy — that makes
+// injury data from the Planner Onboarding actually change what gets picked.
+const INJURY_EXCLUSIONS: Record<string, string[]> = {
+    Shoulder: ['Pike Push-Ups', 'Chair Dips', 'Explosive Push-Ups', 'Shoulder Tap Plank', 'Wall Walkouts', 'Plyometric Push-Ups', 'Plank to Push-Up'],
+    Wrist: ['Standard Push-Ups', 'Wide Push-Ups', 'Diamond Push-Ups', 'Pike Push-Ups', 'Decline Push-Ups (feet elevated)', 'Explosive Push-Ups', 'Plyometric Push-Ups', 'Bear Crawl', 'Crab Walk', 'Plank to Push-Up'],
+    Knee: ['Bulgarian Split Squats', 'Jump Squats', 'Walking Lunges', 'Single-Leg RDL (bodyweight)', 'Single-Leg Squats', 'Skater Hops'],
+    Back: ['Superman Hold', 'Isometric Chin Hold', 'Single-Leg RDL (bodyweight)', 'Side Plank Reach-Through', "World's Greatest Stretch"],
+};
+
+function applyInjuryFilter(pool: string[], injuries?: string[]): string[] {
+    if (!injuries || !injuries.length) return pool;
+    const excluded = new Set<string>();
+    injuries.forEach((inj) => (INJURY_EXCLUSIONS[inj] || []).forEach((name) => excluded.add(name)));
+    const filtered = pool.filter((name) => !excluded.has(name));
+    // Never let a filter empty out a pool entirely — better to include a
+    // "risky" exercise than to crash generation.
+    return filtered.length ? filtered : pool;
+}
+
 export function buildBoxingWorkload(
     combatFocus: string | undefined,
     fitnessBaseline: FitnessBaseline | undefined,
     dayIndex: number,
-    rng: () => number = Math.random
+    rng: () => number = Math.random,
+    equipment: string[] = []
 ): string {
     const mult = getPrescriptionMultiplier(fitnessBaseline);
     const focus = (combatFocus || 'stamina').toLowerCase();
     const variant = Math.floor(rng() * 2);
+    const hasBag = equipment.includes('Heavy Bag');
+    const hasRope = equipment.includes('Jump Rope');
+    const hasDoubleEnd = equipment.includes('Double End Bag');
 
     switch (focus) {
         case 'endurance': {
             const reps = roundToStep(200 * mult, 25);
             const rounds = Math.max(2, Math.round(4 * mult));
+            if (hasRope) return `${rounds} Rounds Double-Under Jump Rope Intervals`;
             return variant === 0
-                ? `${reps}-Rep Pace-Track Straight Jabs`
+                ? `${reps}-Rep Pace-Track Straight Jabs${hasBag ? ' (Heavy Bag)' : ''}`
                 : `${rounds} Rounds Continuous Hand-Speed Shadow-Boxing`;
         }
         case 'explosive': {
             const reps = roundToStep(100 * mult, 10);
             const rounds = Math.max(2, Math.round(3 * mult));
+            if (hasBag) return `${reps} Max-Torque Power Crosses on Heavy Bag (Full Rotation Focus)`;
             return variant === 0
                 ? `${reps} Max-Torque Power Crosses (Full Rotation Focus)`
-                : `${rounds} Rounds Explosive Lead-Hook Burst`;
+                : `${rounds} Rounds Explosive Lead-Hook Burst${hasDoubleEnd ? ' (Double-End Bag)' : ''}`;
         }
         case 'conditioning': {
             const rounds = Math.max(3, Math.round(5 * mult));
             const seconds = roundToStep(30 * mult, 5);
+            if (hasBag) return `${rounds} Rounds High-Intensity Heavy Bag Combo Bursts`;
             return variant === 0
                 ? `${rounds} Rounds High-Intensity Anaerobic Combo Bursts`
                 : `${seconds}s Max-Output Punch Sprints w/ Active Recovery`;
@@ -135,9 +163,10 @@ export function buildBoxingWorkload(
         default: {
             const minutes = Math.max(1.5, Math.round(3 * mult * 2) / 2);
             const rounds = Math.max(2, Math.round(4 * mult));
+            if (hasDoubleEnd) return `${rounds} Rounds Double-End Bag Rhythm & Timing`;
             return variant === 0
                 ? `${minutes}-Minute Non-Stop Combination Blitz Cycles`
-                : `${rounds} Rounds Level-Change Heavy Bodyshot Intervals`;
+                : `${rounds} Rounds Level-Change Heavy Bodyshot Intervals${hasBag ? ' (Heavy Bag)' : ''}`;
         }
     }
 }
@@ -227,6 +256,32 @@ export const PROTOCOL_BLOCKS = [
     { title: 'COOLDOWN', duration: '5 MIN', offsetMin: 44 },
 ];
 
+const BASE_SESSION_MINUTES = PROTOCOL_BLOCKS.reduce((sum, b) => sum + parseInt(b.duration, 10), 0); // 40
+
+// Scales the fixed 5-block skeleton to whatever session length the user
+// picked in the Planner Onboarding (20/30/45/60/90 min), keeping each
+// block's relative share of the session and recalculating start offsets so
+// the schedule stays internally consistent.
+export function scaleProtocolBlocks(targetMinutes: number): typeof PROTOCOL_BLOCKS {
+    const ratio = targetMinutes / BASE_SESSION_MINUTES;
+    let cursor = 0;
+    return PROTOCOL_BLOCKS.map((b) => {
+        const dur = Math.max(3, Math.round(parseInt(b.duration, 10) * ratio));
+        const scaled = { title: b.title, duration: `${dur} MIN`, offsetMin: cursor };
+        cursor += dur;
+        return scaled;
+    });
+}
+
+// Longer sessions get more exercises packed into each block, not just longer
+// timers on the same two moves.
+export function exercisesPerBlockFor(targetMinutes: number): number {
+    if (targetMinutes <= 20) return 1;
+    if (targetMinutes <= 35) return 2;
+    if (targetMinutes <= 60) return 3;
+    return 4; // 90 min
+}
+
 export const EXERCISES_PER_BLOCK = 2;
 export const DAY_NAMES = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
@@ -289,9 +344,11 @@ export function pickExercises(
     count: number,
     rng: () => number = Math.random,
     usedThisGeneration: Set<string> = new Set(),
-    recentHistory: Set<string> = new Set()
+    recentHistory: Set<string> = new Set(),
+    injuries: string[] = []
 ): string[] {
-    const pool = EXERCISES[dayKey] || EXERCISES.push;
+    const rawPool = EXERCISES[dayKey] || EXERCISES.push;
+    const pool = applyInjuryFilter(rawPool, injuries);
 
     // Tier the pool so we prefer exercises that are BOTH new to this week's
     // generation AND weren't used in the previous regeneration. Fall back a
@@ -314,15 +371,21 @@ export function buildProtocolsForDay(
     dayIndex: number = 0,
     rng: () => number = Math.random,
     usedThisGeneration: Set<string> = new Set(),
-    recentHistory: Set<string> = new Set()
+    recentHistory: Set<string> = new Set(),
+    injuries: string[] = [],
+    equipment: string[] = [],
+    sessionMinutes: number = BASE_SESSION_MINUTES
 ): PlannerProtocolBlock[] {
-    return PROTOCOL_BLOCKS.map((block, i) => {
-        const exercises = pickExercises(dayKey, i, EXERCISES_PER_BLOCK, rng, usedThisGeneration, recentHistory);
+    const blocks = scaleProtocolBlocks(sessionMinutes);
+    const perBlock = exercisesPerBlockFor(sessionMinutes);
+
+    return blocks.map((block, i) => {
+        const exercises = pickExercises(dayKey, i, perBlock, rng, usedThisGeneration, recentHistory, injuries);
         // Every day gets one core bodyweight pattern (already in exercises[0])
         // plus one contextual boxing workload mapped to the user's combat
-        // focus, injected into the Primary Block.
+        // focus and available equipment, injected into the Primary Block.
         if (block.title === 'PRIMARY BLOCK' && combatFocus) {
-            exercises[exercises.length - 1] = buildBoxingWorkload(combatFocus, fitnessBaseline, dayIndex, rng);
+            exercises[exercises.length - 1] = buildBoxingWorkload(combatFocus, fitnessBaseline, dayIndex, rng, equipment);
         }
         return {
             time: addMinutes(preferredTime, block.offsetMin),
@@ -347,12 +410,54 @@ export function recoveryForDay(dayKey: string): string {
     return map[dayKey] || 'Active mobility & hydration';
 }
 
+const WEEKDAY_INDEX: Record<string, number> = { SUN: 0, MON: 1, TUE: 2, WED: 3, THU: 4, FRI: 5, SAT: 6 };
+
+// Walks forward from `from`, collecting the next `count` calendar dates that
+// land on one of the user's selected weekdays (in the order they'll actually
+// occur). Falls back to plain sequential days when no selection was made, so
+// old callers/plans are unaffected.
+function resolveScheduledDates(
+    selectedWeekdays: string[] | undefined,
+    count: number,
+    from: Date
+): { day_name: string; date: Date }[] {
+    if (!selectedWeekdays || !selectedWeekdays.length) {
+        return Array.from({ length: count }).map((_, i) => {
+            const d = new Date(from);
+            d.setDate(from.getDate() + i);
+            return { day_name: DAY_NAMES[i % DAY_NAMES.length], date: d };
+        });
+    }
+
+    const wanted = new Set(selectedWeekdays.map((w) => WEEKDAY_INDEX[w.toUpperCase()]).filter((n) => n !== undefined));
+    const out: { day_name: string; date: Date }[] = [];
+    const cursor = new Date(from);
+    let safety = 0;
+
+    while (out.length < count && safety < 60) {
+        const dow = cursor.getDay();
+        if (wanted.has(dow)) {
+            const label = Object.keys(WEEKDAY_INDEX).find((k) => WEEKDAY_INDEX[k] === dow) || 'MON';
+            out.push({ day_name: label, date: new Date(cursor) });
+        }
+        cursor.setDate(cursor.getDate() + 1);
+        safety++;
+    }
+    return out;
+}
+
 export function buildWeeklyPlan(userData: PlannerUserData): WeeklyPlan {
     const start = new Date();
     const preferred = getPreferredTime(userData);
     const combatFocus = userData?.combatFocus;
     const fitnessBaseline = userData?.fitnessBaseline;
     const dayPlan = selectDayPlan(userData?.daysPerWeek ?? userData?.frequency);
+    const equipment = userData?.constraints?.equipment || [];
+    const injuries = (userData?.constraints?.injuries || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+    const sessionMinutes = Math.max(10, Math.round(userData?.available_time || userData?.availableTime || BASE_SESSION_MINUTES));
 
     // New seed every generation => genuinely different exercise selection
     // each time the user regenerates, instead of the old deterministic
@@ -362,23 +467,22 @@ export function buildWeeklyPlan(userData: PlannerUserData): WeeklyPlan {
     const recentHistory = loadRecentExerciseHistory();
     const usedThisGeneration = new Set<string>();
 
-    const end = new Date(start);
-    end.setDate(start.getDate() + Math.max(0, dayPlan.length - 1));
+    const scheduledDates = resolveScheduledDates(userData?.selectedWeekdays, dayPlan.length, start);
+    const lastDate = scheduledDates[scheduledDates.length - 1]?.date || start;
 
-    const week_range = `${start.toLocaleString('en-US', { month: 'short' }).toUpperCase()} ${start.getDate()} - ${end.getDate()}`;
+    const week_range = `${start.toLocaleString('en-US', { month: 'short' }).toUpperCase()} ${scheduledDates[0]?.date.getDate() ?? start.getDate()} - ${lastDate.getDate()}`;
 
     const days = dayPlan.map((dt, i) => {
-        const d = new Date(start);
-        d.setDate(start.getDate() + i);
+        const sched = scheduledDates[i];
         const intensity =
             dt.key === 'recovery' ? 35 : 55 + (i % 4) * 8 + (dt.key === 'strength' ? 10 : 0);
 
         return {
-            day_name: DAY_NAMES[i % DAY_NAMES.length],
-            date: String(d.getDate()),
+            day_name: sched.day_name,
+            date: String(sched.date.getDate()),
             day_type: dt.label,
             intensity: Math.min(intensity, 98),
-            protocol: buildProtocolsForDay(dt.key, dt.label, preferred, combatFocus, fitnessBaseline, i, rng, usedThisGeneration, recentHistory),
+            protocol: buildProtocolsForDay(dt.key, dt.label, preferred, combatFocus, fitnessBaseline, i, rng, usedThisGeneration, recentHistory, injuries, equipment, sessionMinutes),
             recovery: recoveryForDay(dt.key),
         };
     });

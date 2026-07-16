@@ -146,12 +146,14 @@ function getWorkoutFromActivePlan(targetDate: Date): Workout | null {
     const drills: Drill[] = [];
     day.protocol.forEach((block, pIdx) => {
         const exercises = block.exercises && block.exercises.length ? block.exercises : ['Bodyweight Flow'];
+        const blockMinutes = parseInt(block.duration, 10) || 8;
+        const perExerciseSeconds = Math.max(20, Math.round((blockMinutes * 60) / exercises.length));
         exercises.forEach((name, i) => {
             drills.push({
                 name,
                 instruction: `${block.title} — Set ${i + 1} of ${exercises.length}. Bodyweight only.`,
                 type: 'timer',
-                duration: 45,
+                duration: perExerciseSeconds,
                 isPlanner: true,
                 impact: block.impact || day.day_type,
             });
