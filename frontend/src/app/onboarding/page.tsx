@@ -7,6 +7,14 @@ import { Loader2 } from 'lucide-react';
 
 import Welcome from './components/Welcome';
 import TrainingProblem from './components/TrainingProblem';
+import Obstacle from './components/Obstacle';
+import FavoriteFighter from './components/FavoriteFighter';
+import Motivation from './components/Motivation';
+import FutureSelf from './components/FutureSelf';
+import CommitmentLevel from './components/CommitmentLevel';
+import BoxingMindset from './components/BoxingMindset';
+import Superpower from './components/Superpower';
+import FutureProgressPreview from './components/FutureProgressPreview';
 import FutureProgress from './components/FutureProgress';
 import TrainingCategories from './components/TrainingCategories';
 import StructuredProgram from './components/StructuredProgram';
@@ -24,6 +32,14 @@ const OnboardingFlow: React.FC = () => {
     const screens = [
         <Welcome key="welcome" />,
         <TrainingProblem key="problem" />,
+        <Obstacle key="obstacle" />,
+        <FavoriteFighter key="fighter" />,
+        <Motivation key="motivation" />,
+        <FutureSelf key="futureself" />,
+        <CommitmentLevel key="commitment" />,
+        <BoxingMindset key="mindset" />,
+        <Superpower key="superpower" />,
+        <FutureProgressPreview key="progresspreview" />,
         <FutureProgress key="progress" />,
         <TrainingCategories key="categories" />,
         <StructuredProgram key="program" />,

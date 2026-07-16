@@ -28,6 +28,13 @@ export interface OnboardingData {
     daysPerWeek: number;
     combatFocus: string;
     fitnessBaseline: FitnessBaseline;
+    favoriteFighter?: string;
+    motivations?: string[];
+    futureSelf?: string;
+    commitmentLevel?: number;
+    boxingMindset?: string;
+    biggestObstacle?: string;
+    trainingSuperpower?: string;
 }
 
 interface OnboardingContextType {
@@ -135,7 +142,7 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         }
     }, []);
 
-    const totalSteps = 12;
+    const totalSteps = 20;
 
     const updateData = (newData: Partial<OnboardingData>) => {
         setData(prev => {

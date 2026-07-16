@@ -28,6 +28,13 @@ export interface OnboardingData {
   daysPerWeek?: number;
   combatFocus?: string;
   fitnessBaseline?: FitnessBaseline;
+  favoriteFighter?: string;
+  motivations?: string[];
+  futureSelf?: string;
+  commitmentLevel?: number;
+  boxingMindset?: string;
+  biggestObstacle?: string;
+  trainingSuperpower?: string;
 }
 
 export interface Drill {
