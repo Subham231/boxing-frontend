@@ -2,16 +2,16 @@
 
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Shield, Zap, Footprints, Flame, Snowflake, Sparkles } from 'lucide-react';
 import { useOnboarding } from '@/context/OnboardingContext';
 
 const SUPERPOWERS = [
-  { emoji: '🗿', label: 'Iron Chin', desc: 'Nothing knocks me down.' },
-  { emoji: '⚡', label: 'Lightning Hands', desc: "I'm faster than I look." },
-  { emoji: '🕺', label: 'Footwork Wizard', desc: 'I control the distance.' },
-  { emoji: '❤️‍🔥', label: 'Relentless Heart', desc: 'I outwork everyone.' },
-  { emoji: '🧊', label: 'Ice-Cold Focus', desc: 'Pressure doesn\'t rattle me.' },
-  { emoji: '💥', label: 'Explosive Power', desc: 'One shot changes everything.' },
+  { icon: Shield, label: 'Iron Chin', desc: 'Nothing knocks me down.' },
+  { icon: Zap, label: 'Lightning Hands', desc: "I'm faster than I look." },
+  { icon: Footprints, label: 'Footwork Wizard', desc: 'I control the distance.' },
+  { icon: Flame, label: 'Relentless Heart', desc: 'I outwork everyone.' },
+  { icon: Snowflake, label: 'Ice-Cold Focus', desc: 'Pressure doesn\'t rattle me.' },
+  { icon: Sparkles, label: 'Explosive Power', desc: 'One shot changes everything.' },
 ];
 
 const Superpower: React.FC = () => {
@@ -38,6 +38,7 @@ const Superpower: React.FC = () => {
       <main className="flex-1 grid grid-cols-2 gap-3 content-start">
         {SUPERPOWERS.map((s) => {
           const active = selected === s.label;
+          const Icon = s.icon;
           return (
             <motion.button
               key={s.label}
@@ -50,7 +51,7 @@ const Superpower: React.FC = () => {
                 active ? 'bg-primary/10 border-primary shadow-[0_0_20px_rgba(226,255,59,0.2)]' : 'bg-black/30 border-white/5 hover:border-white/10'
               }`}
             >
-              <span className="text-3xl">{s.emoji}</span>
+              <Icon className={`w-7 h-7 ${active ? 'text-primary' : 'text-primary/40'}`} strokeWidth={2.25} />
               <span className={`text-[10px] font-black uppercase leading-tight ${active ? 'text-primary' : 'text-white/70'}`}>{s.label}</span>
               <span className="text-[8px] text-white/30 font-semibold italic leading-tight">"{s.desc}"</span>
             </motion.button>

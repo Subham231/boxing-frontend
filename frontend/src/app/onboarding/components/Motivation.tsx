@@ -2,18 +2,18 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Dumbbell, Swords, Heart, Target, Sparkles, Trophy, Shield, Flame } from 'lucide-react';
 import { useOnboarding } from '@/context/OnboardingContext';
 
 const DRIVERS = [
-  { emoji: '💪', label: 'Get Stronger' },
-  { emoji: '🥊', label: 'Become a Better Boxer' },
-  { emoji: '❤️', label: 'Improve My Health' },
-  { emoji: '⚡', label: 'Build Discipline' },
-  { emoji: '😎', label: 'Gain Confidence' },
-  { emoji: '🏆', label: 'Prepare For Competition' },
-  { emoji: '🛡', label: 'Learn Self Defense' },
-  { emoji: '🔥', label: 'Transform My Lifestyle' },
+  { icon: Dumbbell, label: 'Get Stronger' },
+  { icon: Swords, label: 'Become a Better Boxer' },
+  { icon: Heart, label: 'Improve My Health' },
+  { icon: Target, label: 'Build Discipline' },
+  { icon: Sparkles, label: 'Gain Confidence' },
+  { icon: Trophy, label: 'Prepare For Competition' },
+  { icon: Shield, label: 'Learn Self Defense' },
+  { icon: Flame, label: 'Transform My Lifestyle' },
 ];
 
 const MAX_SELECT = 3;
@@ -52,6 +52,7 @@ const Motivation: React.FC = () => {
       <main className="flex-1 grid grid-cols-2 gap-3 content-start">
         {DRIVERS.map((d) => {
           const active = selected.includes(d.label);
+          const Icon = d.icon;
           return (
             <motion.button
               key={d.label}
@@ -62,7 +63,7 @@ const Motivation: React.FC = () => {
                 active ? 'bg-primary/10 border-primary shadow-[0_0_15px_rgba(226,255,59,0.15)]' : 'bg-black/30 border-white/5 hover:border-white/10'
               }`}
             >
-              <span className="text-2xl">{d.emoji}</span>
+              <Icon className={`w-6 h-6 ${active ? 'text-primary' : 'text-primary/40'}`} strokeWidth={2.25} />
               <span className={`text-[10px] font-black uppercase leading-tight ${active ? 'text-primary' : 'text-white/70'}`}>{d.label}</span>
             </motion.button>
           );

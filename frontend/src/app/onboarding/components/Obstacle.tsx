@@ -2,16 +2,16 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Clock, BatteryLow, Map, TrendingDown, RefreshCw, HeartPulse } from 'lucide-react';
 import { useOnboarding } from '@/context/OnboardingContext';
 
 const OBSTACLES = [
-  { emoji: '⏰', label: 'Lack of Time', response: "We'll build a plan that fits your real schedule, not the other way around." },
-  { emoji: '😴', label: 'Lack of Motivation', response: "Consistency beats motivation — small daily wins keep you moving even on low days." },
-  { emoji: '🗺', label: 'No Clear Plan', response: "That's exactly what a Tactical Protocol solves — structure instead of guesswork." },
-  { emoji: '📉', label: 'Inconsistent Results', response: 'Progress you can track is progress you can trust.' },
-  { emoji: '🥱', label: 'Boredom With Routines', response: "Every regeneration keeps your training fresh — never the same session twice." },
-  { emoji: '🤕', label: 'Injuries or Setbacks', response: "We'll factor in your limitations so training works around you, safely." },
+  { icon: Clock, label: 'Lack of Time', response: "We'll build a plan that fits your real schedule, not the other way around." },
+  { icon: BatteryLow, label: 'Lack of Motivation', response: "Consistency beats motivation — small daily wins keep you moving even on low days." },
+  { icon: Map, label: 'No Clear Plan', response: "That's exactly what a Tactical Protocol solves — structure instead of guesswork." },
+  { icon: TrendingDown, label: 'Inconsistent Results', response: 'Progress you can track is progress you can trust.' },
+  { icon: RefreshCw, label: 'Boredom With Routines', response: "Every regeneration keeps your training fresh — never the same session twice." },
+  { icon: HeartPulse, label: 'Injuries or Setbacks', response: "We'll factor in your limitations so training works around you, safely." },
 ];
 
 const Obstacle: React.FC = () => {
@@ -40,6 +40,7 @@ const Obstacle: React.FC = () => {
       <main className="flex-1 flex flex-col gap-3">
         {OBSTACLES.map((o) => {
           const isActive = selected === o.label;
+          const Icon = o.icon;
           return (
             <motion.button
               key={o.label}
@@ -50,7 +51,7 @@ const Obstacle: React.FC = () => {
                 isActive ? 'bg-primary/10 border-primary shadow-[0_0_15px_rgba(226,255,59,0.15)]' : 'bg-black/30 border-white/5 hover:border-white/10'
               }`}
             >
-              <span className="text-2xl shrink-0">{o.emoji}</span>
+              <Icon className={`w-6 h-6 shrink-0 ${isActive ? 'text-primary' : 'text-primary/40'}`} strokeWidth={2.25} />
               <span className={`text-sm font-black uppercase ${isActive ? 'text-primary' : 'text-white'}`}>{o.label}</span>
             </motion.button>
           );

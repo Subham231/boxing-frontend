@@ -2,18 +2,18 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Trophy, Swords, Zap, Flame, Dumbbell, Brain, Sparkles, Heart } from 'lucide-react';
 import { useOnboarding } from '@/context/OnboardingContext';
 
 const FUTURES = [
-  { emoji: '🏆', label: 'Winning Competitions' },
-  { emoji: '🥊', label: 'Looking Like A Fighter' },
-  { emoji: '⚡', label: 'Faster And More Athletic' },
-  { emoji: '🔥', label: 'Leaner And Healthier' },
-  { emoji: '💪', label: 'Stronger Physically' },
-  { emoji: '🧠', label: 'More Disciplined' },
-  { emoji: '😎', label: 'More Confident' },
-  { emoji: '❤️', label: 'Better Mental Health' },
+  { icon: Trophy, label: 'Winning Competitions' },
+  { icon: Swords, label: 'Looking Like A Fighter' },
+  { icon: Zap, label: 'Faster And More Athletic' },
+  { icon: Flame, label: 'Leaner And Healthier' },
+  { icon: Dumbbell, label: 'Stronger Physically' },
+  { icon: Brain, label: 'More Disciplined' },
+  { icon: Sparkles, label: 'More Confident' },
+  { icon: Heart, label: 'Better Mental Health' },
 ];
 
 const FutureSelf: React.FC = () => {
@@ -40,6 +40,7 @@ const FutureSelf: React.FC = () => {
       <main className="flex-1 grid grid-cols-2 gap-3 content-start relative">
         {FUTURES.map((f) => {
           const active = selected === f.label;
+          const Icon = f.icon;
           return (
             <motion.button
               key={f.label}
@@ -60,7 +61,7 @@ const FutureSelf: React.FC = () => {
                   transition={{ duration: 0.8 }}
                 />
               )}
-              <span className="text-2xl relative z-10">{f.emoji}</span>
+              <Icon className={`w-6 h-6 relative z-10 ${active ? 'text-primary' : 'text-primary/40'}`} strokeWidth={2.25} />
               <span className={`text-[10px] font-black uppercase leading-tight relative z-10 ${active ? 'text-primary' : 'text-white/70'}`}>{f.label}</span>
             </motion.button>
           );
