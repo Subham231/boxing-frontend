@@ -22,12 +22,15 @@ import {
 } from 'lucide-react';
 import { getDailyWorkout } from '@/lib/workout-data';
 import { StreakManager } from '@/lib/streak-manager';
+import { useFirebaseUser } from '@/lib/useFirebaseUser';
+import WeeklyLeaderboard from '@/components/reflex/WeeklyLeaderboard';
 import { ProgressRing } from '@/components/ui/ProgressRing';
 import { RankBadge } from '@/components/ui/RankBadge';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
 
 export default function DashboardPage() {
+  const { user: fbUser } = useFirebaseUser();
   const router = useRouter();
   const [ringName, setRingName] = useState('FIGHTER');
   const [streak, setStreak] = useState(0);
@@ -272,6 +275,12 @@ export default function DashboardPage() {
             <Trophy className="w-4 h-4" />
           </Link>
         </header>
+
+        {fbUser && (
+          <Link href="/reflex" className="block">
+            <WeeklyLeaderboard gameId="reaction_tap" topN={5} currentUid={fbUser.uid} compact />
+          </Link>
+        )}
 
         {/* 7-Day Calendar Strip */}
         <div className="grid grid-cols-7 gap-2 my-2 select-none">

@@ -19,6 +19,12 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { StreakManager } from '@/lib/streak-manager';
+import { isPlausibleReactionTime, looksAutomated, createTabLock } from '@/lib/reflex-anticheat';
+import { useFirebaseUser } from '@/lib/useFirebaseUser';
+import { submitReflexScoreSecure } from '@/lib/firebase-reflex';
+import PhoneLoginGate from '@/components/reflex/PhoneLoginGate';
+import ReferralCard from '@/components/reflex/ReferralCard';
+import WeeklyLeaderboard from '@/components/reflex/WeeklyLeaderboard';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
 
@@ -33,6 +39,8 @@ interface LeaderboardRecord {
 
 export default function ReflexPage() {
   const router = useRouter();
+  const { user: fbUser, loading: fbLoading } = useFirebaseUser();
+  const [showLoginGate, setShowLoginGate] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [playerName, setPlayerName] = useState('FIGHTER');
   const [promiseText, setPromiseText] = useState('FOCUS');
@@ -64,6 +72,13 @@ export default function ReflexPage() {
   const [rtRound, setRtRound] = useState(0);
   const [rtTimes, setRtTimes] = useState<number[]>([]);
   const [rtRoundStatus, setRtRoundStatus] = useState<('correct' | 'wrong' | null)[]>([null, null, null, null, null]);
+  const [rtFlagged, setRtFlagged] = useState(false);
+  const [rtFoulMessage, setRtFoulMessage] = useState<string | null>(null);
+  const rtEarlyTapsRef = useRef(0);
+  const rtTapIntervalsRef = useRef<number[]>([]);
+  const rtLastTapRef = useRef<number>(0);
+  const rtFlaggedRef = useRef(false);
+  const rtTabLockRef = useRef(createTabLock('reaction_tap'));
 
   // Game 2: Combo Flash State
   const [cfActive, setCfActive] = useState(false);
@@ -79,6 +94,10 @@ export default function ReflexPage() {
   const [cfTimerDanger, setCfTimerDanger] = useState(false);
   const [cfLevelScores, setCfLevelScores] = useState<number[]>([]);
   const [cfLightSequence, setCfLightSequence] = useState<string[]>([]);
+  const [cfFlagged, setCfFlagged] = useState(false);
+  const cfFlaggedRef = useRef(false);
+  const cfTapIntervalsRef = useRef<number[]>([]);
+  const cfLastTapRef = useRef<number>(0);
 
   // Leaderboard lists
   const [rtLeaderboard, setRtLeaderboard] = useState<LeaderboardRecord[]>([]);
@@ -264,6 +283,13 @@ export default function ReflexPage() {
     setRtRound(0);
     setRtTimes([]);
     setRtRoundStatus([null, null, null, null, null]);
+    setRtFlagged(false);
+    setRtFoulMessage(null);
+    rtFlaggedRef.current = false;
+    rtEarlyTapsRef.current = 0;
+    rtTapIntervalsRef.current = [];
+    rtLastTapRef.current = 0;
+    rtTabLockRef.current.acquire();
     scheduleNextRtTarget();
   };
 
@@ -271,12 +297,12 @@ export default function ReflexPage() {
     setRtTargetState('wait');
     setRtLabel('WAIT...');
     setRtWaiting(false);
-    
+
     const delay = 1200 + Math.random() * 2400;
     rtTimerRef.current = setTimeout(() => {
       setRtTargetState('ready');
       setRtLabel('HIT!');
-      rtFlashTimeRef.current = Date.now();
+      rtFlashTimeRef.current = performance.now();
       setRtWaiting(true);
 
       // Automatically timeout after 2 seconds
@@ -289,11 +315,63 @@ export default function ReflexPage() {
     }, delay);
   };
 
-  const handleRtTap = () => {
+  // Any tap on the arena — whether it's a legitimate hit or a spam/false
+  // start — passes through here first so early taps can be penalized
+  // instead of silently ignored (silently ignoring them is exactly what
+  // makes constant spam-clicking free to try).
+  const handleArenaTap = () => {
+    const now = performance.now();
+    if (rtLastTapRef.current) {
+      const interval = now - rtLastTapRef.current;
+      rtTapIntervalsRef.current.push(interval);
+      if (rtTapIntervalsRef.current.length > 20) rtTapIntervalsRef.current.shift();
+      if (looksAutomated(rtTapIntervalsRef.current)) {
+        rtFlaggedRef.current = true;
+        setRtFlagged(true);
+        setRtFoulMessage('Suspicious input pattern detected — this session will not be submitted to the leaderboard.');
+      }
+    }
+    rtLastTapRef.current = now;
+
+    if (rtTargetState === 'wait' && rtActive) {
+      // False start: tapping before the target is live. Penalize instead of
+      // ignoring, so spam-clicking through the wait period can't guarantee
+      // a near-zero "reaction time" the instant it flashes.
+      if (rtTimerRef.current) clearTimeout(rtTimerRef.current);
+      rtEarlyTapsRef.current += 1;
+      setRtTargetState('slow');
+      setRtLabel('TOO EARLY');
+      if (rtEarlyTapsRef.current >= 3) {
+        rtFlaggedRef.current = true;
+        setRtFlagged(true);
+        setRtFoulMessage('Multiple false starts detected — this session will not be submitted to the leaderboard.');
+      }
+      setTimeout(() => scheduleNextRtTarget(), 700);
+      return;
+    }
+
+    handleRtTap(now);
+  };
+
+  const handleRtTap = (tapTime: number) => {
     if (!rtWaiting) return;
     if (rtTimerRef.current) clearTimeout(rtTimerRef.current);
-    
-    const elapsed = (Date.now() - rtFlashTimeRef.current) / 1000;
+
+    const elapsed = (tapTime - rtFlashTimeRef.current) / 1000;
+
+    if (!isPlausibleReactionTime(elapsed)) {
+      // Faster than any real human visual reaction — treat as invalid
+      // rather than rewarding it.
+      rtFlaggedRef.current = true;
+      setRtFlagged(true);
+      setRtFoulMessage('An implausibly fast tap was detected — this session will not be submitted to the leaderboard.');
+      setRtTargetState('slow');
+      setRtLabel('FLAGGED');
+      setRtWaiting(false);
+      setTimeout(() => handleRtNextRound(null), 700);
+      return;
+    }
+
     setRtTargetState('hit');
     setRtLabel(`${elapsed.toFixed(3)}s`);
     setRtWaiting(false);
@@ -326,9 +404,13 @@ export default function ReflexPage() {
       setRtLabel(avg ? `AVG: ${avg.toFixed(3)}s` : 'NO HITS');
       setRtActive(false);
       setRtLastAvg(avg);
+      rtTabLockRef.current.release();
       recordSession();
-      if (avg) {
+      if (avg && !rtFlaggedRef.current) {
         submitOnlineScore(LB_RT, avg, avg.toFixed(3));
+        if (fbUser) {
+          submitReflexScoreSecure('reaction_tap', nextTimes).catch((e) => console.warn('[Firebase] score submit failed:', e));
+        }
       }
     } else {
       scheduleNextRtTarget();
@@ -346,6 +428,10 @@ export default function ReflexPage() {
     setCfSequence([]);
     setCfLevelScores([]);
     setCfStatusText('WATCH THE COMBO...');
+    setCfFlagged(false);
+    cfFlaggedRef.current = false;
+    cfTapIntervalsRef.current = [];
+    cfLastTapRef.current = 0;
     nextComboRound([]);
   };
 
@@ -420,7 +506,19 @@ export default function ReflexPage() {
 
   const handleComboInput = (move: string) => {
     if (!cfWaiting) return;
-    
+
+    const now = performance.now();
+    if (cfLastTapRef.current) {
+      const interval = now - cfLastTapRef.current;
+      cfTapIntervalsRef.current.push(interval);
+      if (cfTapIntervalsRef.current.length > 20) cfTapIntervalsRef.current.shift();
+      if (looksAutomated(cfTapIntervalsRef.current)) {
+        cfFlaggedRef.current = true;
+        setCfFlagged(true);
+      }
+    }
+    cfLastTapRef.current = now;
+
     // Light up button feedback temporarily
     setCfLightSequence(prev => [...prev, move]);
     setTimeout(() => {
@@ -480,7 +578,7 @@ export default function ReflexPage() {
     const avg = cfLevelScores.length > 0 ? Math.round(cfLevelScores.reduce((a, b) => a + b, 0) / cfLevelScores.length) : 0;
     setCfStatusText(won ? '🏆 CHAMPION! Max Level!' : `FINAL AVG: ${avg} pts/level`);
     recordSession();
-    if (cfLevelScores.length > 0) {
+    if (cfLevelScores.length > 0 && !cfFlaggedRef.current) {
       submitOnlineScore(LB_CF, avg, avg.toString());
     }
   };
@@ -675,6 +773,33 @@ export default function ReflexPage() {
         </button>
       </header>
 
+      {/* Firebase Login + Weekly Leaderboard */}
+      {!fbLoading && (
+        <>
+          {!fbUser ? (
+            showLoginGate ? (
+              <PhoneLoginGate onLoggedIn={() => setShowLoginGate(false)} />
+            ) : (
+              <GlassCard
+                onClick={() => setShowLoginGate(true)}
+                className="p-4 border-primary/20 bg-primary/[0.03] cursor-pointer flex items-center justify-between"
+              >
+                <div>
+                  <span className="text-xs font-black text-white uppercase block">Login to Compete</span>
+                  <span className="text-[9px] text-white/40 font-semibold">Save your scores &amp; join the weekly leaderboard</span>
+                </div>
+                <span className="text-[10px] font-black text-primary uppercase">Login →</span>
+              </GlassCard>
+            )
+          ) : (
+            <>
+              <WeeklyLeaderboard gameId="reaction_tap" topN={10} currentUid={fbUser.uid} />
+              <ReferralCard uid={fbUser.uid} />
+            </>
+          )}
+        </>
+      )}
+
       {/* Stats Hex card */}
       <GlassCard className="p-6 flex flex-col items-center justify-center border-primary/20 bg-black/40 text-center relative overflow-hidden">
         <div className="text-[8px] font-black text-primary tracking-[3px] uppercase mb-1.5 opacity-85">
@@ -788,7 +913,7 @@ export default function ReflexPage() {
 
         {/* Reaction Arena */}
         <div 
-          onClick={handleRtTap}
+          onClick={handleArenaTap}
           className="h-48 rounded-2xl border border-white/5 bg-black flex flex-col items-center justify-center relative overflow-hidden cursor-pointer select-none"
         >
           {/* Reaction target button */}
@@ -811,6 +936,13 @@ export default function ReflexPage() {
             <span>LAST AVG: <span className="text-primary">{rtLastAvg ? `${rtLastAvg.toFixed(3)}s` : '--'}</span></span>
           </div>
         </div>
+
+        {rtFoulMessage && (
+          <div className="mt-3 px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center gap-2">
+            <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+            <span className="text-[9px] font-bold text-red-300 leading-snug">{rtFoulMessage}</span>
+          </div>
+        )}
 
         {/* Round Progress Dots */}
         <div className="flex justify-center gap-1.5 mt-4">

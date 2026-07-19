@@ -1,0 +1,30 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // User profiles: a user can read their own profile and update only
+    // harmless display fields on it. referralCode/referralCount/
+    // subscriptionUntil are never client-writable — only Cloud Functions
+    // (Admin SDK, which bypasses these rules entirely) can change them.
+    match /users/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null && request.auth.uid == uid;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // Anyone authenticated can READ the leaderboard (needed for the public
+    // top-5 widget and rank lookups). Nobody can write to it directly from
+    // the client — scores are only ever written by the submitReflexScore
+    // Cloud Function using the Admin SDK.
+    match /reflex_scores_reaction_tap/{uid} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+    match /reflex_scores_combo_flash/{uid} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+  }
+}
