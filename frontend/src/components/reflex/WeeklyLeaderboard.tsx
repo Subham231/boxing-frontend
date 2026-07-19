@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Trophy } from 'lucide-react';
-import { subscribeWeeklyLeaderboard, getUserWeeklyRank, type ReflexScoreDoc } from '@/lib/firebase-reflex';
+import { subscribeWeeklyLeaderboard, getUserWeeklyRank, type ReflexScoreRow } from '@/lib/firebase-reflex';
 import { GlassCard } from '@/components/ui/GlassCard';
 
 interface WeeklyLeaderboardProps {
@@ -13,7 +13,7 @@ interface WeeklyLeaderboardProps {
 }
 
 export default function WeeklyLeaderboard({ gameId, topN = 5, currentUid, compact = false }: WeeklyLeaderboardProps) {
-  const [rows, setRows] = useState<ReflexScoreDoc[]>([]);
+  const [rows, setRows] = useState<ReflexScoreRow[]>([]);
   const [myRank, setMyRank] = useState<number | null>(null);
 
   useEffect(() => {
@@ -52,11 +52,11 @@ export default function WeeklyLeaderboard({ gameId, topN = 5, currentUid, compac
             >
               <div className="flex items-center gap-3">
                 <span className={`text-xs font-black w-5 text-center ${i === 0 ? 'text-primary' : 'text-white/40'}`}>#{i + 1}</span>
-                <span className="text-xs font-bold text-white">{mine ? 'You' : maskPhone(row.phone)}</span>
+                <span className="text-xs font-bold text-white">{mine ? 'You' : maskPhone(row.reflex_profiles?.phone || '')}</span>
               </div>
               <div className="text-right">
-                <span className="text-xs font-black text-primary block">{row.weeklyScore?.toFixed(3)}s</span>
-                {!compact && <span className="text-[8px] text-white/30 font-bold uppercase">Best: {row.bestScore?.toFixed(3)}s</span>}
+                <span className="text-xs font-black text-primary block">{row.weekly_score?.toFixed(3)}s</span>
+                {!compact && <span className="text-[8px] text-white/30 font-bold uppercase">Best: {row.best_score?.toFixed(3)}s</span>}
               </div>
             </div>
           );

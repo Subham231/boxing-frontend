@@ -1,7 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
-import { getFunctions } from 'firebase/functions';
 
 const firebaseConfig = {
   apiKey: "AIzaSyAxY5fBm_NxO1Zazb3m3rOGUfUvNS1duUU",
@@ -16,6 +14,7 @@ const firebaseConfig = {
 // Avoid re-initializing during Next.js hot reload / multiple imports.
 export const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
+// Firebase is used ONLY for phone-number authentication in this app.
+// Firestore/Functions were dropped in favor of Supabase as the sole data
+// store — see /api/reflex/* routes and /supabase/reflex-schema.sql.
 export const firebaseAuth = getAuth(firebaseApp);
-export const firestore = getFirestore(firebaseApp);
-export const firebaseFunctions = getFunctions(firebaseApp);
