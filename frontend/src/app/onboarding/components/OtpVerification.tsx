@@ -7,7 +7,6 @@ import { useOnboarding } from '@/context/OnboardingContext';
 import { sendOtp, confirmOtp } from '@/lib/firebase-auth';
 
 const RECAPTCHA_CONTAINER_ID = 'onboarding-phone-recaptcha';
-const GUEST_KEY = 'boxing_guest_mode';
 
 const OtpVerification: React.FC = () => {
   const { data, updateData, nextStep, prevStep } = useOnboarding();
@@ -50,13 +49,6 @@ const OtpVerification: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleSkip = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(GUEST_KEY, 'true');
-    }
-    nextStep();
   };
 
   return (
@@ -128,16 +120,13 @@ const OtpVerification: React.FC = () => {
           </button>
         )}
 
-        <div className="flex justify-between items-center px-1">
+        <div className="flex justify-center items-center px-1">
           <button onClick={prevStep} className="text-[10px] font-black text-white/40 hover:text-white uppercase tracking-widest py-2">
             Back
           </button>
-          <button onClick={handleSkip} className="text-[10px] font-black text-white/40 hover:text-white uppercase tracking-widest py-2">
-            Skip for now
-          </button>
         </div>
         <p className="text-[9px] text-center text-white/25 font-semibold">
-          You can verify your phone number later in Settings.
+          Phone verification is required to enter the ring.
         </p>
       </footer>
     </div>
