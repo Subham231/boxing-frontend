@@ -1,8 +1,7 @@
 'use client';
 
-import React, { useEffect } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
-import { useAuth } from '@/context/AuthContext';
+import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
 import { Loader2 } from 'lucide-react';
 
@@ -11,37 +10,31 @@ export default function ProtectedLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { session, loading } = useAuth();
   const router = useRouter();
-  const pathname = usePathname();
+  const [checked, setChecked] = useState(false);
+  const [allowed, setAllowed] = useState(false);
 
   useEffect(() => {
-    if (loading) return;
-
-    const isGuest = localStorage.getItem('boxing_guest_mode') === 'true';
     const isOnboardingComplete = () => {
       if (localStorage.getItem('boxing_onboarding_done') === 'true') return true;
       try {
         const data = JSON.parse(localStorage.getItem('boxing_onboarding_data') || '{}');
         return !!data.onboarding_completed;
-      } catch (e) {
+      } catch {
         return false;
       }
     };
 
-    // If not authenticated and not in guest mode, force login
-    if (!session && !isGuest) {
-      router.replace('/login');
-      return;
-    }
-
-    // If onboarding is not completed, force onboarding
     if (!isOnboardingComplete()) {
       router.replace('/onboarding');
+      setAllowed(false);
+    } else {
+      setAllowed(true);
     }
-  }, [session, loading, router]);
+    setChecked(true);
+  }, [router]);
 
-  if (loading) {
+  if (!checked) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-bg-dark gap-4">
         <Loader2 className="w-10 h-10 text-primary animate-spin" />
@@ -50,11 +43,7 @@ export default function ProtectedLayout({
     );
   }
 
-  // Fallback check while redirecting
-  const isGuest = typeof window !== 'undefined' && localStorage.getItem('boxing_guest_mode') === 'true';
-  if (!session && !isGuest) {
-    return null;
-  }
+  if (!allowed) return null;
 
   return <AppShell>{children}</AppShell>;
 }

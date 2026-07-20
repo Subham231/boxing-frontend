@@ -25,6 +25,8 @@ import Ecosystem from './components/Ecosystem';
 import JourneyStart from './components/JourneyStart';
 import Identity from './components/Problem';
 import PromiseStep from './components/Promise';
+import OtpVerification from './components/OtpVerification';
+import FinalPromise from './components/FinalPromise';
 
 const OnboardingFlow: React.FC = () => {
     const { currentStep, totalSteps, isLoaded } = useOnboarding();
@@ -50,6 +52,8 @@ const OnboardingFlow: React.FC = () => {
         <JourneyStart key="journey" />,
         <Identity key="identity" />,
         <PromiseStep key="promise" />,
+        <OtpVerification key="otp" />,
+        <FinalPromise key="finalpromise" />,
     ];
 
     if (!isLoaded) {
@@ -72,7 +76,7 @@ const OnboardingFlow: React.FC = () => {
                     transition={{ duration: 0.4, ease: 'easeOut' }}
                     className="w-full max-w-lg"
                 >
-                    {screens[currentStep - 1] || <PromiseStep />}
+                    {screens[currentStep - 1] || <FinalPromise />}
                 </motion.div>
             </AnimatePresence>
 

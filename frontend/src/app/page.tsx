@@ -1,38 +1,33 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/context/AuthContext';
 import { Loader2 } from 'lucide-react';
 
 export default function HomeGate() {
-  const { session, loading } = useAuth();
   const router = useRouter();
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (loading) return;
-
-    const isGuest = localStorage.getItem('boxing_guest_mode') === 'true';
+    // Onboarding (ending in phone verification) is now the sole entry
+    // gate — there's no separate /login page anymore.
     const isOnboardingComplete = () => {
       if (localStorage.getItem('boxing_onboarding_done') === 'true') return true;
       try {
         const data = JSON.parse(localStorage.getItem('boxing_onboarding_data') || '{}');
         return !!data.onboarding_completed;
-      } catch (e) {
+      } catch {
         return false;
       }
     };
 
-    if (session || isGuest) {
-      if (isOnboardingComplete()) {
-        router.replace('/dashboard');
-      } else {
-        router.replace('/onboarding');
-      }
+    if (isOnboardingComplete()) {
+      router.replace('/dashboard');
     } else {
-      router.replace('/login');
+      router.replace('/onboarding');
     }
-  }, [session, loading, router]);
+    setReady(true);
+  }, [router]);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-bg-dark gap-4">

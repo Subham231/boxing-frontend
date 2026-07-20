@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useOnboarding } from '@/context/OnboardingContext';
 import { Power, Check } from 'lucide-react';
 
@@ -19,25 +18,21 @@ const FEATURES = [
 ];
 
 const Promise: React.FC = () => {
-    const router = useRouter();
-    const { nextStep, prevStep, syncToSupabase } = useOnboarding();
+    const { nextStep, prevStep } = useOnboarding();
     const [accepted, setAccepted] = useState(false);
-    const [launching, setLaunching] = useState(false);
 
-    const handleInitialize = async () => {
+    const handleInitialize = () => {
         if (!accepted) {
             alert('The protocol requires your commitment. Accept the promise.');
             return;
         }
-        setLaunching(true);
-        await syncToSupabase();
-        router.replace('/dashboard');
+        nextStep();
     };
 
     return (
         <div className="flex flex-col min-h-[85vh] justify-between py-2">
             <header className="text-left mb-6">
-                <div className="text-[10px] font-black tracking-[3px] text-primary uppercase mb-3">20 / 20</div>
+                <div className="text-[10px] font-black tracking-[3px] text-primary uppercase mb-3">20 / 22</div>
                 <h1 className="text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
                     The Fighter&apos;s <span className="text-primary">Promise</span>
                 </h1>
@@ -83,14 +78,10 @@ const Promise: React.FC = () => {
                 <button
                     type="button"
                     onClick={handleInitialize}
-                    disabled={launching || !accepted}
+                    disabled={!accepted}
                     className="btn-primary w-full h-[75px] text-xl font-black italic uppercase tracking-wider flex items-center justify-center gap-2 disabled:opacity-50"
                 >
-                    {launching ? 'CALIBRATING...' : (
-                        <>
-                            INITIALIZE SYSTEM <Power size={22} />
-                        </>
-                    )}
+                    INITIALIZE SYSTEM <Power size={22} />
                 </button>
                 <button type="button" onClick={prevStep} className="text-[10px] font-black text-white/40 tracking-[2px] uppercase">
                     Back

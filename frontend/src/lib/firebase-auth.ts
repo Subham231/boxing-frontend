@@ -20,14 +20,26 @@ export interface UserProfile {
 }
 
 let recaptchaVerifier: RecaptchaVerifier | null = null;
+let recaptchaContainerIdInUse: string | null = null;
 
 // Must be called with the id of a visible (or invisible) container element
-// already mounted in the DOM before sending an OTP.
+// already mounted in the DOM before sending an OTP. Recreates the verifier
+// if a different container id is requested than the one currently cached
+// (e.g. the Reflex page's gate vs. the Onboarding flow's OTP step each use
+// their own container).
 export function ensureRecaptcha(containerId: string): RecaptchaVerifier {
-  if (recaptchaVerifier) return recaptchaVerifier;
+  if (recaptchaVerifier && recaptchaContainerIdInUse === containerId) return recaptchaVerifier;
+  if (recaptchaVerifier) {
+    try {
+      recaptchaVerifier.clear();
+    } catch {
+      // ignore
+    }
+  }
   recaptchaVerifier = new RecaptchaVerifier(firebaseAuth, containerId, {
     size: 'invisible',
   });
+  recaptchaContainerIdInUse = containerId;
   return recaptchaVerifier;
 }
 
