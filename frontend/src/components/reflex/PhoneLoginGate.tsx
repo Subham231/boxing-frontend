@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { Phone, ShieldCheck, ArrowRight } from 'lucide-react';
 import type { ConfirmationResult } from 'firebase/auth';
-import { sendOtp, confirmOtp } from '@/lib/firebase-auth';
+import { sendOtp, confirmOtp, checkOtpRateLimit } from '@/lib/firebase-auth';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
 
@@ -33,6 +33,11 @@ export default function PhoneLoginGate({ onLoggedIn }: PhoneLoginGateProps) {
     }
     setLoading(true);
     try {
+      const limitCheck = await checkOtpRateLimit(trimmed);
+      if (!limitCheck.allowed) {
+        setError(limitCheck.reason || 'Too many attempts for this number today.');
+        return;
+      }
       const result = await sendOtp(trimmed, RECAPTCHA_CONTAINER_ID);
       setConfirmation(result);
       setStep('otp');

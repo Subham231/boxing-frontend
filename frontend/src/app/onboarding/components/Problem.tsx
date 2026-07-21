@@ -118,6 +118,8 @@ const Identity: React.FC = () => {
                 <div className="w-full flex flex-col gap-5 mt-2">
                     {[
                         { label: 'Ring Name', key: 'ringName' as const, placeholder: 'e.g. TITAN', type: 'text' },
+                        { label: 'Age', key: 'age' as const, placeholder: '25', type: 'number' },
+                        { label: 'Profession', key: 'profession' as const, placeholder: 'e.g. Student, Engineer, Coach', type: 'text' },
                         { label: 'Phone Number', key: 'phone' as const, placeholder: '+1...', type: 'tel' },
                     ].map((field) => (
                         <div key={field.key} className="flex flex-col gap-2">
@@ -126,7 +128,11 @@ const Identity: React.FC = () => {
                                 type={field.type}
                                 placeholder={field.placeholder}
                                 value={data[field.key] ?? ''}
-                                onChange={(e) => updateData({ [field.key]: e.target.value })}
+                                onChange={(e) =>
+                                    updateData({
+                                        [field.key]: field.type === 'number' ? Number(e.target.value) : e.target.value,
+                                    })
+                                }
                                 className="w-full bg-transparent border-b border-white/20 py-2 text-2xl font-bold outline-none focus:border-primary transition-all pb-1 tracking-tight"
                             />
                         </div>

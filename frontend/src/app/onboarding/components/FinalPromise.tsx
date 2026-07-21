@@ -31,7 +31,7 @@ const FinalPromise: React.FC = () => {
         ))}
       </div>
 
-      <div className="relative z-10 text-[10px] font-black tracking-[3px] text-primary uppercase mb-3">22 / 22</div>
+      <div className="relative z-10 text-[10px] font-black tracking-[3px] text-primary uppercase mb-3">23 / 23</div>
 
       <motion.header
         initial={{ opacity: 0, y: 20 }}

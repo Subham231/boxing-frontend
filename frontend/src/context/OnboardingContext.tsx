@@ -12,6 +12,7 @@ export interface OnboardingData {
     ringName: string;
     phone: string;
     age: number;
+    profession: string;
     height: number;
     weight: number;
     goals: string[];
@@ -53,6 +54,7 @@ const defaultData: OnboardingData = {
     ringName: '',
     phone: '',
     age: 25,
+    profession: '',
     height: 175,
     weight: 75,
     goals: [],
@@ -142,7 +144,7 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         }
     }, []);
 
-    const totalSteps = 22;
+    const totalSteps = 23;
 
     const updateData = (newData: Partial<OnboardingData>) => {
         setData(prev => {

@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { ChevronRight, ShieldCheck, ArrowLeft } from 'lucide-react';
 import type { ConfirmationResult } from 'firebase/auth';
 import { useOnboarding } from '@/context/OnboardingContext';
-import { sendOtp, confirmOtp } from '@/lib/firebase-auth';
+import { sendOtp, confirmOtp, checkOtpRateLimit, saveProfileDetails } from '@/lib/firebase-auth';
 
 const RECAPTCHA_CONTAINER_ID = 'onboarding-phone-recaptcha';
 
@@ -26,6 +26,11 @@ const OtpVerification: React.FC = () => {
     }
     setLoading(true);
     try {
+      const limitCheck = await checkOtpRateLimit(trimmed);
+      if (!limitCheck.allowed) {
+        setError(limitCheck.reason || 'Too many attempts for this number today.');
+        return;
+      }
       const result = await sendOtp(trimmed, RECAPTCHA_CONTAINER_ID);
       setConfirmation(result);
       setStep('otp');
@@ -41,8 +46,13 @@ const OtpVerification: React.FC = () => {
     setError(null);
     setLoading(true);
     try {
-      await confirmOtp(confirmation, code.trim());
+      const user = await confirmOtp(confirmation, code.trim());
       updateData({ phone: phone.trim() });
+      await saveProfileDetails(user, {
+        displayName: data.ringName,
+        age: data.age,
+        profession: data.profession,
+      });
       nextStep();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Invalid code. Try again.');

@@ -26,6 +26,7 @@ import JourneyStart from './components/JourneyStart';
 import Identity from './components/Problem';
 import PromiseStep from './components/Promise';
 import OtpVerification from './components/OtpVerification';
+import SubscriptionOffer from './components/SubscriptionOffer';
 import FinalPromise from './components/FinalPromise';
 
 const OnboardingFlow: React.FC = () => {
@@ -53,6 +54,7 @@ const OnboardingFlow: React.FC = () => {
         <Identity key="identity" />,
         <PromiseStep key="promise" />,
         <OtpVerification key="otp" />,
+        <SubscriptionOffer key="subscription" />,
         <FinalPromise key="finalpromise" />,
     ];
 
