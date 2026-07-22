@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
+import { StreakManager } from '@/lib/streak-manager';
 import { 
   User, 
   Settings, 
@@ -46,6 +47,9 @@ export default function SettingsPage() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [profileData, setProfileData] = useState<OnboardingData>({});
+
+  const streakVal = StreakManager.checkAndGetStreak();
+  const rank = StreakManager.getRank(streakVal);
 
   // App Settings
   const [notifications, setNotifications] = useState(true);
@@ -388,6 +392,22 @@ Keep it under 120 words. Focus on their discipline and the evolution of their po
                 {profileData.height ? `${profileData.height}cm / ${profileData.weight}kg` : '--'}
               </span>
             </div>
+            <div>
+              <span className="text-[7px] font-black text-white/30 tracking-wider block uppercase">
+                STREAK
+              </span>
+              <span className="text-xs font-black text-white uppercase mt-0.5 block">
+                🔥 {streakVal} DAYS
+              </span>
+            </div>
+            <div>
+              <span className="text-[7px] font-black text-white/30 tracking-wider block uppercase">
+                RANK
+              </span>
+              <span className="text-xs font-black uppercase mt-0.5 block" style={{ color: rank.color }}>
+                {rank.name}
+              </span>
+            </div>
           </div>
 
           {/* Active Goals badges */}
@@ -507,13 +527,55 @@ Keep it under 120 words. Focus on their discipline and the evolution of their po
 
         {/* Privacy Link */}
         <div 
-          onClick={() => router.push('/privacy')}
+          onClick={() => router.push('/legal/privacy')}
           className="glass-card p-4 rounded-3xl border border-white/5 bg-black/40 flex justify-between items-center cursor-pointer select-none hover:border-white/10"
         >
           <div className="flex items-center gap-4">
             <ShieldCheck className="w-4 h-4 text-white/40" />
             <span className="text-xs font-black uppercase text-white">
-              PRIVACY & SECURITY
+              PRIVACY POLICY
+            </span>
+          </div>
+          <ChevronRight className="w-4 h-4 text-white/20" />
+        </div>
+
+        {/* Terms Link */}
+        <div 
+          onClick={() => router.push('/legal/terms')}
+          className="glass-card p-4 rounded-3xl border border-white/5 bg-black/40 flex justify-between items-center cursor-pointer select-none hover:border-white/10"
+        >
+          <div className="flex items-center gap-4">
+            <ShieldCheck className="w-4 h-4 text-white/40" />
+            <span className="text-xs font-black uppercase text-white">
+              TERMS & CONDITIONS
+            </span>
+          </div>
+          <ChevronRight className="w-4 h-4 text-white/20" />
+        </div>
+
+        {/* Refund Link */}
+        <div 
+          onClick={() => router.push('/legal/refund')}
+          className="glass-card p-4 rounded-3xl border border-white/5 bg-black/40 flex justify-between items-center cursor-pointer select-none hover:border-white/10"
+        >
+          <div className="flex items-center gap-4">
+            <ShieldCheck className="w-4 h-4 text-white/40" />
+            <span className="text-xs font-black uppercase text-white">
+              REFUND & CANCELLATION
+            </span>
+          </div>
+          <ChevronRight className="w-4 h-4 text-white/20" />
+        </div>
+
+        {/* Contact Link */}
+        <div 
+          onClick={() => router.push('/legal/contact')}
+          className="glass-card p-4 rounded-3xl border border-white/5 bg-black/40 flex justify-between items-center cursor-pointer select-none hover:border-white/10"
+        >
+          <div className="flex items-center gap-4">
+            <ShieldCheck className="w-4 h-4 text-white/40" />
+            <span className="text-xs font-black uppercase text-white">
+              CONTACT US
             </span>
           </div>
           <ChevronRight className="w-4 h-4 text-white/20" />

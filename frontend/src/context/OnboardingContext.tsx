@@ -52,7 +52,7 @@ interface OnboardingContextType {
 
 const defaultData: OnboardingData = {
     ringName: '',
-    phone: '',
+    phone: '+91',
     age: 25,
     profession: '',
     height: 175,
