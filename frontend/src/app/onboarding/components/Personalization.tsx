@@ -4,6 +4,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { ChevronRight, Target, Award, CalendarClock, Dumbbell, Flame, LineChart } from 'lucide-react';
 import { useOnboarding } from '@/context/OnboardingContext';
+import StepBadge from './StepBadge';
 
 const CARDS = [
   { icon: Target, label: 'Your Goals' },
@@ -20,7 +21,7 @@ const Personalization: React.FC = () => {
   return (
     <div className="flex flex-col min-h-[85vh] justify-between py-2">
       <header className="text-left mb-6">
-        <div className="text-[10px] font-black tracking-[3px] text-primary uppercase mb-3">15 / 20</div>
+        <StepBadge />
         <h1 className="text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
           Designed <span className="text-primary">around you</span>.
         </h1>

@@ -4,6 +4,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { ChevronRight } from 'lucide-react';
 import { useOnboarding } from '@/context/OnboardingContext';
+import StepBadge from './StepBadge';
 
 const JourneyStart: React.FC = () => {
   const { nextStep, prevStep } = useOnboarding();
@@ -23,7 +24,7 @@ const JourneyStart: React.FC = () => {
       </div>
 
       <div className="relative z-10">
-        <div className="text-[10px] font-black tracking-[3px] text-primary uppercase mb-3">18 / 20</div>
+        <StepBadge />
       </div>
 
       <motion.header

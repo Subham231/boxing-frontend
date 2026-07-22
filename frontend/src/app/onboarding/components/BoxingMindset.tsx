@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { ChevronRight, Brain, Swords, Zap, Shield, Flame, Target } from 'lucide-react';
 import { useOnboarding } from '@/context/OnboardingContext';
+import StepBadge from './StepBadge';
 
 const MINDSETS = [
   { icon: Brain, label: 'Tactical Thinker', quote: 'I outsmart opponents.' },
@@ -26,7 +27,7 @@ const BoxingMindset: React.FC = () => {
   return (
     <div className="flex flex-col min-h-[85vh] justify-between py-2">
       <header className="text-left mb-6">
-        <div className="text-[10px] font-black tracking-[3px] text-primary uppercase mb-3">08 / 20</div>
+        <StepBadge />
         <h1 className="text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
           Which mindset describes <span className="text-primary">you best</span>?
         </h1>

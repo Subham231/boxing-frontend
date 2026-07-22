@@ -3,6 +3,7 @@
 import React from 'react';
 import { ChevronRight } from 'lucide-react';
 import { useOnboarding } from '@/context/OnboardingContext';
+import StepBadge from './StepBadge';
 import { SampleTag, AnimatedRing, AnimatedCounter } from './OnboardingCharts';
 
 const PerformanceTracking: React.FC = () => {
@@ -12,7 +13,7 @@ const PerformanceTracking: React.FC = () => {
     <div className="flex flex-col min-h-[85vh] justify-between py-2">
       <header className="text-left mb-6 flex items-start justify-between">
         <div>
-          <div className="text-[10px] font-black tracking-[3px] text-primary uppercase mb-3">14 / 20</div>
+          <StepBadge />
           <h1 className="text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
             Small improvements <br /> become <span className="text-primary">visible</span>.
           </h1>

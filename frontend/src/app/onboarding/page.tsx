@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { OnboardingProvider, useOnboarding } from '@/context/OnboardingContext';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
@@ -29,8 +29,79 @@ import OtpVerification from './components/OtpVerification';
 import SubscriptionOffer from './components/SubscriptionOffer';
 import FinalPromise from './components/FinalPromise';
 
+export const ONBOARDING_ORDER_KEY = 'boxing_onboarding_screen_order';
+
+/** Middle pool — interactive quiz + static pitch screens, shuffled each new run */
+const MIDDLE_SCREEN_IDS = [
+    'training-problem',
+    'obstacle',
+    'favorite-fighter',
+    'motivation',
+    'future-self',
+    'commitment-level',
+    'boxing-mindset',
+    'superpower',
+    'future-progress-preview',
+    'future-progress',
+    'training-categories',
+    'structured-program',
+    'performance-tracking',
+    'personalization',
+    'daily-consistency',
+    'ecosystem',
+] as const;
+
+type MiddleScreenId = (typeof MIDDLE_SCREEN_IDS)[number];
+
+function shuffleIds(ids: MiddleScreenId[]): MiddleScreenId[] {
+    const next = [...ids];
+    for (let i = next.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [next[i], next[j]] = [next[j], next[i]];
+    }
+    return next;
+}
+
+function isValidOrder(ids: unknown): ids is MiddleScreenId[] {
+    if (!Array.isArray(ids) || ids.length !== MIDDLE_SCREEN_IDS.length) return false;
+    const set = new Set(ids);
+    return MIDDLE_SCREEN_IDS.every((id) => set.has(id));
+}
+
+function getOrCreateMiddleOrder(): MiddleScreenId[] {
+    try {
+        const stored = JSON.parse(localStorage.getItem(ONBOARDING_ORDER_KEY) || 'null');
+        if (isValidOrder(stored)) return stored;
+    } catch {
+        /* ignore */
+    }
+    const order = shuffleIds([...MIDDLE_SCREEN_IDS]);
+    localStorage.setItem(ONBOARDING_ORDER_KEY, JSON.stringify(order));
+    return order;
+}
+
+const MIDDLE_COMPONENTS: Record<MiddleScreenId, React.ReactNode> = {
+    'training-problem': <TrainingProblem key="training-problem" />,
+    obstacle: <Obstacle key="obstacle" />,
+    'favorite-fighter': <FavoriteFighter key="favorite-fighter" />,
+    motivation: <Motivation key="motivation" />,
+    'future-self': <FutureSelf key="future-self" />,
+    'commitment-level': <CommitmentLevel key="commitment-level" />,
+    'boxing-mindset': <BoxingMindset key="boxing-mindset" />,
+    superpower: <Superpower key="superpower" />,
+    'future-progress-preview': <FutureProgressPreview key="future-progress-preview" />,
+    'future-progress': <FutureProgress key="future-progress" />,
+    'training-categories': <TrainingCategories key="training-categories" />,
+    'structured-program': <StructuredProgram key="structured-program" />,
+    'performance-tracking': <PerformanceTracking key="performance-tracking" />,
+    personalization: <Personalization key="personalization" />,
+    'daily-consistency': <DailyConsistency key="daily-consistency" />,
+    ecosystem: <Ecosystem key="ecosystem" />,
+};
+
 const OnboardingFlow: React.FC = () => {
     const { currentStep, totalSteps, isLoaded } = useOnboarding();
+    const [middleOrder, setMiddleOrder] = useState<MiddleScreenId[] | null>(null);
 
     useEffect(() => {
         const prev = document.body.style.overflow;
@@ -40,33 +111,26 @@ const OnboardingFlow: React.FC = () => {
         };
     }, []);
 
-    const screens = [
-        <Welcome key="welcome" />,
-        <TrainingProblem key="problem" />,
-        <Obstacle key="obstacle" />,
-        <FavoriteFighter key="fighter" />,
-        <Motivation key="motivation" />,
-        <FutureSelf key="futureself" />,
-        <CommitmentLevel key="commitment" />,
-        <BoxingMindset key="mindset" />,
-        <Superpower key="superpower" />,
-        <FutureProgressPreview key="progresspreview" />,
-        <FutureProgress key="progress" />,
-        <TrainingCategories key="categories" />,
-        <StructuredProgram key="program" />,
-        <PerformanceTracking key="tracking" />,
-        <Personalization key="personalization" />,
-        <DailyConsistency key="consistency" />,
-        <Ecosystem key="ecosystem" />,
-        <JourneyStart key="journey" />,
-        <Identity key="identity" />,
-        <PromiseStep key="promise" />,
-        <OtpVerification key="otp" />,
-        <SubscriptionOffer key="subscription" />,
-        <FinalPromise key="finalpromise" />,
-    ];
+    useEffect(() => {
+        if (!isLoaded) return;
+        setMiddleOrder(getOrCreateMiddleOrder());
+    }, [isLoaded]);
 
-    if (!isLoaded) {
+    const screens = useMemo(() => {
+        if (!middleOrder) return [];
+        return [
+            <Welcome key="welcome" />,
+            ...middleOrder.map((id) => MIDDLE_COMPONENTS[id]),
+            <JourneyStart key="journey" />,
+            <Identity key="identity" />,
+            <PromiseStep key="promise" />,
+            <OtpVerification key="otp" />,
+            <SubscriptionOffer key="subscription" />,
+            <FinalPromise key="finalpromise" />,
+        ];
+    }, [middleOrder]);
+
+    if (!isLoaded || !middleOrder) {
         return (
             <div className="flex-1 flex flex-col items-center justify-center p-6 min-h-screen bg-bg-dark gap-4 overflow-hidden scrollbar-hide">
                 <Loader2 className="w-10 h-10 text-primary animate-spin" />

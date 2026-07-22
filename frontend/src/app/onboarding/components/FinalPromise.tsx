@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Flame, Power } from 'lucide-react';
 import { useOnboarding } from '@/context/OnboardingContext';
+import StepBadge from './StepBadge';
 
 const FinalPromise: React.FC = () => {
   const router = useRouter();
@@ -31,7 +32,7 @@ const FinalPromise: React.FC = () => {
         ))}
       </div>
 
-      <div className="relative z-10 text-[10px] font-black tracking-[3px] text-primary uppercase mb-3">23 / 23</div>
+      <StepBadge className="relative z-10" />
 
       <motion.header
         initial={{ opacity: 0, y: 20 }}

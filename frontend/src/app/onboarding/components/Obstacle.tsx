@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronRight, Clock, BatteryLow, Map, TrendingDown, RefreshCw, HeartPulse } from 'lucide-react';
 import { useOnboarding } from '@/context/OnboardingContext';
+import StepBadge from './StepBadge';
 
 const OBSTACLES = [
   { icon: Clock, label: 'Lack of Time', response: "We'll build a plan that fits your real schedule, not the other way around." },
@@ -28,7 +29,7 @@ const Obstacle: React.FC = () => {
   return (
     <div className="flex flex-col min-h-[85vh] justify-between py-2">
       <header className="text-left mb-6">
-        <div className="text-[10px] font-black tracking-[3px] text-primary uppercase mb-3">03 / 20</div>
+        <StepBadge />
         <h1 className="text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
           What's held you back <span className="text-primary">before</span>?
         </h1>

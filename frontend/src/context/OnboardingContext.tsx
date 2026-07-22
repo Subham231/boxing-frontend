@@ -179,6 +179,7 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         };
         localStorage.setItem('boxing_onboarding_data', JSON.stringify(payload));
         localStorage.setItem('boxing_onboarding_done', 'true');
+        localStorage.removeItem('boxing_onboarding_screen_order');
         updateData({ hasCompletedOnboarding: true });
         console.log('Onboarding saved:', payload);
     };

@@ -4,6 +4,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { ChevronRight, X, Check } from 'lucide-react';
 import { useOnboarding } from '@/context/OnboardingContext';
+import StepBadge from './StepBadge';
 
 const RANDOM = ['Random Training', 'Repeated Workouts', 'No Progress Tracking'];
 const STRUCTURED = ['Structured Plans', 'Progress Analytics', 'Continuous Improvement'];
@@ -14,7 +15,7 @@ const TrainingProblem: React.FC = () => {
   return (
     <div className="flex flex-col min-h-[85vh] justify-between py-2">
       <header className="text-left mb-6">
-        <div className="text-[10px] font-black tracking-[3px] text-primary uppercase mb-3">02 / 20</div>
+        <StepBadge />
         <h1 className="text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
           Most fighters don't fail <br /> because they lack <span className="text-primary">talent</span>.
         </h1>

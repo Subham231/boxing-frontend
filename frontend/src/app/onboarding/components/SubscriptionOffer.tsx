@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, Crown, Gift } from 'lucide-react';
 import { useOnboarding } from '@/context/OnboardingContext';
+import StepBadge from './StepBadge';
 import { firebaseAuth } from '@/lib/firebase';
 import ReferralCard from '@/components/reflex/ReferralCard';
 
@@ -55,7 +56,7 @@ const SubscriptionOffer: React.FC = () => {
   return (
     <div className="flex flex-col min-h-[85vh] justify-between py-2">
       <header className="text-left mb-6">
-        <div className="text-[10px] font-black tracking-[3px] text-primary uppercase mb-3">22 / 23</div>
+        <StepBadge />
         <h1 className="text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
           Choose your <span className="text-primary">edge</span>.
         </h1>

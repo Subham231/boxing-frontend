@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { ChevronRight, ShieldCheck, ArrowLeft } from 'lucide-react';
 import type { ConfirmationResult } from 'firebase/auth';
 import { useOnboarding } from '@/context/OnboardingContext';
+import StepBadge from './StepBadge';
 import { sendOtp, confirmOtp, checkOtpRateLimit, saveProfileDetails } from '@/lib/firebase-auth';
 
 const RECAPTCHA_CONTAINER_ID = 'onboarding-phone-recaptcha';
@@ -66,7 +67,7 @@ const OtpVerification: React.FC = () => {
       <div id={RECAPTCHA_CONTAINER_ID} />
 
       <header className="text-left mb-6">
-        <div className="text-[10px] font-black tracking-[3px] text-primary uppercase mb-3">21 / 22</div>
+        <StepBadge />
         <h1 className="text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
           Verify your <span className="text-primary">fight number</span>.
         </h1>
