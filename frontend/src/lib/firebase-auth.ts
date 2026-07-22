@@ -92,6 +92,19 @@ export async function claimReferralIfNeeded(user: User): Promise<void> {
   });
 }
 
+/** Apply a friend's referral code after the profile already exists (e.g. onboarding). */
+export async function applyReferralCode(user: User, code: string): Promise<void> {
+  const idToken = await user.getIdToken();
+  const res = await fetch('/api/reflex/apply-referral', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+    body: JSON.stringify({ code }),
+  });
+  if (!res.ok) {
+    throw new Error((await res.json().catch(() => ({})))?.error || 'Could not apply referral code.');
+  }
+}
+
 export async function saveProfileDetails(user: User, details: { displayName?: string; age?: number; profession?: string }): Promise<void> {
   const idToken = await user.getIdToken();
   await fetch('/api/reflex/save-profile-details', {
