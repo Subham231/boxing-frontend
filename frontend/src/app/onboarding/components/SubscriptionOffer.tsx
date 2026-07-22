@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Check, Crown, Gift } from 'lucide-react';
 import { useOnboarding } from '@/context/OnboardingContext';
 import { firebaseAuth } from '@/lib/firebase';
@@ -10,14 +11,14 @@ const PLANS = [
   {
     id: 'free',
     name: 'Free',
-    price: '$0',
+    price: '₹0',
     period: '',
     features: ['Daily Grind access', 'Basic Planner', 'Reflex Enhancer'],
   },
   {
     id: 'monthly',
     name: 'Pro Monthly',
-    price: '$9.99',
+    price: '₹829',
     period: '/mo',
     features: ['Everything in Free', 'Unlimited Planner Regeneration', 'Full Guru Library', 'Advanced Analytics'],
     highlight: true,
@@ -25,25 +26,30 @@ const PLANS = [
   {
     id: 'yearly',
     name: 'Pro Yearly',
-    price: '$79',
+    price: '₹6,500',
     period: '/yr',
     features: ['Everything in Pro Monthly', '2 months free', 'Priority support'],
   },
 ];
 
 const SubscriptionOffer: React.FC = () => {
+  const router = useRouter();
   const { nextStep, prevStep } = useOnboarding();
   const [selected, setSelected] = useState<string>('monthly');
   const uid = firebaseAuth.currentUser?.uid;
 
   const handleContinue = () => {
-    // No payment processor is wired up yet — this just records the user's
-    // intent locally. Real billing (Stripe/RevenueCat/etc.) would replace
-    // this with an actual checkout call before advancing.
     if (typeof window !== 'undefined') {
       localStorage.setItem('boxing_selected_plan', selected);
     }
-    nextStep();
+    
+    if (selected === 'monthly' || selected === 'yearly') {
+      // Redirect premium plan selection to the secure checkout page
+      router.push(`/checkout?plan=${selected}`);
+    } else {
+      // Continue onboarding for the Free plan
+      nextStep();
+    }
   };
 
   return (
@@ -107,6 +113,17 @@ const SubscriptionOffer: React.FC = () => {
         <button onClick={prevStep} className="text-[10px] font-black text-white/40 hover:text-white uppercase tracking-widest py-1 mx-auto">
           Back
         </button>
+
+        {/* Legal Policies Footer */}
+        <div className="flex flex-wrap justify-center items-center gap-x-2 gap-y-1 text-white/30 text-[9px] font-bold uppercase tracking-wider text-center mt-2 pb-2">
+          <a href="/legal/terms" target="_blank" className="hover:text-primary transition-colors">Terms</a>
+          <span>•</span>
+          <a href="/legal/privacy" target="_blank" className="hover:text-primary transition-colors">Privacy Policy</a>
+          <span>•</span>
+          <a href="/legal/refund" target="_blank" className="hover:text-primary transition-colors">Refund & Cancellation</a>
+          <span>•</span>
+          <a href="/legal/contact" target="_blank" className="hover:text-primary transition-colors">Contact Us</a>
+        </div>
       </footer>
     </div>
   );
