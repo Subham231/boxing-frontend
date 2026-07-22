@@ -207,7 +207,10 @@ export default function PlannerOnboardingWizard({ mode, onGenerate, onLaunch, on
                   <input
                     type="number"
                     value={profile[key] ?? ''}
-                    onChange={(e) => update({ [key]: Number(e.target.value) } as Partial<PlannerProfile>)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      update({ [key]: val === '' ? '' : Number(val) } as any);
+                    }}
                     className="bg-black/40 border border-white/10 rounded-2xl px-4 py-3 text-lg font-black text-white outline-none focus:border-primary"
                   />
                 </div>

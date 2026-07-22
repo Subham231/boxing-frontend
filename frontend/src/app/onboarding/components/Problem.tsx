@@ -128,11 +128,12 @@ const Identity: React.FC = () => {
                                 type={field.type}
                                 placeholder={field.placeholder}
                                 value={data[field.key] ?? ''}
-                                onChange={(e) =>
+                                onChange={(e) => {
+                                    const val = e.target.value;
                                     updateData({
-                                        [field.key]: field.type === 'number' ? Number(e.target.value) : e.target.value,
-                                    })
-                                }
+                                        [field.key]: field.type === 'number' ? (val === '' ? '' : Number(val)) : val,
+                                    });
+                                }}
                                 className="w-full bg-transparent border-b border-white/20 py-2 text-2xl font-bold outline-none focus:border-primary transition-all pb-1 tracking-tight"
                             />
                         </div>

@@ -110,20 +110,21 @@ const SubscriptionOffer: React.FC = () => {
         <button onClick={handleContinue} className="btn-primary w-full h-16 flex items-center justify-center gap-2">
           CONTINUE
         </button>
+
+        {/* Legal Policies Footer in styled black box */}
+        <div className="bg-black/80 border border-white/10 rounded-2xl py-3 px-4 flex flex-wrap justify-center items-center gap-x-3 gap-y-1.5 text-white/50 text-[9px] font-bold uppercase tracking-widest text-center mt-2 shadow-[0_4px_12px_rgba(0,0,0,0.5)]">
+          <a href="/legal/terms" target="_blank" className="hover:text-primary transition-colors">Terms</a>
+          <span className="text-white/20">•</span>
+          <a href="/legal/privacy" target="_blank" className="hover:text-primary transition-colors">Privacy Policy</a>
+          <span className="text-white/20">•</span>
+          <a href="/legal/refund" target="_blank" className="hover:text-primary transition-colors">Refund Policy</a>
+          <span className="text-white/20">•</span>
+          <a href="/legal/contact" target="_blank" className="hover:text-primary transition-colors">Contact Us</a>
+        </div>
+
         <button onClick={prevStep} className="text-[10px] font-black text-white/40 hover:text-white uppercase tracking-widest py-1 mx-auto">
           Back
         </button>
-
-        {/* Legal Policies Footer */}
-        <div className="flex flex-wrap justify-center items-center gap-x-2 gap-y-1 text-white/30 text-[9px] font-bold uppercase tracking-wider text-center mt-2 pb-2">
-          <a href="/legal/terms" target="_blank" className="hover:text-primary transition-colors">Terms</a>
-          <span>•</span>
-          <a href="/legal/privacy" target="_blank" className="hover:text-primary transition-colors">Privacy Policy</a>
-          <span>•</span>
-          <a href="/legal/refund" target="_blank" className="hover:text-primary transition-colors">Refund & Cancellation</a>
-          <span>•</span>
-          <a href="/legal/contact" target="_blank" className="hover:text-primary transition-colors">Contact Us</a>
-        </div>
       </footer>
     </div>
   );
