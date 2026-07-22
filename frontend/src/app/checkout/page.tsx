@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Script from 'next/script';
 import { Check, ShieldCheck, ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
@@ -8,7 +8,7 @@ import { firebaseAuth } from '@/lib/firebase';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
 
-export default function CheckoutPage() {
+function CheckoutContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [planId, setPlanId] = useState<string>('monthly');
@@ -283,3 +283,17 @@ export default function CheckoutPage() {
     </div>
   );
 }
+
+export default function CheckoutPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#0A0A0A] gap-4">
+        <Loader2 className="w-10 h-10 text-primary animate-spin" />
+        <p className="text-[10px] text-white/50 uppercase tracking-[3px]">Initializing Secure Checkout...</p>
+      </div>
+    }>
+      <CheckoutContent />
+    </Suspense>
+  );
+}
+
