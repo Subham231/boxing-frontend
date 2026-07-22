@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { Check, ChevronRight, Settings, Target } from 'lucide-react';
 import { getDailyWorkout } from '@/lib/workout-data';
 import { StreakManager } from '@/lib/streak-manager';
+import { completeSessionSecure } from '@/lib/rank-client';
 import { GlassCard } from '@/components/ui/GlassCard';
 
 export default function TrainingPage() {
@@ -36,6 +37,7 @@ export default function TrainingPage() {
         if (completed.length > 0) {
           StreakManager.completeSession();
           StreakManager.syncWithSupabase().catch(console.error);
+          completeSessionSecure().catch(console.error);
         }
       }
     } catch (e) {

@@ -256,7 +256,7 @@ export default function DashboardPage() {
               </h1>
               <div className="flex gap-2 mt-2">
                 <div 
-                  onClick={() => router.push('/settings')}
+                  onClick={() => router.push('/ranks')}
                   className="cursor-pointer"
                 >
                   <RankBadge score={streak} />
