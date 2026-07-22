@@ -248,7 +248,7 @@ export default function GuruPage() {
           {mounted && (
             <div className="flex flex-col gap-2">
               <span className="text-[9px] font-black tracking-[3px] text-white/30 uppercase">Achievements</span>
-              <div className="flex gap-2 overflow-x-auto pb-1">
+              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
                 {achievements.map((a) => {
                   const Icon = ACHIEVEMENT_ICONS[a.icon];
                   return (

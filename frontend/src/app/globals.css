@@ -26,6 +26,17 @@ body {
   min-height: 100vh;
 }
 
+@layer components {
+  .btn-primary {
+    @apply relative bg-primary text-black font-black uppercase tracking-wider rounded-full transition-all duration-300 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100;
+    box-shadow: 0 10px 40px rgba(226, 255, 59, 0.25);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background-color: rgba(226, 255, 59, 0.95);
+    box-shadow: 0 0 30px rgba(226, 255, 59, 0.45);
+  }
+}
+
 @layer utilities {
   .text-glow {
     text-shadow: 0 0 15px rgba(226, 255, 59, 0.4);
@@ -37,6 +48,13 @@ body {
     background: var(--glass);
     backdrop-filter: blur(20px);
     border: 1px solid var(--glass-border);
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
   }
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;

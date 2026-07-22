@@ -64,7 +64,7 @@ const SubscriptionOffer: React.FC = () => {
         </p>
       </header>
 
-      <main className="flex-1 flex flex-col gap-4 overflow-y-auto">
+      <main className="flex-1 flex flex-col gap-4 overflow-y-auto scrollbar-hide">
         {PLANS.map((plan) => {
           const active = selected === plan.id;
           return (

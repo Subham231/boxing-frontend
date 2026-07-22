@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { OnboardingProvider, useOnboarding } from '@/context/OnboardingContext';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
@@ -32,6 +32,14 @@ import FinalPromise from './components/FinalPromise';
 const OnboardingFlow: React.FC = () => {
     const { currentStep, totalSteps, isLoaded } = useOnboarding();
 
+    useEffect(() => {
+        const prev = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.body.style.overflow = prev;
+        };
+    }, []);
+
     const screens = [
         <Welcome key="welcome" />,
         <TrainingProblem key="problem" />,
@@ -60,7 +68,7 @@ const OnboardingFlow: React.FC = () => {
 
     if (!isLoaded) {
         return (
-            <div className="flex-1 flex flex-col items-center justify-center p-6 min-h-screen bg-bg-dark gap-4">
+            <div className="flex-1 flex flex-col items-center justify-center p-6 min-h-screen bg-bg-dark gap-4 overflow-hidden scrollbar-hide">
                 <Loader2 className="w-10 h-10 text-primary animate-spin" />
                 <p className="text-[10px] text-text-muted uppercase tracking-[3px]">Loading System...</p>
             </div>
@@ -68,7 +76,7 @@ const OnboardingFlow: React.FC = () => {
     }
 
     return (
-        <div className="flex-1 flex flex-col items-center justify-center p-6 bg-[#0a0a0c] min-h-screen">
+        <div className="flex-1 flex flex-col items-center justify-center p-6 pb-16 bg-[#0a0a0c] h-dvh max-h-dvh overflow-hidden scrollbar-hide">
             <AnimatePresence mode="wait">
                 <motion.div
                     key={currentStep}
@@ -76,13 +84,13 @@ const OnboardingFlow: React.FC = () => {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -20 }}
                     transition={{ duration: 0.4, ease: 'easeOut' }}
-                    className="w-full max-w-lg"
+                    className="w-full max-w-lg h-full overflow-y-auto overflow-x-hidden scrollbar-hide"
                 >
                     {screens[currentStep - 1] || <FinalPromise />}
                 </motion.div>
             </AnimatePresence>
 
-            <div className="fixed bottom-10 left-0 right-0 px-10 flex gap-1">
+            <div className="fixed bottom-10 left-0 right-0 px-10 flex gap-1 pointer-events-none">
                 {Array.from({ length: totalSteps }).map((_, i) => (
                     <div
                         key={i}

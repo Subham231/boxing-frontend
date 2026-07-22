@@ -112,7 +112,7 @@ export default function ScheduleStep({ profile, update, toggleWeekday }: Schedul
 
       <div>
         <label className="text-[9px] font-black text-primary tracking-widest uppercase block mb-3">Preferred Start Time</label>
-        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+        <div className="flex gap-2 flex-wrap -mx-1 px-1">
           {timeOptions.map((t) => {
             const active = to24Hour(t) === profile.preferredTime;
             return (
@@ -120,7 +120,7 @@ export default function ScheduleStep({ profile, update, toggleWeekday }: Schedul
                 key={t}
                 type="button"
                 onClick={() => update({ preferredTime: to24Hour(t) })}
-                className={`shrink-0 px-4 py-2.5 rounded-full border text-[11px] font-black uppercase tracking-wide transition-all ${
+                className={`px-4 py-2.5 rounded-full border text-[11px] font-black uppercase tracking-wide transition-all ${
                   active ? 'bg-primary/10 border-primary text-primary' : 'bg-black/30 border-white/10 text-white/50 hover:border-white/20'
                 }`}
               >

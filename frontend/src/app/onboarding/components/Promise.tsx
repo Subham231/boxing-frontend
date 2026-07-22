@@ -41,7 +41,7 @@ const Promise: React.FC = () => {
                 </p>
             </header>
 
-            <main className="flex-1 flex flex-col gap-5 overflow-y-auto">
+            <main className="flex-1 flex flex-col gap-5 overflow-y-auto scrollbar-hide">
                 <div className="glass-card p-4 rounded-3xl border-white/5 bg-black/40 flex flex-col gap-2.5">
                     {FEATURES.map((f) => (
                         <div key={f} className="flex items-center gap-2.5">
