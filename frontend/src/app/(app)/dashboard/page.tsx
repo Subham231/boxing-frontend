@@ -58,35 +58,41 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    // Load onboarding data
-    const onboardingRaw = localStorage.getItem('boxing_onboarding_data');
-    if (onboardingRaw) {
+    // Load onboarding data and streak data
+    const loadInitialData = async () => {
+      const onboardingRaw = localStorage.getItem('boxing_onboarding_data');
+      if (onboardingRaw) {
+        try {
+          const onboarding = JSON.parse(onboardingRaw);
+          setRingName((onboarding.ringName || onboarding.ring_name || 'FIGHTER').toUpperCase());
+          setLevel(onboarding.experience_level || onboarding.experienceLevel || 'Novice');
+        } catch (e) {
+          console.error('Failed to parse onboarding data:', e);
+        }
+      }
+
+      // Load streak data and sync
+      const activeStreak = StreakManager.checkAndGetStreak();
+      setStreak(activeStreak);
+      if (fbUser) { // Only sync if user is logged in
+        await StreakManager.syncWithSupabase().catch(console.error);
+        // Re-fetch streak after Supabase sync in case it affected local state
+        setStreak(StreakManager.checkAndGetStreak());
+      }
+
+      // Load today's workout completion progress
+      const progressKey = 'workout_progress_' + new Date().toDateString();
       try {
-        const onboarding = JSON.parse(onboardingRaw);
-        setRingName((onboarding.ringName || onboarding.ring_name || 'FIGHTER').toUpperCase());
-        setLevel(onboarding.experience_level || onboarding.experienceLevel || 'Novice');
+        const storedProgress = localStorage.getItem(progressKey);
+        if (storedProgress) {
+          setCompletedIndices(JSON.parse(storedProgress).map(Number));
+        }
       } catch (e) {
-        console.error('Failed to parse onboarding data:', e);
+        console.error('Failed to load workout progress:', e);
       }
-    }
+    };
 
-    // Load streak data
-    const activeStreak = StreakManager.checkAndGetStreak();
-    setStreak(activeStreak);
-
-    // Sync streak to Supabase if logged in
-    StreakManager.syncWithSupabase().catch(console.error);
-
-    // Load today's workout completion progress
-    const progressKey = 'workout_progress_' + new Date().toDateString();
-    try {
-      const storedProgress = localStorage.getItem(progressKey);
-      if (storedProgress) {
-        setCompletedIndices(JSON.parse(storedProgress).map(Number));
-      }
-    } catch (e) {
-      console.error('Failed to load workout progress:', e);
-    }
+    loadInitialData();
 
     // Simulated heart rate fluctuation
     const bpmInterval = setInterval(() => {

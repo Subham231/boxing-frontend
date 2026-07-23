@@ -33,8 +33,9 @@ export default function TrainingPage() {
         const completed = JSON.parse(storedProgress).map(Number);
         setCompletedIndices(completed);
 
-        // Update streak if session completed count > 0
-        if (completed.length > 0) {
+        // Update streak only when ALL drills are completed (full session)
+        const dailyWorkoutForStreak = getDailyWorkout();
+        if (completed.length === dailyWorkoutForStreak.drills.length && dailyWorkoutForStreak.drills.length > 0) {
           StreakManager.completeSession();
           StreakManager.syncWithSupabase().catch(console.error);
           completeSessionSecure().catch(console.error);

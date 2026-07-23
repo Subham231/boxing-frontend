@@ -11,16 +11,27 @@ export function BottomNav() {
   const [streak, setStreak] = useState(0);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('boxing_streak_data');
-      if (stored) {
-        const data = JSON.parse(stored);
-        setStreak(data.currentStreak || 0);
-      }
-    } catch (e) {
-      console.error('Failed to load streak data:', e);
-    }
-  }, []);
+    // We want this to update if the streak data changes, so we'll re-check on route changes
+    const updateStreak = () => {
+      const data = StreakManager.getStreakData();
+      const currentStreak = StreakManager.checkAndGetStreak(); // This will ensure localstorage is up-to-date with any breaks
+      setStreak(currentStreak);
+    };
+
+    updateStreak(); // Initial load
+
+    // Add event listener for storage changes, if applicable (for cross-tab sync)
+    // window.addEventListener('storage', updateStreak);
+
+    // Re-check streak on route change (e.g., coming back from a session)
+    // This is a simple way to ensure the streak is updated without complex state management
+    router.events.on('routeChangeComplete', updateStreak);
+
+    return () => {
+      // window.removeEventListener('storage', updateStreak);
+      router.events.off('routeChangeComplete', updateStreak);
+    };
+  }, [pathname, router.events]);
 
   const navItems = [
     { label: 'HOME', icon: Home, href: '/dashboard' },
