@@ -26,7 +26,12 @@ export default function ProtectedLayout({
     };
 
     if (!isOnboardingComplete()) {
-      router.replace('/onboarding');
+      if (typeof window !== 'undefined') {
+        window.location.replace('/onboarding');
+      } else {
+        // Fallback for server-side rendering, though this component is client-only
+        router.replace('/onboarding');
+      }
       setAllowed(false);
     } else {
       setAllowed(true);
