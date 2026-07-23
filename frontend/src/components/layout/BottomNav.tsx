@@ -23,15 +23,16 @@ export function BottomNav() {
     // Add event listener for storage changes, if applicable (for cross-tab sync)
     // window.addEventListener('storage', updateStreak);
 
-    // Re-check streak on route change (e.g., coming back from a session)
-    // This is a simple way to ensure the streak is updated without complex state management
-    router.events.on('routeChangeComplete', updateStreak);
+    // No need to listen to router.events.on('routeChangeComplete') directly
+    // because usePathname from 'next/navigation' already causes a re-render
+    // when the path changes, which will trigger this useEffect again.
+    // If the path does not change, but the local storage does, that's what
+    // the optional window.addEventListener('storage', updateStreak) would handle.
 
     return () => {
       // window.removeEventListener('storage', updateStreak);
-      router.events.off('routeChangeComplete', updateStreak);
     };
-  }, [pathname, router.events]);
+  }, [pathname]); // Depend on pathname to re-run when route changes
 
   const navItems = [
     { label: 'HOME', icon: Home, href: '/dashboard' },
