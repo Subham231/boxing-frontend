@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Home, BarChart3, Brain, Play, Zap, Calendar, User, Flame } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
+import { StreakManager } from '@/lib/streak-manager';
 
 export function BottomNav() {
   const pathname = usePathname();
