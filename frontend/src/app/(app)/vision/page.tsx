@@ -1139,7 +1139,7 @@ export default function VisionPage() {
         {stage === 'config' && (
           <motion.div
             key="stage-config"
-            className="flex flex-col gap-6 anim-fade-in select-none"
+            className="flex flex-col gap-5 anim-fade-in select-none pb-8"
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -15 }}
@@ -1165,43 +1165,52 @@ export default function VisionPage() {
               <span className="text-[8px] font-black text-white/40 tracking-wider uppercase block">
                 DRILL COMBAT MODE
               </span>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2.5">
                 <button
+                  type="button"
                   onClick={() => setMode('punches')}
-                  className={`flex flex-col items-center justify-center p-3 rounded-3xl border text-center transition-all ${mode === 'punches'
+                  className={`flex flex-col items-center justify-center p-4 rounded-3xl border text-center transition-all ${mode === 'punches'
                       ? 'bg-primary/15 border-primary text-primary shadow-[0_0_12px_rgba(226,255,59,0.2)]'
                       : 'bg-black/40 border-white/5 text-white/50 hover:text-white'
                     }`}
                 >
-                  <Target className="w-4 h-4 mb-1.5" />
-                  <span className="text-[9px] font-black uppercase leading-tight">PUNCHES</span>
-                  <span className="text-[6px] text-white/30 mt-0.5 leading-tight">Jab–Uppercut</span>
+                  <Target className="w-5 h-5 mb-2" />
+                  <span className="text-[10px] font-black uppercase">PUNCHES</span>
+                  <span className="text-[6px] text-white/30 mt-0.5">Jab, Cross, Hook, Uppercut</span>
                 </button>
 
                 <button
+                  type="button"
                   onClick={() => setMode('defense')}
-                  className={`flex flex-col items-center justify-center p-3 rounded-3xl border text-center transition-all ${mode === 'defense'
+                  className={`flex flex-col items-center justify-center p-4 rounded-3xl border text-center transition-all ${mode === 'defense'
                       ? 'bg-red-500/10 border-red-500 text-red-500 shadow-[0_0_12px_rgba(239,68,68,0.2)]'
                       : 'bg-black/40 border-white/5 text-white/50 hover:text-white'
                     }`}
                 >
-                  <Shield className="w-4 h-4 mb-1.5" />
-                  <span className="text-[9px] font-black uppercase leading-tight">DEFENSE</span>
-                  <span className="text-[6px] text-white/30 mt-0.5 leading-tight">Slips &amp; Rolls</span>
-                </button>
-
-                <button
-                  onClick={() => setMode('freestyle')}
-                  className={`flex flex-col items-center justify-center p-3 rounded-3xl border text-center transition-all ${mode === 'freestyle'
-                      ? 'bg-cyan-500/10 border-cyan-400 text-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.25)]'
-                      : 'bg-black/40 border-white/5 text-white/50 hover:text-white'
-                    }`}
-                >
-                  <Zap className="w-4 h-4 mb-1.5" />
-                  <span className="text-[9px] font-black uppercase leading-tight">FREESTYLE</span>
-                  <span className="text-[6px] text-white/30 mt-0.5 leading-tight">Timed round</span>
+                  <Shield className="w-5 h-5 mb-2" />
+                  <span className="text-[10px] font-black uppercase">DEFENSE</span>
+                  <span className="text-[6px] text-white/30 mt-0.5">Slips, Rolls, Head Movement</span>
                 </button>
               </div>
+
+              <button
+                type="button"
+                onClick={() => setMode('freestyle')}
+                className={`w-full flex flex-row items-center gap-3 p-4 rounded-3xl border text-left transition-all ${mode === 'freestyle'
+                    ? 'bg-cyan-500/15 border-cyan-400 text-cyan-300 shadow-[0_0_14px_rgba(34,211,238,0.3)]'
+                    : 'bg-black/40 border-cyan-500/20 text-white/70 hover:text-white hover:border-cyan-400/40'
+                  }`}
+              >
+                <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${mode === 'freestyle' ? 'bg-cyan-400/20' : 'bg-white/5'}`}>
+                  <Zap className={`w-5 h-5 ${mode === 'freestyle' ? 'text-cyan-300' : 'text-cyan-500/70'}`} />
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-[11px] font-black uppercase tracking-wide">FREESTYLE COMBAT</span>
+                  <span className="text-[7px] text-white/40 mt-0.5 uppercase tracking-wider">
+                    Timed round — set duration below · punch calls on
+                  </span>
+                </div>
+              </button>
             </div>
 
             <div className="flex flex-col gap-3">
@@ -1210,55 +1219,33 @@ export default function VisionPage() {
               </span>
               <div className="grid grid-cols-2 gap-2.5">
                 {[
-                  { key: 'easy' as const, label: 'EASY', color: 'text-green-400 border-green-500/30' },
-                  { key: 'medium' as const, label: 'MEDIUM', color: 'text-primary border-primary/30' },
-                  { key: 'hard' as const, label: 'HARD', color: 'text-red-500 border-red-500/30' },
-                  { key: 'extreme' as const, label: 'EXTREME', color: 'text-fuchsia-400 border-fuchsia-500/30' },
+                  { key: 'easy' as const, label: 'EASY', gapMs: DIFFICULTY_GAP_MS.easy, color: 'text-green-400 border-green-500/30' },
+                  { key: 'medium' as const, label: 'MEDIUM', gapMs: DIFFICULTY_GAP_MS.medium, color: 'text-primary border-primary/30' },
+                  { key: 'hard' as const, label: 'HARD', gapMs: DIFFICULTY_GAP_MS.hard, color: 'text-red-500 border-red-500/30' },
+                  { key: 'extreme' as const, label: 'EXTREME', gapMs: DIFFICULTY_GAP_MS.extreme, color: 'text-fuchsia-400 border-fuchsia-500/40' },
                 ].map((choice) => (
                   <button
+                    type="button"
                     key={choice.key}
                     onClick={() => {
                       setDifficulty(choice.key);
                       speakCommand(`${choice.label} level.`);
                     }}
-                    className={`py-3 rounded-2xl border text-[10px] font-black transition-all ${difficulty === choice.key
-                        ? `bg-white/[0.08] ${choice.color} text-white`
+                    className={`py-3 px-2 rounded-2xl border text-center transition-all ${difficulty === choice.key
+                        ? `bg-white/[0.08] ${choice.color} text-white ring-1 ring-inset ring-white/10`
                         : 'bg-black/40 border-white/5 text-white/55 hover:text-white'
                       }`}
                   >
-                    {choice.label}
+                    <span className="text-[10px] font-black block">{choice.label}</span>
+                    <span className={`text-[8px] font-mono font-bold block mt-1 ${difficulty === choice.key ? 'opacity-90' : 'text-white/35'}`}>
+                      every {(choice.gapMs / 1000).toFixed(1)}s
+                    </span>
                   </button>
                 ))}
               </div>
-            </div>
-
-            <div className="flex flex-col gap-3">
-              <span className="text-[8px] font-black text-white/40 tracking-wider uppercase block">
-                CAMERA SOURCE
-              </span>
-              {cameraDevices.length === 0 ? (
-                <div className="bg-black/40 border border-white/5 rounded-2xl px-4 py-3 text-[10px] text-white/40 font-bold uppercase text-center">
-                  No cameras found — grant camera permission and reopen this page.
-                </div>
-              ) : (
-                <select
-                  value={selectedDeviceId}
-                  onChange={(e) => setSelectedDeviceId(e.target.value)}
-                  className="w-full bg-black/40 border border-white/10 rounded-2xl px-4 py-3 text-[11px] font-bold text-white uppercase tracking-wide focus:outline-none focus:border-primary"
-                >
-                  {cameraDevices.map((d, i) => (
-                    <option key={d.deviceId} value={d.deviceId} className="bg-zinc-900">
-                      {d.label || `Camera ${i + 1}`}
-                    </option>
-                  ))}
-                </select>
-              )}
-              <button
-                onClick={enumerateCameras}
-                className="text-[8px] font-black text-primary/70 hover:text-primary uppercase tracking-widest self-start"
-              >
-                ↻ Refresh camera list
-              </button>
+              <p className="text-[7px] font-bold text-white/25 uppercase tracking-wider text-center">
+                Active pace: 1 command every {(DIFFICULTY_GAP_MS[difficulty] / 1000).toFixed(1)} seconds
+              </p>
             </div>
 
             <div className="bg-white/[0.02] border border-white/5 p-4 rounded-3xl text-center">
@@ -1267,7 +1254,7 @@ export default function VisionPage() {
                   <div className="text-3xl font-black italic text-white leading-none font-mono">
                     {formatMmSs(freestyleSeconds)}
                   </div>
-                  <span className="text-[8px] font-black text-primary tracking-widest uppercase block mt-1.5 mb-4">
+                  <span className="text-[8px] font-black text-cyan-300 tracking-widest uppercase block mt-1.5 mb-4">
                     FREESTYLE DURATION
                   </span>
                   <input
@@ -1280,7 +1267,7 @@ export default function VisionPage() {
                     className="w-full accent-primary bg-white/10 rounded-lg cursor-pointer"
                   />
                   <span className="text-[7px] font-black text-white/30 tracking-widest uppercase mt-3 block">
-                    Recommended: 60s
+                    Recommended: 60s · pace follows difficulty above
                   </span>
                 </>
               ) : (
@@ -1307,6 +1294,36 @@ export default function VisionPage() {
               )}
             </div>
 
+            <div className="flex flex-col gap-3">
+              <span className="text-[8px] font-black text-white/40 tracking-wider uppercase block">
+                CAMERA SOURCE
+              </span>
+              {cameraDevices.length === 0 ? (
+                <div className="bg-black/40 border border-white/5 rounded-2xl px-4 py-3 text-[10px] text-white/40 font-bold uppercase text-center">
+                  No cameras found — grant camera permission and reopen this page.
+                </div>
+              ) : (
+                <select
+                  value={selectedDeviceId}
+                  onChange={(e) => setSelectedDeviceId(e.target.value)}
+                  className="w-full bg-black/40 border border-white/10 rounded-2xl px-4 py-3 text-[11px] font-bold text-white uppercase tracking-wide focus:outline-none focus:border-primary"
+                >
+                  {cameraDevices.map((d, i) => (
+                    <option key={d.deviceId} value={d.deviceId} className="bg-zinc-900">
+                      {d.label || `Camera ${i + 1}`}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <button
+                type="button"
+                onClick={enumerateCameras}
+                className="text-[8px] font-black text-primary/70 hover:text-primary uppercase tracking-widest self-start"
+              >
+                ↻ Refresh camera list
+              </button>
+            </div>
+
             <NeonButton onClick={startCalibration} className="w-full h-14 mt-2">
               START CALIBRATION
             </NeonButton>
@@ -1322,8 +1339,10 @@ export default function VisionPage() {
             exit={{ opacity: 0 }}
           >
             <div className="absolute -top-16 left-0 right-0 flex justify-between items-center text-[10px] font-mono text-primary font-bold z-10 pointer-events-none select-none">
-              <span className="opacity-80">MODE: {mode.toUpperCase()} MODE</span>
-              <span className="opacity-40 uppercase">DIFF_{difficulty}_SPEED</span>
+              <span className="opacity-80">MODE: {mode.toUpperCase()}</span>
+              <span className="opacity-40 uppercase">
+                {difficulty} · {(DIFFICULTY_GAP_MS[difficulty] / 1000).toFixed(1)}s
+              </span>
             </div>
 
             <header className="flex justify-between items-center z-50">
