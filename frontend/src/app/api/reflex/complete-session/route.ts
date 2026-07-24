@@ -1,13 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyFirebaseIdToken } from '@/lib/server/firebase-admin';
 import { supabaseAdmin } from '@/lib/server/supabase-admin';
-import { applyDailyProgress, type RankState } from '@/lib/rank-system';
+import { applySessionProgress, type RankState } from '@/lib/rank-system';
 
 export const runtime = 'nodejs';
-
-function todayUtcIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 export async function POST(req: NextRequest) {
   if (!supabaseAdmin) {
@@ -27,7 +23,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid or expired token.' }, { status: 401 });
   }
   const uid = decoded.uid;
-  const today = todayUtcIso();
+  const now = new Date().toISOString();
 
   const { data: existing } = await supabaseAdmin.from('user_streaks').select('*').eq('uid', uid).maybeSingle();
 
@@ -37,10 +33,10 @@ export async function POST(req: NextRequest) {
     longest_streak: 0,
     rank_level: 0,
     streak_progress_days: 0,
-    last_active_date: null,
+    last_active_at: null,
   };
 
-  const next = applyDailyProgress(current, today, true);
+  const next = applySessionProgress(current, now, true);
 
   const { error } = await supabaseAdmin.from('user_streaks').upsert({
     uid,
@@ -48,7 +44,7 @@ export async function POST(req: NextRequest) {
     longest_streak: next.longest_streak,
     rank_level: next.rank_level,
     streak_progress_days: next.streak_progress_days,
-    last_active_date: next.last_active_date,
+    last_active_at: next.last_active_at,
     updated_at: new Date().toISOString(),
   });
 
@@ -57,5 +53,6 @@ export async function POST(req: NextRequest) {
   }
 
   const rankedUp = next.rank_level > current.rank_level;
-  return NextResponse.json({ state: next, rankedUp });
+  const alreadyCreditedToday = next.last_active_at === current.last_active_at && current.last_active_at !== null;
+  return NextResponse.json({ state: next, rankedUp, alreadyCreditedToday });
 }

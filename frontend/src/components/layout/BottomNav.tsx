@@ -1,39 +1,16 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Home, BarChart3, Brain, Play, Zap, Calendar, User, Flame } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
-import { StreakManager } from '@/lib/streak-manager';
+import { useRankState } from '@/lib/rank-client';
 
 export function BottomNav() {
   const pathname = usePathname();
-  const [streak, setStreak] = useState(0);
-
-  useEffect(() => {
-    // We want this to update if the streak data changes, so we'll re-check on route changes
-    const updateStreak = () => {
-      const data = StreakManager.getStreakData();
-      const currentStreak = StreakManager.checkAndGetStreak(); // This will ensure localstorage is up-to-date with any breaks
-      setStreak(currentStreak);
-    };
-
-    updateStreak(); // Initial load
-
-    // Add event listener for storage changes, if applicable (for cross-tab sync)
-    // window.addEventListener('storage', updateStreak);
-
-    // No need to listen to router.events.on('routeChangeComplete') directly
-    // because usePathname from 'next/navigation' already causes a re-render
-    // when the path changes, which will trigger this useEffect again.
-    // If the path does not change, but the local storage does, that's what
-    // the optional window.addEventListener('storage', updateStreak) would handle.
-
-    return () => {
-      // window.removeEventListener('storage', updateStreak);
-    };
-  }, [pathname]); // Depend on pathname to re-run when route changes
+  const { rankState } = useRankState();
+  const streak = rankState?.current_streak ?? 0;
 
   const navItems = [
     { label: 'HOME', icon: Home, href: '/dashboard' },

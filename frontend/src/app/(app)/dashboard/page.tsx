@@ -23,6 +23,7 @@ import {
 import { getDailyWorkout } from '@/lib/workout-data';
 import { StreakManager } from '@/lib/streak-manager';
 import { useFirebaseUser } from '@/lib/useFirebaseUser';
+import { useRankState } from '@/lib/rank-client';
 import WeeklyLeaderboard from '@/components/reflex/WeeklyLeaderboard';
 import { ProgressRing } from '@/components/ui/ProgressRing';
 import { RankBadge } from '@/components/ui/RankBadge';
@@ -31,9 +32,13 @@ import { NeonButton } from '@/components/ui/NeonButton';
 
 export default function DashboardPage() {
   const { user: fbUser } = useFirebaseUser();
+  const { rankState } = useRankState();
   const router = useRouter();
   const [ringName, setRingName] = useState('FIGHTER');
-  const [streak, setStreak] = useState(0);
+  // Authoritative streak/rank (video-analysis sessions only), synced from
+  // Supabase via useRankState — falls back to 0 while loading/logged out.
+  const streak = rankState?.current_streak ?? 0;
+  const rankLevel = rankState?.rank_level ?? 0;
   const [bpm, setBpm] = useState(92);
   const [completedIndices, setCompletedIndices] = useState<number[]>([]);
   const [calendarDays, setCalendarDays] = useState<any[]>([]);
@@ -58,41 +63,38 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    // Load onboarding data and streak data
-    const loadInitialData = async () => {
-      const onboardingRaw = localStorage.getItem('boxing_onboarding_data');
-      if (onboardingRaw) {
-        try {
-          const onboarding = JSON.parse(onboardingRaw);
-          setRingName((onboarding.ringName || onboarding.ring_name || 'FIGHTER').toUpperCase());
-          setLevel(onboarding.experience_level || onboarding.experienceLevel || 'Novice');
-        } catch (e) {
-          console.error('Failed to parse onboarding data:', e);
-        }
-      }
-
-      // Load streak data and sync
-      const activeStreak = StreakManager.checkAndGetStreak();
-      setStreak(activeStreak);
-      if (fbUser) { // Only sync if user is logged in
-        await StreakManager.syncWithSupabase().catch(console.error);
-        // Re-fetch streak after Supabase sync in case it affected local state
-        setStreak(StreakManager.checkAndGetStreak());
-      }
-
-      // Load today's workout completion progress
-      const progressKey = 'workout_progress_' + new Date().toDateString();
+    // Load onboarding data
+    const onboardingRaw = localStorage.getItem('boxing_onboarding_data');
+    if (onboardingRaw) {
       try {
-        const storedProgress = localStorage.getItem(progressKey);
-        if (storedProgress) {
-          setCompletedIndices(JSON.parse(storedProgress).map(Number));
-        }
+        const onboarding = JSON.parse(onboardingRaw);
+        setRingName((onboarding.ringName || onboarding.ring_name || 'FIGHTER').toUpperCase());
+        setLevel(onboarding.experience_level || onboarding.experienceLevel || 'Novice');
       } catch (e) {
-        console.error('Failed to load workout progress:', e);
+        console.error('Failed to parse onboarding data:', e);
       }
-    };
+    }
 
-    loadInitialData();
+    // Note: the displayed streak/rank now comes from useRankState() (backed
+    // by the video-analysis-driven Supabase system), not from the legacy
+    // StreakManager below. StreakManager still runs to keep the old
+    // display-name-keyed leaderboard table populated in parallel — see
+    // PROJECT_HANDOFF.md — but it's no longer the source of truth for what
+    // the user sees here.
+
+    // Sync streak to Supabase if logged in
+    StreakManager.syncWithSupabase().catch(console.error);
+
+    // Load today's workout completion progress
+    const progressKey = 'workout_progress_' + new Date().toDateString();
+    try {
+      const storedProgress = localStorage.getItem(progressKey);
+      if (storedProgress) {
+        setCompletedIndices(JSON.parse(storedProgress).map(Number));
+      }
+    } catch (e) {
+      console.error('Failed to load workout progress:', e);
+    }
 
     // Simulated heart rate fluctuation
     const bpmInterval = setInterval(() => {
@@ -265,7 +267,7 @@ export default function DashboardPage() {
                   onClick={() => router.push('/ranks')}
                   className="cursor-pointer"
                 >
-                  <RankBadge score={streak} />
+                  <RankBadge score={streak} level={rankLevel} />
                 </div>
                 <div className="px-2 py-0.5 rounded bg-white/5 border border-white/10 text-[9px] font-black tracking-widest text-white/60 flex items-center gap-1">
                   <span>XP LEVEL</span>

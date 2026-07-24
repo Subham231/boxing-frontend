@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
+import { completeSessionSecure } from '@/lib/rank-client';
 
 // ---------------------------------------------------------------------------
 // Landmark indices we care about (MediaPipe Pose / BlazePose 33-point model)
@@ -929,6 +930,12 @@ export default function VisionPage() {
           localStorage.setItem(progressKey, JSON.stringify(completed));
         }
       } catch { }
+
+      // This is the ONLY place the streak/rank system gets credited — not
+      // login, not Daily Grind workouts. Safe to call every time results
+      // are shown: the server no-ops (no extra credit) if a session was
+      // already credited within the last 24 hours.
+      completeSessionSecure().catch(console.error);
     }
   }, [stage, resultsData, insufficientData]);
 

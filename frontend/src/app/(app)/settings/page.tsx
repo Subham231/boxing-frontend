@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { StreakManager } from '@/lib/streak-manager';
+import { useRankState } from '@/lib/rank-client';
+import { getRankInfoByLevel } from '@/components/ui/RankBadge';
 import { 
   User, 
   Settings, 
@@ -48,8 +49,9 @@ export default function SettingsPage() {
   const [mounted, setMounted] = useState(false);
   const [profileData, setProfileData] = useState<OnboardingData>({});
 
-  const streakVal = StreakManager.checkAndGetStreak();
-  const rank = StreakManager.getRank(streakVal);
+  const { rankState } = useRankState();
+  const streakVal = rankState?.current_streak ?? 0;
+  const rank = getRankInfoByLevel(rankState?.rank_level ?? 0);
 
   // App Settings
   const [notifications, setNotifications] = useState(true);

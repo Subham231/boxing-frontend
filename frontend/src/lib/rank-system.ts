@@ -16,16 +16,18 @@ export const RANKS: RankTier[] = [
 
 export const MAX_RANK_LEVEL = RANKS.length - 1;
 
-// Consecutive ACTIVE days needed to climb from `level` to `level + 1`.
+// Consecutive credited sessions needed to climb from `level` to `level + 1`.
 // Grows by 2 every rank: 3, 5, 7, 9, 11, 13.
 export function requiredStreakForNextRank(level: number): number {
   return 3 + level * 2;
 }
 
-// Every 2 full consecutive INACTIVE days costs exactly one rank (can
-// cascade for longer absences) — this is intentionally much more forgiving
-// than the old "miss one day, streak resets to zero" behavior.
-export const INACTIVE_DAYS_PER_DEMOTION = 2;
+// Every 2 full missed 24h windows (48h of inactivity since the last credited
+// session) costs exactly one rank (can cascade for longer absences) — this is
+// intentionally much more forgiving than a "miss one day, streak resets to
+// zero" system, while still actually breaking the streak.
+export const INACTIVE_HOURS_PER_DEMOTION = 48;
+export const CREDIT_WINDOW_HOURS = 24;
 
 export function getRankTier(level: number): RankTier {
   return RANKS[Math.max(0, Math.min(level, MAX_RANK_LEVEL))];
@@ -37,37 +39,60 @@ export interface RankState {
   longest_streak: number;
   rank_level: number;
   streak_progress_days: number;
-  last_active_date: string | null;
+  // ISO timestamp (timestamptz) of the last credited session — NOT a
+  // calendar date. Using a rolling timestamp instead of a UTC calendar date
+  // is what makes this correct for users far from UTC (e.g. India, UTC+5:30):
+  // a calendar-date comparison could call two sessions "consecutive" even
+  // when they were ~47 hours apart (11:59pm one day, 12:01am two days later
+  // in local time), or call them "missed" when they were <24h apart, purely
+  // depending on what time of day the user trains relative to UTC midnight.
+  last_active_at: string | null;
 }
 
-function daysBetween(fromIso: string | null, toIso: string): number {
+function hoursBetween(fromIso: string | null, toIso: string): number {
   if (!fromIso) return Infinity;
-  const from = new Date(fromIso + 'T00:00:00Z').getTime();
-  const to = new Date(toIso + 'T00:00:00Z').getTime();
-  return Math.round((to - from) / 86400000);
+  const from = new Date(fromIso).getTime();
+  const to = new Date(toIso).getTime();
+  return (to - from) / 3600000;
 }
 
-// The single authoritative state-transition function — used by the server
-// route so the exact same logic that computes demotions also computes
-// promotions, with no drift between client display and server truth.
-export function applyDailyProgress(state: RankState, todayIso: string, didCompleteToday: boolean): RankState {
+// The single authoritative state-transition function — used by both server
+// routes (complete-session and sync-rank) so the exact same logic computes
+// demotions and promotions, with no drift between "what counts as a rank
+// change" in different places.
+//
+// - didCompleteSession=true is only ever passed when a real video-analysis
+//   session just finished (never on login, never on a plain page view).
+// - Completing more than once within the same rolling 24h window is free:
+//   no extra credit, but also no penalty — the user can use the analysis
+//   feature as often as they like without it affecting their streak either
+//   way.
+export function applySessionProgress(state: RankState, nowIso: string, didCompleteSession: boolean): RankState {
   const next = { ...state };
-  const gap = daysBetween(next.last_active_date, todayIso);
+  const gapHours = hoursBetween(next.last_active_at, nowIso);
 
-  // Apply any pending demotions for inactivity BEFORE crediting today's
-  // activity, so a comeback day always starts from the correctly-demoted
-  // rank rather than an stale one.
-  if (gap >= INACTIVE_DAYS_PER_DEMOTION) {
-    const demotions = Math.floor(gap / INACTIVE_DAYS_PER_DEMOTION);
+  // Apply any pending demotions for inactivity BEFORE crediting this
+  // session, so a comeback session always starts from the correctly
+  // demoted rank rather than a stale one.
+  if (gapHours >= INACTIVE_HOURS_PER_DEMOTION) {
+    const demotions = Math.floor(gapHours / INACTIVE_HOURS_PER_DEMOTION);
     next.rank_level = Math.max(0, next.rank_level - demotions);
     next.streak_progress_days = 0;
     next.current_streak = 0;
   }
 
-  if (!didCompleteToday) return next;
-  if (next.last_active_date === todayIso) return next; // already credited today
+  if (!didCompleteSession) return next;
 
-  next.current_streak = gap === 1 ? next.current_streak + 1 : 1;
+  // Already credited within the last 24h — free re-use of the feature,
+  // no additional streak credit.
+  if (next.last_active_at !== null && gapHours < CREDIT_WINDOW_HOURS) return next;
+
+  // Consecutive if this session lands within the window that follows the
+  // previous credited session (i.e. before a demotion-worthy gap would have
+  // occurred). Otherwise the streak restarts at 1.
+  next.current_streak = gapHours < INACTIVE_HOURS_PER_DEMOTION && next.current_streak > 0
+    ? next.current_streak + 1
+    : 1;
   next.longest_streak = Math.max(next.longest_streak, next.current_streak);
   next.streak_progress_days += 1;
 
@@ -77,6 +102,6 @@ export function applyDailyProgress(state: RankState, todayIso: string, didComple
     next.streak_progress_days = 0;
   }
 
-  next.last_active_date = todayIso;
+  next.last_active_at = nowIso;
   return next;
 }

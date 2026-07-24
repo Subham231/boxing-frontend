@@ -1,5 +1,9 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import { firebaseAuth } from './firebase';
 import { supabase } from './supabase';
+import { useFirebaseUser } from './useFirebaseUser';
 import type { RankState } from './rank-system';
 
 // Call this whenever the user finishes a workout/drill session — credits
@@ -39,4 +43,37 @@ export async function getRankState(uid: string): Promise<RankState | null> {
   if (!supabase) return null;
   const { data } = await supabase.from('user_streaks').select('*').eq('uid', uid).maybeSingle();
   return data as RankState | null;
+}
+
+// Shared hook for anywhere the app *displays* current streak/rank
+// (Dashboard, BottomNav, Settings/Profile). Always goes through
+// syncRankState so every surface shows the same, up-to-date number —
+// including a demotion that happened server-side since the last visit —
+// instead of each screen reading its own stale localStorage copy.
+export function useRankState() {
+  const { user, loading: userLoading } = useFirebaseUser();
+  const [rankState, setRankState] = useState<RankState | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (userLoading) return;
+    if (!user) {
+      setRankState(null);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    syncRankState().then((s) => {
+      if (!cancelled) {
+        setRankState(s);
+        setLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, userLoading]);
+
+  return { rankState, loading };
 }
