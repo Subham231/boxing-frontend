@@ -29,6 +29,10 @@ import { ProgressRing } from '@/components/ui/ProgressRing';
 import { RankBadge } from '@/components/ui/RankBadge';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
+import WelcomeIntro, { WELCOME_INTRO_KEY } from '@/components/tutorial/WelcomeIntro';
+import SpotlightTour, { TourStep } from '@/components/tutorial/SpotlightTour';
+
+const TUTORIAL_DONE_KEY = 'boxing_tutorial_done';
 
 export default function DashboardPage() {
   const { user: fbUser } = useFirebaseUser();
@@ -46,10 +50,9 @@ export default function DashboardPage() {
   // Onboarding metrics
   const [level, setLevel] = useState('Novice');
   
-  // Tutorial State
-  const [tutorialDone, setTutorialDone] = useState(true);
-  const [showTutorialWelcome, setShowTutorialWelcome] = useState(false);
-  const [tutStep, setTutStep] = useState(0);
+  // Tutorial State: welcome intro (once) -> spotlight tour (once), both replayable from Settings
+  const [showWelcomeIntro, setShowWelcomeIntro] = useState(false);
+  const [showSpotlightTour, setShowSpotlightTour] = useState(false);
 
   // Get daily workout for today
   const todayWorkout = useMemo(() => getDailyWorkout(), []);
@@ -132,14 +135,15 @@ export default function DashboardPage() {
     }
     setCalendarDays(tempDays);
 
-    // Check tutorial state
-    const isTutorialDone = localStorage.getItem('boxing_tutorial_done') === '1';
-    setTutorialDone(isTutorialDone);
-    if (!isTutorialDone) {
-      // Delay to allow page elements to mount nicely
-      const timer = setTimeout(() => {
-        setShowTutorialWelcome(true);
-      }, 1000);
+    // Check tutorial state: welcome intro takes priority on first-ever visit,
+    // spotlight tour runs right after (or alone, if intro was already seen).
+    const introDone = localStorage.getItem(WELCOME_INTRO_KEY) === '1';
+    const tourDone = localStorage.getItem(TUTORIAL_DONE_KEY) === '1';
+    if (!introDone) {
+      const timer = setTimeout(() => setShowWelcomeIntro(true), 600);
+      return () => clearTimeout(timer);
+    } else if (!tourDone) {
+      const timer = setTimeout(() => setShowSpotlightTour(true), 600);
       return () => clearTimeout(timer);
     }
 
@@ -180,8 +184,8 @@ export default function DashboardPage() {
     return 'GO';
   }, [nextDrill]);
 
-  // Tutorial Steps Configuration
-  const tutorialSteps = [
+  // Dashboard Spotlight Tour Steps Configuration
+  const tourSteps: TourStep[] = [
     {
       title: "Today's Mission",
       desc: "This card shows your daily workout focus and your completion progress for the day.",
@@ -209,24 +213,10 @@ export default function DashboardPage() {
     }
   ];
 
-  const handleStartTutorial = () => {
-    setShowTutorialWelcome(false);
-    setTutorialDone(false);
-    setTutStep(0);
-  };
-
-  const handleSkipTutorial = () => {
-    localStorage.setItem('boxing_tutorial_done', '1');
-    setTutorialDone(true);
-    setShowTutorialWelcome(false);
-  };
-
-  const handleNextTutorial = () => {
-    if (tutStep < tutorialSteps.length - 1) {
-      setTutStep(prev => prev + 1);
-    } else {
-      localStorage.setItem('boxing_tutorial_done', '1');
-      setTutorialDone(true);
+  const handleWelcomeIntroDone = () => {
+    setShowWelcomeIntro(false);
+    if (localStorage.getItem(TUTORIAL_DONE_KEY) !== '1') {
+      setShowSpotlightTour(true);
     }
   };
 
@@ -455,96 +445,14 @@ export default function DashboardPage() {
 
       {/* Tutorial Overlay Systems */}
       <AnimatePresence>
-        {showTutorialWelcome && (
-          <motion.div 
-            className="fixed inset-0 bg-black/80 backdrop-blur-md z-[99999] flex flex-col items-center justify-center p-6 text-center"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <div className="w-16 h-16 rounded-full bg-primary/10 border-2 border-primary flex items-center justify-center text-primary text-3xl mb-6 shadow-[0_0_20px_rgba(226,255,59,0.3)]">
-              🥊
-            </div>
-            <h2 className="text-3xl font-black uppercase italic text-white tracking-wide leading-tight mb-3">
-              Welcome,<br /><span className="text-primary">Fighter!</span>
-            </h2>
-            <p className="text-sm text-white/60 font-semibold max-w-[280px] leading-relaxed mb-8">
-              Your AI-powered boxing command centre is ready. Let us take you on a quick tour.
-            </p>
-            <div className="flex flex-col gap-3.5 w-full max-w-[260px]">
-              <NeonButton onClick={handleStartTutorial} className="w-full">
-                SHOW ME AROUND
-              </NeonButton>
-              <button 
-                onClick={handleSkipTutorial} 
-                className="text-xs font-black text-white/40 hover:text-white uppercase tracking-widest py-2"
-              >
-                SKIP TUTORIAL
-              </button>
-            </div>
-          </motion.div>
-        )}
-
-        {!tutorialDone && !showTutorialWelcome && (
-          <motion.div 
-            className="fixed inset-0 z-[99999] pointer-events-none"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            {/* Dark Mask Backdrop */}
-            <div 
-              className="absolute inset-0 bg-black/50 pointer-events-auto" 
-              onClick={handleSkipTutorial}
-            />
-
-            {/* Spotlight cut-out effect */}
-            {/* Handled by rendering spotlight box dynamically with absolute positioning */}
-            
-            {/* Tooltip Card */}
-            <div className="absolute bottom-28 left-4 right-4 bg-black/95 border border-primary/30 rounded-3xl p-5 shadow-2xl pointer-events-auto z-10 flex flex-col gap-4 max-w-sm mx-auto">
-              <div className="flex justify-between items-center">
-                <button 
-                  onClick={handleSkipTutorial} 
-                  className="text-[9px] font-black text-white/40 hover:text-white uppercase tracking-widest"
-                >
-                  SKIP
-                </button>
-                <div className="text-[9px] font-black text-primary tracking-widest uppercase">
-                  STEP {tutStep + 1} OF {tutorialSteps.length}
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-lg font-black uppercase italic text-white leading-none mb-1">
-                  {tutorialSteps[tutStep].title}
-                </h4>
-                <p className="text-xs text-white/60 leading-relaxed font-semibold">
-                  {tutorialSteps[tutStep].desc}
-                </p>
-              </div>
-
-              <div className="flex justify-between items-center mt-2">
-                <div className="flex gap-1.5">
-                  {tutorialSteps.map((_, i) => (
-                    <div 
-                      key={i} 
-                      className={`w-1.5 h-1.5 rounded-full transition-all ${
-                        i === tutStep ? 'bg-primary w-4' : 'bg-white/10'
-                      }`}
-                    />
-                  ))}
-                </div>
-                
-                <NeonButton 
-                  onClick={handleNextTutorial} 
-                  className="px-5 py-2 h-9 text-xs"
-                >
-                  {tutStep === tutorialSteps.length - 1 ? "LET'S GO 🥊" : "NEXT"}
-                </NeonButton>
-              </div>
-            </div>
-          </motion.div>
+        {showWelcomeIntro && <WelcomeIntro key="welcome-intro" onDone={handleWelcomeIntroDone} />}
+        {showSpotlightTour && !showWelcomeIntro && (
+          <SpotlightTour
+            key="spotlight-tour"
+            steps={tourSteps}
+            storageKey={TUTORIAL_DONE_KEY}
+            onDone={() => setShowSpotlightTour(false)}
+          />
         )}
       </AnimatePresence>
     </div>

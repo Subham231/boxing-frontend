@@ -594,6 +594,24 @@ Keep it under 120 words. Focus on their discipline and the evolution of their po
           </button>
         </div>
 
+        {/* Replay Tutorial */}
+        <div
+          onClick={() => {
+            localStorage.removeItem('boxing_welcome_intro_done');
+            localStorage.removeItem('boxing_tutorial_done');
+            router.push('/dashboard');
+          }}
+          className="glass-card p-4 rounded-3xl border border-white/5 bg-black/40 flex justify-between items-center cursor-pointer select-none hover:border-white/10"
+        >
+          <div className="flex items-center gap-4">
+            <Sparkles className="w-4 h-4 text-primary" />
+            <span className="text-xs font-black uppercase text-white">
+              REPLAY TUTORIAL
+            </span>
+          </div>
+          <ChevronRight className="w-4 h-4 text-white/20" />
+        </div>
+
         {/* Privacy Link */}
         <div 
           onClick={() => router.push('/legal/privacy')}
