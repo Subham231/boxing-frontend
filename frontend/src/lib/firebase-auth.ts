@@ -17,11 +17,6 @@ export interface UserProfile {
   has_claimed_referral_bonus: boolean;
   subscription_until: string | null;
   created_at: string;
-  display_name?: string | null;
-  age?: number | null;
-  profession?: string | null;
-  avatar_url?: string | null;
-  promise_word?: string | null;
 }
 
 let recaptchaVerifier: RecaptchaVerifier | null = null;
@@ -48,6 +43,20 @@ export function ensureRecaptcha(containerId: string): RecaptchaVerifier {
   return recaptchaVerifier;
 }
 
+export async function checkPhoneExists(phoneNumberE164: string): Promise<boolean> {
+  try {
+    const res = await fetch('/api/reflex/check-phone', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: phoneNumberE164 }),
+    });
+    const data = await res.json();
+    return !!data.exists;
+  } catch {
+    return false;
+  }
+}
+
 export async function checkOtpRateLimit(phoneNumberE164: string): Promise<{ allowed: boolean; reason?: string; remaining?: number }> {
   const res = await fetch('/api/reflex/otp-rate-limit', {
     method: 'POST',
@@ -62,23 +71,19 @@ export async function sendOtp(phoneNumberE164: string, recaptchaContainerId: str
   return signInWithPhoneNumber(firebaseAuth, phoneNumberE164, verifier);
 }
 
-export async function confirmOtp(confirmation: ConfirmationResult, code: string, referralCodeEntered?: string): Promise<{ user: User; isNew: boolean; profile: UserProfile }> {
+export async function confirmOtp(confirmation: ConfirmationResult, code: string, referralCodeEntered?: string): Promise<User> {
   const cred = await confirmation.confirm(code);
   const user = cred.user;
-  const { profile, isNew } = await ensureUserProfile(user, referralCodeEntered);
-  if (isNew) {
-    // Only a genuinely new account can still redeem a referral code — see
-    // /api/reflex/apply-referral and /api/reflex/ensure-profile.
-    await claimReferralIfNeeded(user);
-  }
-  return { user, isNew, profile };
+  await ensureUserProfile(user, referralCodeEntered);
+  await claimReferralIfNeeded(user);
+  return user;
 }
 
 // Calls the server route, which verifies the Firebase ID token and
 // creates/returns the Supabase profile row (with a fresh referral code on
 // first login). All actual data writes happen server-side with the
 // Supabase service_role key — the client never writes profile data itself.
-export async function ensureUserProfile(user: User, referralCodeEntered?: string): Promise<{ profile: UserProfile; isNew: boolean }> {
+export async function ensureUserProfile(user: User, referralCodeEntered?: string): Promise<UserProfile> {
   const idToken = await user.getIdToken();
   const res = await fetch('/api/reflex/ensure-profile', {
     method: 'POST',
@@ -86,8 +91,8 @@ export async function ensureUserProfile(user: User, referralCodeEntered?: string
     body: JSON.stringify({ referredBy: referralCodeEntered || null }),
   });
   if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || 'Could not create profile.');
-  const { profile, isNew } = await res.json();
-  return { profile: profile as UserProfile, isNew: !!isNew };
+  const { profile } = await res.json();
+  return profile as UserProfile;
 }
 
 export async function claimReferralIfNeeded(user: User): Promise<void> {
@@ -101,36 +106,17 @@ export async function claimReferralIfNeeded(user: User): Promise<void> {
   });
 }
 
-/** Apply a friend's referral code after the profile already exists (e.g. onboarding). */
-export async function applyReferralCode(user: User, code: string): Promise<void> {
+export async function saveProfileDetails(user: User, details: { displayName?: string; age?: number; profession?: string }): Promise<void> {
   const idToken = await user.getIdToken();
-  const res = await fetch('/api/reflex/apply-referral', {
+  await fetch('/api/reflex/save-profile-details', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-    body: JSON.stringify({ code }),
-  });
-  if (!res.ok) {
-    throw new Error((await res.json().catch(() => ({})))?.error || 'Could not apply referral code.');
-  }
-}
-
-export async function saveProfileDetails(user: User, details: { displayName?: string; age?: number; profession?: string; promiseWord?: string; avatarUrl?: string }): Promise<UserProfile | null> {
-  const idToken = await user.getIdToken();
-  try {
-    const res = await fetch('/api/reflex/save-profile-details', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-      body: JSON.stringify(details),
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return (data.profile as UserProfile) || null;
-  } catch {
+    body: JSON.stringify(details),
+  }).catch(() => {
     // Non-fatal — the core account (uid + phone) already exists even if
     // these extra display fields fail to save; they can be retried later
-    // from the profile/settings screen.
-    return null;
-  }
+    // from a profile/settings screen.
+  });
 }
 
 export function watchAuthState(callback: (user: User | null) => void) {
