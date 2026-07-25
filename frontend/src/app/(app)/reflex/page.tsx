@@ -28,9 +28,6 @@ import WeeklyLeaderboard from '@/components/reflex/WeeklyLeaderboard';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
 
-const LB_RT = 'leaderboard_reflex_reaction_tap';
-const LB_CF = 'leaderboard_reflex_combo_flash';
-
 interface LeaderboardRecord {
   player_name: string;
   score: number;
@@ -150,8 +147,6 @@ export default function ReflexPage() {
       setAssessStep('start');
     }
 
-    // Load Leaderboards
-    loadLeaderboards();
   }, []);
 
   const getWeekKey = () => {
@@ -188,91 +183,6 @@ export default function ReflexPage() {
     if (rtBest < 0.28) return '🔥 PRO LEVEL';
     return 'AMATEUR TIER';
   }, [rtBest]);
-
-  const loadLeaderboards = async () => {
-    if (!supabase) return;
-    try {
-      // Reaction Tap Leaderboard
-      const { data: rtData } = await supabase
-        .from(LB_RT)
-        .select('player_name, score, display_score')
-        .order('score', { ascending: true })
-        .limit(10);
-      if (rtData) setRtLeaderboard(rtData);
-
-      // Combo Flash Leaderboard
-      const { data: cfData } = await supabase
-        .from(LB_CF)
-        .select('player_name, score, display_score')
-        .order('score', { ascending: false })
-        .limit(10);
-      if (cfData) setCfLeaderboard(cfData);
-
-      // Fetch user's own rankings if existing
-      const pName = playerName;
-      if (pName) {
-        const { data: rtSingle } = await supabase
-          .from(LB_RT)
-          .select('score')
-          .eq('player_name', pName)
-          .maybeSingle();
-        if (rtSingle) {
-          // Find index
-          const { count } = await supabase
-            .from(LB_RT)
-            .select('*', { count: 'exact', head: true })
-            .lt('score', rtSingle.score);
-          setRtRank(`#${(count || 0) + 1} RANK`);
-        }
-
-        const { data: cfSingle } = await supabase
-          .from(LB_CF)
-          .select('score')
-          .eq('player_name', pName)
-          .maybeSingle();
-        if (cfSingle) {
-          // Find index
-          const { count } = await supabase
-            .from(LB_CF)
-            .select('*', { count: 'exact', head: true })
-            .gt('score', cfSingle.score);
-          setCfRank(`#${(count || 0) + 1} RANK`);
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to load online leaderboards:', e);
-    }
-  };
-
-  const submitOnlineScore = async (tableName: string, score: number, displayVal: string) => {
-    if (!supabase) return;
-    const name = playerName || 'FIGHTER';
-    try {
-      const { data: existing, error } = await supabase
-        .from(tableName)
-        .select('id, score')
-        .eq('player_name', name)
-        .maybeSingle();
-
-      if (existing && !error) {
-        const oldScore = existing.score;
-        const isBetter = tableName === LB_RT ? score < oldScore : score > oldScore;
-        if (isBetter) {
-          await supabase
-            .from(tableName)
-            .update({ score, display_score: displayVal, created_at: new Date().toISOString() })
-            .eq('id', existing.id);
-        }
-      } else {
-        await supabase
-          .from(tableName)
-          .insert([{ player_name: name, score, display_score: displayVal, created_at: new Date().toISOString() }]);
-      }
-      loadLeaderboards();
-    } catch (e) {
-      console.error('Failed to submit online score:', e);
-    }
-  };
 
   // =========================================================================
   // GAME 1: REACTION TAP LOGIC
@@ -407,7 +317,6 @@ export default function ReflexPage() {
       rtTabLockRef.current.release();
       recordSession();
       if (avg && !rtFlaggedRef.current) {
-        submitOnlineScore(LB_RT, avg, avg.toFixed(3));
         if (fbUser) {
           submitReflexScoreSecure('reaction_tap', nextTimes).catch((e) => console.warn('[Firebase] score submit failed:', e));
         }
@@ -578,9 +487,6 @@ export default function ReflexPage() {
     const avg = cfLevelScores.length > 0 ? Math.round(cfLevelScores.reduce((a, b) => a + b, 0) / cfLevelScores.length) : 0;
     setCfStatusText(won ? '🏆 CHAMPION! Max Level!' : `FINAL AVG: ${avg} pts/level`);
     recordSession();
-    if (cfLevelScores.length > 0 && !cfFlaggedRef.current) {
-      submitOnlineScore(LB_CF, avg, avg.toString());
-    }
   };
 
   // =========================================================================

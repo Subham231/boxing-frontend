@@ -15,7 +15,6 @@ import {
   Target, 
   Check, 
   Activity,
-  Heart,
   ChevronRight,
   Sparkles,
   Award
@@ -41,7 +40,6 @@ export default function DashboardPage() {
   // Supabase via useRankState — falls back to 0 while loading/logged out.
   const streak = rankState?.current_streak ?? 0;
   const rankLevel = rankState?.rank_level ?? 0;
-  const [bpm, setBpm] = useState(92);
   const [completedIndices, setCompletedIndices] = useState<number[]>([]);
   const [calendarDays, setCalendarDays] = useState<any[]>([]);
 
@@ -98,15 +96,6 @@ export default function DashboardPage() {
       console.error('Failed to load workout progress:', e);
     }
 
-    // Simulated heart rate fluctuation
-    const bpmInterval = setInterval(() => {
-      setBpm(prev => {
-        const delta = Math.random() > 0.5 ? 1 : -1;
-        const next = prev + delta;
-        return next > 98 ? 98 : next < 90 ? 90 : next;
-      });
-    }, 4000);
-
     // Setup Calendar Strip (last 3 days + today + next 3 days)
     const dayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
     const tempDays = [];
@@ -154,7 +143,6 @@ export default function DashboardPage() {
       return () => clearTimeout(timer);
     }
 
-    return () => clearInterval(bpmInterval);
   }, []);
 
   // Prefer the live Supabase display name over the localStorage fallback
@@ -244,18 +232,6 @@ export default function DashboardPage() {
 
   return (
     <div className="relative w-full">
-      {/* Top HUD Telemetry Display (embedded context-aware details) */}
-      <div className="absolute -top-16 left-0 right-0 flex justify-between items-center text-[10px] font-mono text-primary font-bold z-10 pointer-events-none select-none">
-        <div className="flex flex-col gap-0.5">
-          <span className="opacity-80">SYS_ID: <span className="text-white font-black">{ringName}</span></span>
-          <span className="opacity-40">STATUS: ACTIVE</span>
-        </div>
-        <div className="flex items-center gap-1.5 text-red-500 text-sm font-black">
-          <Heart className="w-3.5 h-3.5 fill-red-500 animate-pulse" />
-          <span className="font-mono text-xs">{bpm}_BPM</span>
-        </div>
-      </div>
-
       <div className="flex flex-col gap-6 anim-fade-in">
         {/* Unified Fighter Header */}
         <header className="flex justify-between items-start">

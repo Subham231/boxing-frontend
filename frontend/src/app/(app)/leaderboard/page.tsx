@@ -42,31 +42,47 @@ export default function LeaderboardPage() {
 
     try {
       // 1. Reflex rankings (lower average reaction is better) — real data
-      // from actual Reaction Tap game submissions, no placeholder rows.
-      const { data: rtData } = await supabase
-        .from('leaderboard_reflex_reaction_tap')
-        .select('player_name, score, display_score')
-        .order('score', { ascending: true })
+      // from actual Reaction Tap game submissions, pulled from reflex_scores
+      // (the table that /api/reflex/submit-score actually writes to), joined
+      // against profiles for a display name.
+      const { data: rtScores } = await supabase
+        .from('reflex_scores')
+        .select('uid, weekly_score')
+        .eq('game_id', 'reaction_tap')
+        .not('weekly_score', 'is', null)
+        .order('weekly_score', { ascending: true })
         .limit(50);
+
+      const { data: cfScores } = await supabase
+        .from('reflex_scores')
+        .select('uid, weekly_score')
+        .eq('game_id', 'combo_flash')
+        .not('weekly_score', 'is', null)
+        .order('weekly_score', { ascending: false })
+        .limit(50);
+
+      const scoreUids = [...(rtScores || []), ...(cfScores || [])].map((r: any) => r.uid);
+      const { data: scoreProfiles } = scoreUids.length
+        ? await supabase.from('reflex_profiles').select('uid, display_name').in('uid', scoreUids)
+        : { data: [] as any[] };
+      const nameByUid = new Map<string, string>(
+        (scoreProfiles || []).map((p: any) => [p.uid, (p.display_name || 'FIGHTER').toUpperCase()])
+      );
+
       setReflexRankings(
-        (rtData || []).map((d: any) => ({
-          name: d.player_name,
-          score: d.score,
-          display_val: `${d.display_score}s`,
+        (rtScores || []).map((d: any) => ({
+          name: nameByUid.get(d.uid) || 'FIGHTER',
+          score: d.weekly_score,
+          display_val: `${d.weekly_score}s`,
         }))
       );
 
       // 2. Combo rankings (higher average score is better)
-      const { data: cfData } = await supabase
-        .from('leaderboard_reflex_combo_flash')
-        .select('player_name, score, display_score')
-        .order('score', { ascending: false })
-        .limit(50);
       setComboRankings(
-        (cfData || []).map((d: any) => ({
-          name: d.player_name,
-          score: d.score,
-          display_val: `${d.display_score} pts`,
+        (cfScores || []).map((d: any) => ({
+          name: nameByUid.get(d.uid) || 'FIGHTER',
+          score: d.weekly_score,
+          display_val: `${d.weekly_score} pts`,
         }))
       );
 

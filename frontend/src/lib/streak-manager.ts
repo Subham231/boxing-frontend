@@ -1,5 +1,4 @@
 import { StreakData } from '@/types';
-import { supabase } from './supabase';
 
 const STORAGE_KEY = 'boxing_streak_data';
 
@@ -83,85 +82,14 @@ export const StreakManager = {
     },
 
     async syncWithSupabase() {
-        if (!supabase) return;
-
-        try {
-            const onboardingRaw = localStorage.getItem('boxing_onboarding_data');
-            const onboardingData = onboardingRaw ? JSON.parse(onboardingRaw) : {};
-            const name = (onboardingData.ring_name || onboardingData.ringName || 'FIGHTER').toUpperCase();
-
-            // Ensure local streak data is up-to-date before syncing
-            const localStreak = this.checkAndGetStreak();
-
-            if (localStreak <= 0) {
-                // If local streak is 0, also ensure Supabase is reset
-                const { error: deleteError } = await supabase
-                    .from('leaderboard_streaks')
-                    .delete()
-                    .eq('name', name);
-
-                if (deleteError && deleteError.code !== 'PGRST116') { // PGRST116 means "No rows found" which is fine
-                    throw deleteError;
-                }
-                console.log("Supabase streak cleared for:", name);
-                return;
-            }
-
-            const { data: existingStreak, error: fetchError } = await supabase
-                .from('leaderboard_streaks')
-                .select('current_streak, longest_streak, last_activity')
-                .eq('name', name)
-                .single();
-
-            if (fetchError && fetchError.code !== 'PGRST116') { // No rows found is okay
-                throw fetchError;
-            }
-
-            let newCurrentStreak = localStreak;
-            let newLongestStreak = existingStreak?.longest_streak || 0;
-            const lastActivity = existingStreak?.last_activity ? new Date(existingStreak.last_activity) : null;
-            const today = new Date();
-            const todayISO = today.toISOString().split('T')[0]; // YYYY-MM-DD
-
-            if (lastActivity) {
-                const lastActivityISO = lastActivity.toISOString().split('T')[0];
-                const diffTime = Math.abs(today.getTime() - lastActivity.getTime());
-                const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-
-                if (diffDays === 1 && localStreak > 0 && lastActivityISO === new Date(today.getTime() - (1000 * 60 * 60 * 24)).toISOString().split('T')[0]) {
-                    // Streak continued
-                    // newCurrentStreak is already localStreak
-                    newLongestStreak = Math.max(newLongestStreak, newCurrentStreak);
-                } else if (diffDays > 1) {
-                    // Streak broken in Supabase, reset to 1 if local is active
-                    newCurrentStreak = localStreak; // Should be 1 if local just started or 0 if reset
-                    // Longest streak remains the same or gets updated if localStreak was higher before reset
-                } else if (diffDays === 0) {
-                    // Same day, don't increment, just ensure consistency
-                    newCurrentStreak = existingStreak?.current_streak || localStreak;
-                }
-            } else {
-                // First time syncing for this user
-                newLongestStreak = Math.max(newLongestStreak, newCurrentStreak);
-            }
-
-            const { error } = await supabase
-                .from('leaderboard_streaks')
-                .upsert({
-                    name: name,
-                    current_streak: newCurrentStreak,
-                    longest_streak: newLongestStreak,
-                    display_val: newCurrentStreak.toString(),
-                    last_activity: todayISO // Only update last_activity to today if a session is completed
-                }, {
-                    onConflict: 'name'
-                });
-
-            if (error) throw error;
-            console.log("Streak synced with Supabase:", newCurrentStreak, "Longest:", newLongestStreak);
-        } catch (e) {
-            console.error("Supabase Streak Sync Error:", e);
-        }
+        // No-op: kept only so existing call sites don't need to change.
+        // The real streak table (`user_streaks`) is uid-keyed and is written
+        // server-side by /api/reflex/complete-session using the service-role
+        // key. This client-side path used to write to a name-keyed
+        // `leaderboard_streaks` table that no longer exists in the schema
+        // (see supabase/reflex-schema-v3.sql), which is what was producing
+        // the "Supabase Streak Sync Error" / 404s on every dashboard load.
+        return;
     },
 
     getRank(score: number) {
