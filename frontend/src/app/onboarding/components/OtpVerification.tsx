@@ -1,16 +1,19 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { ChevronRight, ShieldCheck, ArrowLeft } from 'lucide-react';
 import type { ConfirmationResult } from 'firebase/auth';
 import { useOnboarding } from '@/context/OnboardingContext';
 import StepBadge from './StepBadge';
 import { sendOtp, confirmOtp, checkOtpRateLimit, saveProfileDetails } from '@/lib/firebase-auth';
+import { cacheProfileLocally } from '@/lib/profile-client';
 
 const RECAPTCHA_CONTAINER_ID = 'onboarding-phone-recaptcha';
 
 const OtpVerification: React.FC = () => {
   const { data, updateData, nextStep, prevStep } = useOnboarding();
+  const router = useRouter();
   const [step, setStep] = useState<'phone' | 'otp'>('phone');
   const [phone, setPhone] = useState(data.phone?.startsWith('+') ? data.phone : '');
   const [code, setCode] = useState('');
@@ -47,14 +50,32 @@ const OtpVerification: React.FC = () => {
     setError(null);
     setLoading(true);
     try {
-      const user = await confirmOtp(confirmation, code.trim());
+      const { user, isNew, profile } = await confirmOtp(confirmation, code.trim());
       updateData({ phone: phone.trim() });
-      await saveProfileDetails(user, {
-        displayName: data.ringName,
-        age: data.age,
-        profession: data.profession,
-      });
-      nextStep();
+
+      if (isNew) {
+        // Brand-new account — save what they just entered during onboarding
+        // and continue on to the rest of the flow (subscription screen etc).
+        await saveProfileDetails(user, {
+          displayName: data.ringName,
+          age: data.age,
+          profession: data.profession,
+          promiseWord: data.promiseWord,
+        });
+        nextStep();
+        return;
+      }
+
+      // Existing account signing back in — this is a LOGIN, not a signup.
+      // Restore their real saved data instead of overwriting it with
+      // whatever placeholder values are currently sitting in the
+      // in-progress onboarding form, and skip straight past the rest of
+      // onboarding (subscription offer / final promise) into the app.
+      cacheProfileLocally(profile);
+      try {
+        localStorage.setItem('boxing_onboarding_complete', 'true');
+      } catch { }
+      router.replace('/dashboard');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Invalid code. Try again.');
     } finally {

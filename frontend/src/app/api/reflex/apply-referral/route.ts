@@ -47,6 +47,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'You already used a referral code.' }, { status: 400 });
   }
 
+  // Referral codes are a new-account perk only. An account that's more than
+  // a short window past its own creation is not "a new signup" anymore —
+  // this stops an existing account (or the same phone number re-verifying
+  // later) from redeeming a code after the fact.
+  const REFERRAL_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
+  const createdAt = me.created_at ? new Date(me.created_at).getTime() : 0;
+  if (!createdAt || Date.now() - createdAt > REFERRAL_WINDOW_MS) {
+    return NextResponse.json({ error: 'Referral codes can only be applied when creating a new account.' }, { status: 400 });
+  }
+
   if (me.referral_code === code) {
     return NextResponse.json({ error: 'You cannot use your own code.' }, { status: 400 });
   }

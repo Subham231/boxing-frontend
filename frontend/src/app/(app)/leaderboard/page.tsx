@@ -1,147 +1,145 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Trophy, 
-  ArrowLeft, 
-  Flame, 
-  Zap, 
-  Target, 
-  Sparkles,
-  Users
+import {
+  Trophy,
+  ArrowLeft,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { StreakManager } from '@/lib/streak-manager';
+import { useFirebaseUser } from '@/lib/useFirebaseUser';
+import { getRankInfoByLevel } from '@/components/ui/RankBadge';
 import { GlassCard } from '@/components/ui/GlassCard';
 
 interface LeaderboardItem {
+  uid?: string;
   name: string;
+  avatar_url?: string | null;
   score: number;
   display_val: string;
+  rank_level?: number;
 }
 
 export default function LeaderboardPage() {
   const router = useRouter();
+  const { user } = useFirebaseUser();
   const [mounted, setMounted] = useState(false);
-  const [activeTab, setActiveTab] = useState<'reflex' | 'streak' | 'combo'>('reflex');
-  const [playerName, setPlayerName] = useState('FIGHTER');
+  const [activeTab, setActiveTab] = useState<'reflex' | 'streak' | 'combo'>('streak');
 
-  // Rankings state
   const [reflexRankings, setReflexRankings] = useState<LeaderboardItem[]>([]);
   const [streakRankings, setStreakRankings] = useState<LeaderboardItem[]>([]);
   const [comboRankings, setComboRankings] = useState<LeaderboardItem[]>([]);
 
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [errored, setErrored] = useState(false);
 
-  useEffect(() => {
-    setMounted(true);
-    
-    // Fetch playerName
-    try {
-      const data = JSON.parse(localStorage.getItem('boxing_onboarding_data') || '{}');
-      if (data.ring_name || data.ringName) {
-        setPlayerName((data.ring_name || data.ringName).toUpperCase());
-      }
-    } catch (e) {}
-
-    loadAllRankings();
-  }, []);
-
-  const loadAllRankings = async () => {
-    setLoading(true);
-    setError(false);
+  const loadAllRankings = useCallback(async () => {
+    if (!supabase) {
+      setErrored(true);
+      setLoading(false);
+      return;
+    }
 
     try {
-      if (supabase) {
-        // 1. Reflex rankings (lower average reaction is better)
-        const { data: rtData } = await supabase
-          .from('leaderboard_reflex_reaction_tap')
-          .select('player_name, score, display_score')
-          .order('score', { ascending: true })
-          .limit(50);
-        
-        if (rtData) {
-          setReflexRankings(rtData.map((d: any) => ({
-            name: d.player_name,
-            score: d.score,
-            display_val: `${d.display_score}s`
-          })));
-        }
+      // 1. Reflex rankings (lower average reaction is better) — real data
+      // from actual Reaction Tap game submissions, no placeholder rows.
+      const { data: rtData } = await supabase
+        .from('leaderboard_reflex_reaction_tap')
+        .select('player_name, score, display_score')
+        .order('score', { ascending: true })
+        .limit(50);
+      setReflexRankings(
+        (rtData || []).map((d: any) => ({
+          name: d.player_name,
+          score: d.score,
+          display_val: `${d.display_score}s`,
+        }))
+      );
 
-        // 2. Combo rankings (higher average score is better)
-        const { data: cfData } = await supabase
-          .from('leaderboard_reflex_combo_flash')
-          .select('player_name, score, display_score')
-          .order('score', { ascending: false })
-          .limit(50);
+      // 2. Combo rankings (higher average score is better)
+      const { data: cfData } = await supabase
+        .from('leaderboard_reflex_combo_flash')
+        .select('player_name, score, display_score')
+        .order('score', { ascending: false })
+        .limit(50);
+      setComboRankings(
+        (cfData || []).map((d: any) => ({
+          name: d.player_name,
+          score: d.score,
+          display_val: `${d.display_score} pts`,
+        }))
+      );
 
-        if (cfData) {
-          setComboRankings(cfData.map((d: any) => ({
-            name: d.player_name,
-            score: d.score,
-            display_val: `${d.display_score} pts`
-          })));
-        }
+      // 3. Streak / Rank board — the authoritative source, joined against
+      // real profiles for display name + avatar. This is uid-keyed (not
+      // display-name-keyed like the legacy leaderboard_streaks table), so
+      // it can't collide on duplicate names and always reflects the same
+      // numbers the Dashboard/Ranks page show.
+      const { data: streakRows } = await supabase
+        .from('user_streaks')
+        .select('uid, current_streak, longest_streak, rank_level')
+        .order('current_streak', { ascending: false })
+        .limit(50);
 
-        // 3. Streak rankings (higher streak is better)
-        const { data: stData } = await supabase
-          .from('leaderboard_streaks')
-          .select('player_name, score, display_score')
-          .order('score', { ascending: false })
-          .limit(50);
+      if (streakRows && streakRows.length > 0) {
+        const uids = streakRows.map((r: any) => r.uid);
+        const { data: profiles } = await supabase
+          .from('reflex_profiles')
+          .select('uid, display_name, avatar_url')
+          .in('uid', uids);
+        const profileByUid = new Map<string, { display_name?: string; avatar_url?: string }>(
+          (profiles || []).map((p: any) => [p.uid, p])
+        );
 
-        if (stData) {
-          setStreakRankings(stData.map((d: any) => ({
-            name: d.player_name,
-            score: d.score,
-            display_val: `${d.display_score} days`
-          })));
-        } else {
-          // Fallback mock streaks
-          loadMockRankings();
-        }
+        setStreakRankings(
+          streakRows.map((r: any) => {
+            const p = profileByUid.get(r.uid);
+            return {
+              uid: r.uid,
+              name: (p?.display_name || 'FIGHTER').toUpperCase(),
+              avatar_url: p?.avatar_url || null,
+              score: r.current_streak,
+              display_val: `${r.current_streak} days`,
+              rank_level: r.rank_level,
+            };
+          })
+        );
       } else {
-        loadMockRankings();
+        setStreakRankings([]);
       }
+
+      setErrored(false);
     } catch (e) {
-      console.warn('Failed to load online rankings, loading fallbacks:', e);
-      loadMockRankings();
+      console.error('Failed to load leaderboard data:', e);
+      setErrored(true);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const loadMockRankings = () => {
-    // Mock reflex
-    setReflexRankings([
-      { name: 'TITAN_X', score: 0.172, display_val: '0.172s' },
-      { name: 'KRONOS_AI', score: 0.185, display_val: '0.185s' },
-      { name: 'VIKTOR', score: 0.208, display_val: '0.208s' },
-      { name: 'VULCAN', score: 0.245, display_val: '0.245s' },
-      { name: 'GUEST_049', score: 0.285, display_val: '0.285s' }
-    ]);
+  useEffect(() => {
+    setMounted(true);
+    loadAllRankings();
 
-    // Mock combo
-    setComboRankings([
-      { name: 'KRONOS_AI', score: 75, display_val: '75 pts' },
-      { name: 'TITAN_X', score: 68, display_val: '68 pts' },
-      { name: 'VULCAN', score: 55, display_val: '55 pts' },
-      { name: 'VIKTOR', score: 48, display_val: '48 pts' },
-      { name: 'GUEST_049', score: 32, display_val: '32 pts' }
-    ]);
+    // Live updates: re-fetch whenever any user's streak/rank changes (a
+    // real video-analysis session completing anywhere updates this table),
+    // so the board reflects reality without the user needing to refresh.
+    if (!supabase) return;
+    const channel = supabase
+      .channel('leaderboard-user-streaks')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'user_streaks' }, () => {
+        loadAllRankings();
+      })
+      .subscribe();
 
-    // Mock streak
-    setStreakRankings([
-      { name: 'VIKTOR', score: 28, display_val: '28 days' },
-      { name: 'TITAN_X', score: 18, display_val: '18 days' },
-      { name: 'VULCAN', score: 12, display_val: '12 days' },
-      { name: 'KRONOS_AI', score: 9, display_val: '9 days' },
-      { name: 'GUEST_049', score: 5, display_val: '5 days' }
-    ]);
-  };
+    // Safety-net poll in case the realtime channel drops silently.
+    const interval = setInterval(loadAllRankings, 30000);
+
+    return () => {
+      supabase?.removeChannel(channel);
+      clearInterval(interval);
+    };
+  }, [loadAllRankings]);
 
   const activeRankings = React.useMemo(() => {
     if (activeTab === 'reflex') return reflexRankings;
@@ -163,18 +161,14 @@ export default function LeaderboardPage() {
       {/* Telemetry Display */}
       <div className="absolute -top-16 left-0 right-0 flex justify-between items-center text-[10px] font-mono text-primary font-bold z-10 pointer-events-none select-none">
         <span className="opacity-80 uppercase">MODULE: GLOBAL LEADERBOARD</span>
-        <span className="opacity-40 uppercase">SYNC_STATUS_LIVE</span>
+        <span className="opacity-40 uppercase">{errored ? 'SYNC_STATUS_OFFLINE' : 'SYNC_STATUS_LIVE'}</span>
       </div>
 
       {/* Page Header */}
       <header className="flex justify-between items-start">
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-full border-2 border-primary/80 shadow-[0_0_15px_rgba(226,255,59,0.3)] overflow-hidden bg-black/40">
-            <img 
-              src="https://i.pravatar.cc/150?u=leader" 
-              alt="Avatar" 
-              className="w-full h-full object-cover"
-            />
+          <div className="w-14 h-14 rounded-full border-2 border-primary/80 shadow-[0_0_15px_rgba(226,255,59,0.3)] overflow-hidden bg-black/40 flex items-center justify-center">
+            <Trophy className="w-6 h-6 text-primary" />
           </div>
           <div>
             <div className="text-[10px] font-black text-white/50 tracking-wider uppercase mb-0.5">
@@ -185,8 +179,8 @@ export default function LeaderboardPage() {
             </h1>
           </div>
         </div>
-        
-        <button 
+
+        <button
           onClick={() => router.back()}
           className="w-10 h-10 rounded-full border border-white/10 bg-white/5 flex items-center justify-center text-white/60 hover:text-white transition-all"
         >
@@ -197,16 +191,16 @@ export default function LeaderboardPage() {
       {/* Segmented control tabs */}
       <div className="flex border border-white/5 bg-white/[0.02] p-1.5 rounded-full select-none">
         {[
-          { id: 'reflex', label: 'Reflex' },
           { id: 'streak', label: 'Streak' },
+          { id: 'reflex', label: 'Reflex' },
           { id: 'combo', label: 'Combo' }
         ].map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id as any)}
             className={`flex-1 py-2.5 text-[10px] font-black uppercase tracking-wider rounded-full transition-all duration-300 ${
-              activeTab === tab.id 
-                ? 'bg-primary text-black shadow-[0_4px_12px_rgba(226,255,59,0.25)]' 
+              activeTab === tab.id
+                ? 'bg-primary text-black shadow-[0_4px_12px_rgba(226,255,59,0.25)]'
                 : 'text-white/40 hover:text-white'
             }`}
           >
@@ -227,8 +221,8 @@ export default function LeaderboardPage() {
             </span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_6px_#22c55e]" />
-            <span className="text-[8px] font-bold text-white/40 uppercase">LIVE</span>
+            <div className={`w-1.5 h-1.5 rounded-full ${errored ? 'bg-red-500' : 'bg-green-500 animate-pulse shadow-[0_0_6px_#22c55e]'}`} />
+            <span className="text-[8px] font-bold text-white/40 uppercase">{errored ? 'OFFLINE' : 'LIVE'}</span>
           </div>
         </div>
 
@@ -237,45 +231,52 @@ export default function LeaderboardPage() {
             <div className="flex-1 flex flex-col items-center justify-center p-10 text-[10px] font-bold text-white/30 uppercase tracking-[2px]">
               Syncing with AI Core...
             </div>
+          ) : errored ? (
+            <div className="flex-1 flex flex-col items-center justify-center p-10 text-[10px] font-bold text-white/30 uppercase tracking-[2px] gap-2">
+              <span>Couldn&apos;t reach the leaderboard.</span>
+              <button onClick={loadAllRankings} className="text-primary underline">Retry</button>
+            </div>
           ) : activeRankings.length > 0 ? (
             activeRankings.map((row, idx) => {
               const rank = idx + 1;
-              const isMe = row.name.toUpperCase() === playerName.toUpperCase();
-              
-              // Get fighter badges if it's a streak board
-              const streakVal = activeTab === 'streak' ? row.score : 0;
-              const rankLabel = activeTab === 'streak' ? StreakManager.getRank(streakVal) : null;
+              const isMe = row.uid ? row.uid === user?.uid : false;
+              const rankTier = activeTab === 'streak' && row.rank_level !== undefined ? getRankInfoByLevel(row.rank_level) : null;
 
               return (
-                <div 
-                  key={idx}
+                <div
+                  key={row.uid || `${row.name}-${idx}`}
                   className={`flex justify-between items-center px-5 py-3.5 border-b border-white/[0.02] last:border-0 transition-all duration-150 ${
                     isMe ? 'bg-primary/10 border-l-4 border-primary pl-4' : ''
                   }`}
                 >
                   <div className="flex items-center gap-4">
                     <span className={`text-xs font-black w-6 text-center ${
-                      rank === 1 
-                        ? 'text-yellow-400 font-black text-sm drop-shadow-[0_0_8px_rgba(250,204,21,0.6)]' 
-                        : rank === 2 
-                          ? 'text-zinc-300 font-bold' 
-                          : rank === 3 
-                            ? 'text-amber-600' 
+                      rank === 1
+                        ? 'text-yellow-400 font-black text-sm drop-shadow-[0_0_8px_rgba(250,204,21,0.6)]'
+                        : rank === 2
+                          ? 'text-zinc-300 font-bold'
+                          : rank === 3
+                            ? 'text-amber-600'
                             : 'text-white/20'
                     }`}>
                       {rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank}
                     </span>
+                    {activeTab === 'streak' && (
+                      <div className="w-7 h-7 rounded-full overflow-hidden bg-white/10 flex items-center justify-center shrink-0">
+                        {row.avatar_url ? (
+                          <img src={row.avatar_url} alt={row.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-[9px] font-black text-white/60">{row.name.charAt(0)}</span>
+                        )}
+                      </div>
+                    )}
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-black text-white/80 uppercase tracking-wide">
                         {row.name}
                       </span>
-                      {rankLabel && (
-                        <span className={`px-2 py-0.5 text-[7px] font-black rounded uppercase flex items-center gap-1 ${
-                          rankLabel.class === 'rank-gold' 
-                            ? 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/20' 
-                            : 'bg-zinc-500/10 text-zinc-400 border border-zinc-500/20'
-                        }`}>
-                          {rankLabel.name}
+                      {rankTier && (
+                        <span className="px-2 py-0.5 text-[7px] font-black rounded uppercase flex items-center gap-1 bg-primary/10 text-primary border border-primary/20">
+                          {rankTier.name}
                         </span>
                       )}
                     </div>
@@ -288,7 +289,7 @@ export default function LeaderboardPage() {
             })
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center p-10 text-[10px] font-bold text-white/30 uppercase tracking-[2px]">
-              No entries found.
+              No entries yet. Be the first on the board.
             </div>
           )}
         </div>
@@ -296,7 +297,7 @@ export default function LeaderboardPage() {
 
       <p className="text-[9px] font-bold text-white/30 uppercase tracking-widest text-center select-none">
         {activeTab === 'reflex' && 'Lower is better. Fastest reaction times globally.'}
-        {activeTab === 'streak' && 'Daily discipline. Longest active training streaks.'}
+        {activeTab === 'streak' && 'Daily discipline. Longest active training streaks, live from every fighter\'s account.'}
         {activeTab === 'combo' && 'Memory and speed. Cumulative combo points per level.'}
       </p>
     </div>

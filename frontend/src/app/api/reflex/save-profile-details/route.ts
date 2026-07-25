@@ -26,19 +26,23 @@ export async function POST(req: NextRequest) {
   const displayName = typeof body.displayName === 'string' ? body.displayName.trim().slice(0, 60) : undefined;
   const age = Number.isFinite(body.age) ? Math.max(0, Math.min(120, Math.round(body.age))) : undefined;
   const profession = typeof body.profession === 'string' ? body.profession.trim().slice(0, 100) : undefined;
+  const promiseWord = typeof body.promiseWord === 'string' ? body.promiseWord.trim().slice(0, 200) : undefined;
+  const avatarUrl = typeof body.avatarUrl === 'string' ? body.avatarUrl.trim().slice(0, 2000) : undefined;
 
   const update: Record<string, unknown> = {};
   if (displayName) update.display_name = displayName;
   if (age !== undefined) update.age = age;
   if (profession) update.profession = profession;
+  if (promiseWord) update.promise_word = promiseWord;
+  if (avatarUrl) update.avatar_url = avatarUrl;
 
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ updated: false, reason: 'Nothing to update.' });
   }
 
-  const { error } = await supabaseAdmin.from('reflex_profiles').update(update).eq('uid', decoded.uid);
+  const { data, error } = await supabaseAdmin.from('reflex_profiles').update(update).eq('uid', decoded.uid).select('*').single();
   if (error) {
     return NextResponse.json({ updated: false, error: error.message }, { status: 500 });
   }
-  return NextResponse.json({ updated: true });
+  return NextResponse.json({ updated: true, profile: data });
 }

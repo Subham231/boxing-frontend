@@ -21,6 +21,8 @@ import {
 } from 'lucide-react';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
+import { useMyProfile } from '@/lib/profile-client';
+import { useRankState } from '@/lib/rank-client';
 
 interface VisionSession {
   date: string;
@@ -57,6 +59,8 @@ export default function AnalyticsPage() {
   const [mounted, setMounted] = useState(false);
   const [mode, setMode] = useState<'daily' | 'ai'>('daily');
   const [playerName, setPlayerName] = useState('FIGHTER');
+  const { profile: myProfile } = useMyProfile();
+  const { rankState } = useRankState();
 
   // History State
   const [dailyHistory, setDailyHistory] = useState<DailySession[]>([]);
@@ -74,6 +78,14 @@ export default function AnalyticsPage() {
     setMounted(true);
     loadData();
   }, []);
+
+  // Prefer the live Supabase display name over the localStorage fallback
+  // once the profile loads.
+  useEffect(() => {
+    if (myProfile?.display_name) {
+      setPlayerName(myProfile.display_name.toUpperCase());
+    }
+  }, [myProfile]);
 
   const loadData = () => {
     // Player Name
@@ -134,64 +146,14 @@ export default function AnalyticsPage() {
     } catch (e) { }
   };
 
-  // Seeding mock history
-  const handleSyncAll = () => {
+  // Re-reads all local session stores and recomputes stats/charts. There is
+  // no "syncing" to a server here — session history lives entirely on this
+  // device — this just re-scans localStorage in case data changed in
+  // another tab/session.
+  const handleRefresh = () => {
     setSyncing(true);
-
-    setTimeout(() => {
-      const mockVisionHistory: VisionSession[] = [
-        {
-          date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-          punches: 78,
-          score: 84,
-          reflex_tier: 'Amateur',
-          avg_reflex_ms: 320,
-          flaw: 'GUARD DROPS ON LEAD SLIPS',
-          advice: 'Great punch volume today. However, your lead hand repeatedly drops to your chest when you slip to the right. Keep that glove pinned to your jaw.',
-          raw_data: {
-            drill_data: [
-              { command: 'Jab', velocity_rating: 'Snappy', reflex_time_ms: 310, extension_speed_ms: 95, form_notes: 'Good extension, but chin was exposed.' },
-              { command: 'Cross', velocity_rating: 'Explosive', reflex_time_ms: 290, extension_speed_ms: 88, form_notes: 'Beautiful hip rotation and power output.' },
-              { command: 'Slip Left', velocity_rating: 'Slow', reflex_time_ms: 360, extension_speed_ms: 120, form_notes: 'Rear hand dropped. Vulnerable to counters.' }
-            ]
-          }
-        },
-        {
-          date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-          punches: 92,
-          score: 91,
-          reflex_tier: 'Elite',
-          avg_reflex_ms: 260,
-          flaw: 'REAR FOOT FLARES OUT',
-          advice: 'Outstanding hand speed and reaction timing. Focus on anchoring your rear heel on cross delivery to keep balance.',
-          raw_data: {
-            drill_data: [
-              { command: 'Double Jab', velocity_rating: 'Explosive', reflex_time_ms: 250, extension_speed_ms: 82, form_notes: 'Blazing speed. Excellent double activation.' },
-              { command: 'Roll Under', velocity_rating: 'Snappy', reflex_time_ms: 270, extension_speed_ms: 90, form_notes: 'Perfect level change. Eyes stayed on target.' }
-            ]
-          }
-        }
-      ];
-
-      localStorage.setItem('boxing_session_history', JSON.stringify(mockVisionHistory));
-
-      const day1Key = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toDateString();
-      const day2Key = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toDateString();
-      const day3Key = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toDateString();
-
-      localStorage.setItem('workout_progress_' + day1Key, JSON.stringify([0, 1, 2]));
-      localStorage.setItem('workout_progress_' + day2Key, JSON.stringify([0, 1, 2, 3]));
-      localStorage.setItem('workout_progress_' + day3Key, JSON.stringify([0, 1]));
-
-      const mockPlannerDay1 = [{ name: 'Stance Calibration Block', completed_at: Date.now() - 2 * 24 * 60 * 60 * 1000, impact: 'High' }];
-      const mockPlannerDay2 = [{ name: 'Counter-Punch Uplink', completed_at: Date.now() - 5 * 24 * 60 * 60 * 1000, impact: 'Elite' }];
-
-      localStorage.setItem('planner_drills_completed_' + day1Key, JSON.stringify(mockPlannerDay1));
-      localStorage.setItem('planner_drills_completed_' + day2Key, JSON.stringify(mockPlannerDay2));
-
-      loadData();
-      setSyncing(false);
-    }, 1500);
+    loadData();
+    setTimeout(() => setSyncing(false), 400);
   };
 
   // Matrix Calculations
@@ -321,12 +283,16 @@ export default function AnalyticsPage() {
       {/* Page Header */}
       <header className="flex justify-between items-start">
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-full border-2 border-primary/80 shadow-[0_0_15px_rgba(226,255,59,0.3)] overflow-hidden bg-black/40">
-            <img
-              src="https://i.pravatar.cc/150?u=viktor"
-              alt="Avatar"
-              className="w-full h-full object-cover"
-            />
+          <div className="w-14 h-14 rounded-full border-2 border-primary/80 shadow-[0_0_15px_rgba(226,255,59,0.3)] overflow-hidden bg-black/40 flex items-center justify-center">
+            {myProfile?.avatar_url ? (
+              <img
+                src={myProfile.avatar_url}
+                alt="Avatar"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <span className="text-lg font-black text-primary">{playerName.charAt(0)}</span>
+            )}
           </div>
           <div>
             <div className="text-[10px] font-black text-white/50 tracking-wider uppercase mb-0.5">
@@ -472,19 +438,44 @@ export default function AnalyticsPage() {
               </div>
             </div>
 
-            {/* Session History Section */}
+            {/* Streak History — authoritative, from Supabase (video-analysis sessions only) */}
+            <div className="flex flex-col gap-3.5">
+              <div className="flex justify-between items-center select-none">
+                <span className="text-[10px] font-black tracking-[2px] text-white uppercase">
+                  STREAK HISTORY
+                </span>
+                <Flame className="w-3.5 h-3.5 text-primary" />
+              </div>
+              <div className="grid grid-cols-2 gap-3.5">
+                {[
+                  { value: rankState?.current_streak ?? 0, label: 'Current Streak' },
+                  { value: rankState?.longest_streak ?? 0, label: 'Longest Streak' },
+                ].map((item, idx) => (
+                  <GlassCard key={idx} className="p-4 text-center border-white/5 bg-black/40">
+                    <div className="text-2xl font-black italic text-white leading-none mb-1">
+                      {item.value}
+                    </div>
+                    <span className="text-[7px] font-black text-white/40 uppercase tracking-widest">
+                      {item.label}
+                    </span>
+                  </GlassCard>
+                ))}
+              </div>
+            </div>
+
+
             <div className="flex flex-col gap-4">
               <div className="flex justify-between items-center select-none">
                 <span className="text-[10px] font-black tracking-[2px] text-white uppercase">
                   SESSION HISTORY
                 </span>
                 <button
-                  onClick={handleSyncAll}
+                  onClick={handleRefresh}
                   disabled={syncing}
                   className="flex items-center gap-1.5 px-3 py-1 bg-transparent border border-primary text-primary hover:bg-primary hover:text-black transition-all text-[8px] font-black uppercase rounded-full shadow-[0_0_10px_rgba(226,255,59,0.15)] disabled:opacity-40"
                 >
                   <RefreshCw className={`w-2.5 h-2.5 ${syncing ? 'animate-spin' : ''}`} />
-                  <span>{syncing ? 'Connecting...' : 'SYNC & CONNECT ALL'}</span>
+                  <span>{syncing ? 'Refreshing...' : 'REFRESH'}</span>
                 </button>
               </div>
 

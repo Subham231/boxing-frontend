@@ -24,6 +24,7 @@ import { getDailyWorkout } from '@/lib/workout-data';
 import { StreakManager } from '@/lib/streak-manager';
 import { useFirebaseUser } from '@/lib/useFirebaseUser';
 import { useRankState } from '@/lib/rank-client';
+import { useMyProfile } from '@/lib/profile-client';
 import WeeklyLeaderboard from '@/components/reflex/WeeklyLeaderboard';
 import { ProgressRing } from '@/components/ui/ProgressRing';
 import { RankBadge } from '@/components/ui/RankBadge';
@@ -33,6 +34,7 @@ import { NeonButton } from '@/components/ui/NeonButton';
 export default function DashboardPage() {
   const { user: fbUser } = useFirebaseUser();
   const { rankState } = useRankState();
+  const { profile: myProfile } = useMyProfile();
   const router = useRouter();
   const [ringName, setRingName] = useState('FIGHTER');
   // Authoritative streak/rank (video-analysis sessions only), synced from
@@ -155,6 +157,16 @@ export default function DashboardPage() {
     return () => clearInterval(bpmInterval);
   }, []);
 
+  // Prefer the live Supabase display name over the localStorage fallback
+  // once the profile loads (e.g. right after a login restore, or after an
+  // edit made on the Settings page or another device).
+  useEffect(() => {
+    if (myProfile?.display_name) {
+      setRingName(myProfile.display_name.toUpperCase());
+    }
+  }, [myProfile]);
+
+
   // Compute completion percent
   const completionPercent = useMemo(() => {
     if (!todayWorkout.drills.length) return 0;
@@ -248,12 +260,16 @@ export default function DashboardPage() {
         {/* Unified Fighter Header */}
         <header className="flex justify-between items-start">
           <div className="flex items-center gap-4 ranks-ref">
-            <div className="w-14 h-14 rounded-full border-2 border-primary/80 shadow-[0_0_15px_rgba(226,255,59,0.3)] overflow-hidden bg-black/40">
-              <img 
-                src="https://i.pravatar.cc/150?u=viktor" 
-                alt="Avatar" 
-                className="w-full h-full object-cover"
-              />
+            <div className="w-14 h-14 rounded-full border-2 border-primary/80 shadow-[0_0_15px_rgba(226,255,59,0.3)] overflow-hidden bg-black/40 flex items-center justify-center">
+              {myProfile?.avatar_url ? (
+                <img
+                  src={myProfile.avatar_url}
+                  alt="Avatar"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <span className="text-lg font-black text-primary">{ringName.charAt(0)}</span>
+              )}
             </div>
             <div>
               <div className="text-[10px] font-black text-white/50 tracking-wider uppercase mb-0.5">

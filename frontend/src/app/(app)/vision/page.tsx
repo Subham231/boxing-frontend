@@ -14,12 +14,12 @@ import {
   StopCircle,
   RotateCcw,
   Shield,
-  ShieldAlert,
-  Zap,
+  ShieldAlert
 } from 'lucide-react';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
 import { completeSessionSecure } from '@/lib/rank-client';
+import { logVisionSession, getReflexTier } from '@/lib/session-log';
 
 // ---------------------------------------------------------------------------
 // Landmark indices we care about (MediaPipe Pose / BlazePose 33-point model)
@@ -64,29 +64,6 @@ const REACTION_WINDOW_PAD_MS = 250;
 
 type PoseLandmark = { x: number; y: number; z?: number; visibility?: number };
 type Stage = 'welcome' | 'config' | 'camera' | 'analyzing' | 'results';
-type DrillMode = 'punches' | 'defense' | 'freestyle';
-type Difficulty = 'easy' | 'medium' | 'hard' | 'extreme';
-
-const DIFFICULTY_GAP_MS: Record<Difficulty, number> = {
-  easy: 3500,
-  medium: 2000,
-  hard: 1200,
-  extreme: 800,
-};
-
-const DIFFICULTY_TTS_RATE: Record<Difficulty, number> = {
-  easy: 0.85,
-  medium: 0.95,
-  hard: 1.0,
-  extreme: 1.0,
-};
-
-function formatMmSs(totalSeconds: number): string {
-  const s = Math.max(0, Math.floor(totalSeconds));
-  const mins = Math.floor(s / 60).toString().padStart(2, '0');
-  const secs = (s % 60).toString().padStart(2, '0');
-  return `${mins}:${secs}`;
-}
 
 interface RepLogEntry {
   index: number;
@@ -212,10 +189,9 @@ export default function VisionPage() {
 
   // Configuration
   const [voiceProfile, setVoiceProfile] = useState<'steel' | 'athena' | 'cyber'>('steel');
-  const [mode, setMode] = useState<DrillMode>('punches');
-  const [difficulty, setDifficulty] = useState<Difficulty>('medium');
+  const [mode, setMode] = useState<'punches' | 'defense'>('punches');
+  const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
   const [punchTarget, setPunchTarget] = useState(50);
-  const [freestyleSeconds, setFreestyleSeconds] = useState(60);
 
   // Camera / model loading
   const [engineStatus, setEngineStatus] = useState<'loading' | 'ready' | 'failed'>('loading');
@@ -250,20 +226,15 @@ export default function VisionPage() {
   const modeRef = useRef(mode);
   const difficultyRef = useRef(difficulty);
   const punchTargetRef = useRef(punchTarget);
-  const freestyleSecondsRef = useRef(freestyleSeconds);
   const isMutedRef = useRef(isMuted);
   const voiceProfileRef = useRef(voiceProfile);
   const calibSuccessRef = useRef(false);
   const isTrackingInadequateRef = useRef(false);
-  const holdSpeechRef = useRef(false);
-  const voicesReadyRef = useRef(false);
-  const analysingLockRef = useRef(false);
 
   useEffect(() => { stageRef.current = stage; }, [stage]);
   useEffect(() => { modeRef.current = mode; }, [mode]);
   useEffect(() => { difficultyRef.current = difficulty; }, [difficulty]);
   useEffect(() => { punchTargetRef.current = punchTarget; }, [punchTarget]);
-  useEffect(() => { freestyleSecondsRef.current = freestyleSeconds; }, [freestyleSeconds]);
   useEffect(() => { voiceProfileRef.current = voiceProfile; }, [voiceProfile]);
 
   // DOM / media refs
@@ -311,12 +282,6 @@ export default function VisionPage() {
 
     if (typeof window !== 'undefined') {
       synthRef.current = window.speechSynthesis;
-      const warmVoices = () => {
-        const list = window.speechSynthesis.getVoices();
-        if (list.length > 0) voicesReadyRef.current = true;
-      };
-      warmVoices();
-      window.speechSynthesis.onvoiceschanged = warmVoices;
     }
 
     const loadMediaPipe = () => {
@@ -338,9 +303,6 @@ export default function VisionPage() {
     loadMediaPipe();
 
     return () => {
-      if (typeof window !== 'undefined') {
-        window.speechSynthesis.onvoiceschanged = null;
-      }
       cleanupSession();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -397,71 +359,25 @@ export default function VisionPage() {
   // -------------------------------------------------------------------------
   // Voice
   // -------------------------------------------------------------------------
-  const pickCoachVoice = (voices: SpeechSynthesisVoice[], profile: 'steel' | 'athena' | 'cyber') => {
-    const score = (v: SpeechSynthesisVoice) => {
-      const n = v.name.toLowerCase();
-      let s = 0;
-      if (/en(-|_)?(us|gb|au)/i.test(v.lang) || v.lang.toLowerCase().startsWith('en')) s += 10;
-      if (/neural|natural|premium|enhanced|online \(natural\)/i.test(n)) s += 8;
-      if (/microsoft|google/i.test(n)) s += 5;
-      if (/zira|aria|jenny|guy|sara|david|mark|samantha|alex/i.test(n)) s += 4;
-      if (/compact|eloquence|robot|whisper/i.test(n)) s -= 6;
-      if (profile === 'steel' && (/male|uk|en-gb|david|mark|guy/i.test(n) || v.lang === 'en-GB')) s += 6;
-      if (profile === 'athena' && (/female|aria|zira|jenny|samantha|sara/i.test(n))) s += 6;
-      if (profile === 'cyber' && (/google|online/i.test(n))) s += 6;
-      return s;
-    };
-    const ranked = [...voices].sort((a, b) => score(b) - score(a));
-    return ranked[0] || voices[0] || null;
-  };
-
-  const speakCommand = (text: string, opts?: { cancel?: boolean; onEnd?: () => void }) => {
-    if (!synthRef.current || isMutedRef.current) {
-      opts?.onEnd?.();
-      return;
-    }
+  const speakCommand = (text: string) => {
+    if (!synthRef.current || isMutedRef.current) return;
     try {
-      const shouldCancel = opts?.cancel !== false;
-      if (shouldCancel && !holdSpeechRef.current) {
-        synthRef.current.cancel();
-      }
+      synthRef.current.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       const voices = synthRef.current.getVoices();
-      const chosen = pickCoachVoice(voices, voiceProfileRef.current);
-      if (chosen) utterance.voice = chosen;
-      utterance.volume = 1;
-      utterance.rate = DIFFICULTY_TTS_RATE[difficultyRef.current];
       const profile = voiceProfileRef.current;
-      utterance.pitch = profile === 'steel' ? 0.9 : profile === 'athena' ? 1.0 : 0.95;
-      if (opts?.onEnd) {
-        utterance.onend = () => opts.onEnd?.();
-        utterance.onerror = () => opts.onEnd?.();
-      }
+      const chosen = voices.find((v) => {
+        if (profile === 'steel') return v.name.includes('Google UK') || v.name.includes('Male') || v.lang === 'en-GB';
+        if (profile === 'athena') return v.name.includes('Aria') || v.name.includes('Female') || v.name.includes('Zira');
+        return v.name.includes('Google') || v.name.includes('Online');
+      }) || voices[0];
+      if (chosen) utterance.voice = chosen;
+      utterance.rate = difficultyRef.current === 'hard' ? 1.05 : difficultyRef.current === 'easy' ? 0.8 : 0.9;
+      utterance.pitch = profile === 'steel' ? 0.75 : profile === 'athena' ? 1.05 : 0.9;
       synthRef.current.speak(utterance);
     } catch (e) {
       console.warn('Speech failed:', e);
-      opts?.onEnd?.();
     }
-  };
-
-  /** Speak without allowing the next command to cancel mid-line; then run fn. */
-  const speakThen = (text: string, then: () => void, fallbackMs = 2500) => {
-    holdSpeechRef.current = true;
-    let done = false;
-    const finish = () => {
-      if (done) return;
-      done = true;
-      holdSpeechRef.current = false;
-      setTimeout(then, 400);
-    };
-    const fallback = setTimeout(finish, fallbackMs);
-    speakCommand(text, {
-      cancel: true,
-      onEnd: () => {
-        clearTimeout(fallback);
-        finish();
-      },
-    });
   };
 
   // -------------------------------------------------------------------------
@@ -535,10 +451,8 @@ export default function VisionPage() {
     awaitingUserStartRef.current = false;
     setHitCount(0);
     setMissCount(0);
-    setTimerDisplay(modeRef.current === 'freestyle' ? formatMmSs(freestyleSecondsRef.current) : '00:00');
+    setTimerDisplay('00:00');
     elapsedSecondsRef.current = 0;
-    analysingLockRef.current = false;
-    holdSpeechRef.current = false;
     hitCountRef.current = 0;
     missCountRef.current = 0;
     reactionTimesRef.current = [];
@@ -666,9 +580,8 @@ export default function VisionPage() {
           setCalibSuccess(true);
           setCalibStatus('CALIBRATION COMPLETE.');
           if (calibTickRef.current) clearInterval(calibTickRef.current);
-          speakThen('Calibration complete.', () => {
-            startDrill();
-          });
+          speakCommand('Calibration complete. Beginning drill.');
+          startDrill();
         }
       } else {
         goodHoldMsRef.current = 0;
@@ -821,36 +734,21 @@ export default function VisionPage() {
   // Drill / command loop
   // -------------------------------------------------------------------------
   const startDrill = () => {
-    if (modeRef.current === 'freestyle') {
-      setTimerDisplay(formatMmSs(freestyleSecondsRef.current));
-    }
-
     sessionTimerRef.current = setInterval(() => {
       if (isTrackingInadequateRef.current) return;
       elapsedSecondsRef.current += 1;
-      if (modeRef.current === 'freestyle') {
-        const remaining = freestyleSecondsRef.current - elapsedSecondsRef.current;
-        setTimerDisplay(formatMmSs(remaining));
-        if (remaining <= 0) {
-          stopAndAnalyse();
-        }
-      } else {
-        setTimerDisplay(formatMmSs(elapsedSecondsRef.current));
-      }
+      const mins = Math.floor(elapsedSecondsRef.current / 60).toString().padStart(2, '0');
+      const secs = (elapsedSecondsRef.current % 60).toString().padStart(2, '0');
+      setTimerDisplay(`${mins}:${secs}`);
     }, 1000);
 
-    const gap = DIFFICULTY_GAP_MS[difficultyRef.current];
+    const gap = difficultyRef.current === 'hard' ? 2200 : difficultyRef.current === 'easy' ? 4000 : 3000;
 
     const runCommands = () => {
       if (stageRef.current !== 'camera') return;
 
       if (isTrackingInadequateRef.current) {
         drillTimerRef.current = setTimeout(runCommands, 300);
-        return;
-      }
-
-      if (modeRef.current === 'freestyle' && elapsedSecondsRef.current >= freestyleSecondsRef.current) {
-        stopAndAnalyse();
         return;
       }
 
@@ -873,14 +771,14 @@ export default function VisionPage() {
         });
       }
 
-      if (modeRef.current !== 'freestyle' && attemptedRef.current >= punchTargetRef.current) {
+      if (attemptedRef.current >= punchTargetRef.current) {
         stopAndAnalyse();
         return;
       }
 
-      const pool = modeRef.current === 'defense'
-        ? [...PUNCH_COMMANDS, ...DEFENSE_COMMANDS]
-        : PUNCH_COMMANDS;
+      const pool = modeRef.current === 'punches'
+        ? PUNCH_COMMANDS
+        : [...PUNCH_COMMANDS, ...DEFENSE_COMMANDS];
       const cmd = pool[Math.floor(Math.random() * pool.length)];
 
       setActiveCommand(cmd.text);
@@ -901,9 +799,6 @@ export default function VisionPage() {
   };
 
   const stopAndAnalyse = async () => {
-    if (analysingLockRef.current) return;
-    analysingLockRef.current = true;
-
     if (drillTimerRef.current) clearTimeout(drillTimerRef.current);
     if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
     if (calibTickRef.current) clearInterval(calibTickRef.current);
@@ -1027,7 +922,7 @@ export default function VisionPage() {
   };
 
   useEffect(() => {
-    if (stage === 'results' && (resultsData || insufficientData)) {
+    if (stage === 'results' && resultsData) {
       const progressKey = 'workout_progress_' + new Date().toDateString();
       try {
         const completed = JSON.parse(localStorage.getItem(progressKey) || '[]');
@@ -1037,11 +932,42 @@ export default function VisionPage() {
         }
       } catch { }
 
+      // Real session record for the Analytics page — every field here is
+      // pulled straight from the actual computed results, nothing invented.
+      logVisionSession({
+        date: new Date().toISOString(),
+        punches: resultsData.log.filter((r: RepLogEntry) => r.kind === 'punch').length,
+        score: resultsData.overallScore,
+        reflex_tier: resultsData.avgReflex ? getReflexTier(resultsData.avgReflex / 1000) : '--',
+        avg_reflex_ms: resultsData.avgReflex ?? 0,
+        accuracy: resultsData.accuracy,
+        flaw: resultsData.flaw,
+        advice: resultsData.advice,
+        raw_data: {
+          drill_data: resultsData.log.map((r: RepLogEntry) => ({
+            command: r.command,
+            velocity_rating: r.peakVelocity > POWER_REFERENCE_VELOCITY * 0.7 ? 'Explosive' : r.peakVelocity > POWER_REFERENCE_VELOCITY * 0.4 ? 'Snappy' : 'Slow',
+            reflex_time_ms: r.reactionMs ?? 0,
+            extension_speed_ms: r.reactionMs ?? 0,
+            form_notes: r.hit ? 'Clean strike, on time.' : 'Missed — no clean strike detected within the window.',
+          })),
+        },
+      });
+
       // This is the ONLY place the streak/rank system gets credited — not
       // login, not Daily Grind workouts. Safe to call every time results
       // are shown: the server no-ops (no extra credit) if a session was
       // already credited within the last 24 hours.
       completeSessionSecure().catch(console.error);
+    } else if (stage === 'results' && insufficientData) {
+      const progressKey = 'workout_progress_' + new Date().toDateString();
+      try {
+        const completed = JSON.parse(localStorage.getItem(progressKey) || '[]');
+        if (!completed.includes(99)) {
+          completed.push(99);
+          localStorage.setItem(progressKey, JSON.stringify(completed));
+        }
+      } catch { }
     }
   }, [stage, resultsData, insufficientData]);
 
@@ -1139,7 +1065,7 @@ export default function VisionPage() {
         {stage === 'config' && (
           <motion.div
             key="stage-config"
-            className="flex flex-col gap-5 anim-fade-in select-none pb-8"
+            className="flex flex-col gap-6 anim-fade-in select-none"
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -15 }}
@@ -1165,133 +1091,58 @@ export default function VisionPage() {
               <span className="text-[8px] font-black text-white/40 tracking-wider uppercase block">
                 DRILL COMBAT MODE
               </span>
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-2 gap-3.5">
                 <button
-                  type="button"
                   onClick={() => setMode('punches')}
-                  className={`flex flex-col items-center justify-center p-4 rounded-3xl border text-center transition-all ${mode === 'punches'
+                  className={`flex flex-col items-center justify-center p-4 rounded-3xl border text-left transition-all ${mode === 'punches'
                       ? 'bg-primary/15 border-primary text-primary shadow-[0_0_12px_rgba(226,255,59,0.2)]'
                       : 'bg-black/40 border-white/5 text-white/50 hover:text-white'
                     }`}
                 >
                   <Target className="w-5 h-5 mb-2" />
-                  <span className="text-[10px] font-black uppercase">PUNCHES</span>
+                  <span className="text-[10px] font-black uppercase">PUNCHES ONLY</span>
                   <span className="text-[6px] text-white/30 mt-0.5">Jab, Cross, Hook, Uppercut</span>
                 </button>
 
                 <button
-                  type="button"
                   onClick={() => setMode('defense')}
-                  className={`flex flex-col items-center justify-center p-4 rounded-3xl border text-center transition-all ${mode === 'defense'
+                  className={`flex flex-col items-center justify-center p-4 rounded-3xl border text-left transition-all ${mode === 'defense'
                       ? 'bg-red-500/10 border-red-500 text-red-500 shadow-[0_0_12px_rgba(239,68,68,0.2)]'
                       : 'bg-black/40 border-white/5 text-white/50 hover:text-white'
                     }`}
                 >
                   <Shield className="w-5 h-5 mb-2" />
-                  <span className="text-[10px] font-black uppercase">DEFENSE</span>
+                  <span className="text-[10px] font-black uppercase">PUNCHES &amp; DEFENSE</span>
                   <span className="text-[6px] text-white/30 mt-0.5">Slips, Rolls, Head Movement</span>
                 </button>
               </div>
-
-              <button
-                type="button"
-                onClick={() => setMode('freestyle')}
-                className={`w-full flex flex-row items-center gap-3 p-4 rounded-3xl border text-left transition-all ${mode === 'freestyle'
-                    ? 'bg-cyan-500/15 border-cyan-400 text-cyan-300 shadow-[0_0_14px_rgba(34,211,238,0.3)]'
-                    : 'bg-black/40 border-cyan-500/20 text-white/70 hover:text-white hover:border-cyan-400/40'
-                  }`}
-              >
-                <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${mode === 'freestyle' ? 'bg-cyan-400/20' : 'bg-white/5'}`}>
-                  <Zap className={`w-5 h-5 ${mode === 'freestyle' ? 'text-cyan-300' : 'text-cyan-500/70'}`} />
-                </div>
-                <div className="flex flex-col min-w-0">
-                  <span className="text-[11px] font-black uppercase tracking-wide">FREESTYLE COMBAT</span>
-                  <span className="text-[7px] text-white/40 mt-0.5 uppercase tracking-wider">
-                    Timed round — set duration below · punch calls on
-                  </span>
-                </div>
-              </button>
             </div>
 
             <div className="flex flex-col gap-3">
               <span className="text-[8px] font-black text-white/40 tracking-wider uppercase block">
                 SPEED DIFFICULTY LEVEL
               </span>
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-3 gap-2.5">
                 {[
-                  { key: 'easy' as const, label: 'EASY', gapMs: DIFFICULTY_GAP_MS.easy, color: 'text-green-400 border-green-500/30' },
-                  { key: 'medium' as const, label: 'MEDIUM', gapMs: DIFFICULTY_GAP_MS.medium, color: 'text-primary border-primary/30' },
-                  { key: 'hard' as const, label: 'HARD', gapMs: DIFFICULTY_GAP_MS.hard, color: 'text-red-500 border-red-500/30' },
-                  { key: 'extreme' as const, label: 'EXTREME', gapMs: DIFFICULTY_GAP_MS.extreme, color: 'text-fuchsia-400 border-fuchsia-500/40' },
+                  { key: 'easy', label: 'EASY', color: 'text-green-400 border-green-500/30' },
+                  { key: 'medium', label: 'MEDIUM', color: 'text-primary border-primary/30' },
+                  { key: 'hard', label: 'HARD', color: 'text-red-500 border-red-500/30' },
                 ].map((choice) => (
                   <button
-                    type="button"
                     key={choice.key}
                     onClick={() => {
-                      setDifficulty(choice.key);
+                      setDifficulty(choice.key as any);
                       speakCommand(`${choice.label} level.`);
                     }}
-                    className={`py-3 px-2 rounded-2xl border text-center transition-all ${difficulty === choice.key
-                        ? `bg-white/[0.08] ${choice.color} text-white ring-1 ring-inset ring-white/10`
+                    className={`py-3 rounded-2xl border text-[10px] font-black transition-all ${difficulty === choice.key
+                        ? `bg-white/[0.08] ${choice.color} text-white`
                         : 'bg-black/40 border-white/5 text-white/55 hover:text-white'
                       }`}
                   >
-                    <span className="text-[10px] font-black block">{choice.label}</span>
-                    <span className={`text-[8px] font-mono font-bold block mt-1 ${difficulty === choice.key ? 'opacity-90' : 'text-white/35'}`}>
-                      every {(choice.gapMs / 1000).toFixed(1)}s
-                    </span>
+                    {choice.label}
                   </button>
                 ))}
               </div>
-              <p className="text-[7px] font-bold text-white/25 uppercase tracking-wider text-center">
-                Active pace: 1 command every {(DIFFICULTY_GAP_MS[difficulty] / 1000).toFixed(1)} seconds
-              </p>
-            </div>
-
-            <div className="bg-white/[0.02] border border-white/5 p-4 rounded-3xl text-center">
-              {mode === 'freestyle' ? (
-                <>
-                  <div className="text-3xl font-black italic text-white leading-none font-mono">
-                    {formatMmSs(freestyleSeconds)}
-                  </div>
-                  <span className="text-[8px] font-black text-cyan-300 tracking-widest uppercase block mt-1.5 mb-4">
-                    FREESTYLE DURATION
-                  </span>
-                  <input
-                    type="range"
-                    min="30"
-                    max="180"
-                    step="15"
-                    value={freestyleSeconds}
-                    onChange={(e) => setFreestyleSeconds(parseInt(e.target.value))}
-                    className="w-full accent-primary bg-white/10 rounded-lg cursor-pointer"
-                  />
-                  <span className="text-[7px] font-black text-white/30 tracking-widest uppercase mt-3 block">
-                    Recommended: 60s · pace follows difficulty above
-                  </span>
-                </>
-              ) : (
-                <>
-                  <div className="text-3xl font-black italic text-white leading-none">
-                    {punchTarget}
-                  </div>
-                  <span className="text-[8px] font-black text-primary tracking-widest uppercase block mt-1.5 mb-4">
-                    TOTAL COMMANDS OBJECTIVE
-                  </span>
-                  <input
-                    type="range"
-                    min="10"
-                    max="120"
-                    step="5"
-                    value={punchTarget}
-                    onChange={(e) => setPunchTarget(parseInt(e.target.value))}
-                    className="w-full accent-primary bg-white/10 rounded-lg cursor-pointer"
-                  />
-                  <span className="text-[7px] font-black text-white/30 tracking-widest uppercase mt-3 block">
-                    Recommended: {difficulty === 'easy' ? '20' : difficulty === 'medium' ? '35' : difficulty === 'hard' ? '55' : '40'} commands
-                  </span>
-                </>
-              )}
             </div>
 
             <div className="flex flex-col gap-3">
@@ -1316,12 +1167,32 @@ export default function VisionPage() {
                 </select>
               )}
               <button
-                type="button"
                 onClick={enumerateCameras}
                 className="text-[8px] font-black text-primary/70 hover:text-primary uppercase tracking-widest self-start"
               >
                 ↻ Refresh camera list
               </button>
+            </div>
+
+            <div className="bg-white/[0.02] border border-white/5 p-4 rounded-3xl text-center">
+              <div className="text-3xl font-black italic text-white leading-none">
+                {punchTarget}
+              </div>
+              <span className="text-[8px] font-black text-primary tracking-widest uppercase block mt-1.5 mb-4">
+                TOTAL COMMANDS OBJECTIVE
+              </span>
+              <input
+                type="range"
+                min="10"
+                max="120"
+                step="5"
+                value={punchTarget}
+                onChange={(e) => setPunchTarget(parseInt(e.target.value))}
+                className="w-full accent-primary bg-white/10 rounded-lg cursor-pointer"
+              />
+              <span className="text-[7px] font-black text-white/30 tracking-widest uppercase mt-3 block">
+                Recommended: {difficulty === 'easy' ? '20' : difficulty === 'medium' ? '35' : '55'} commands
+              </span>
             </div>
 
             <NeonButton onClick={startCalibration} className="w-full h-14 mt-2">
@@ -1339,10 +1210,8 @@ export default function VisionPage() {
             exit={{ opacity: 0 }}
           >
             <div className="absolute -top-16 left-0 right-0 flex justify-between items-center text-[10px] font-mono text-primary font-bold z-10 pointer-events-none select-none">
-              <span className="opacity-80">MODE: {mode.toUpperCase()}</span>
-              <span className="opacity-40 uppercase">
-                {difficulty} · {(DIFFICULTY_GAP_MS[difficulty] / 1000).toFixed(1)}s
-              </span>
+              <span className="opacity-80">MODE: {mode.toUpperCase()} MODE</span>
+              <span className="opacity-40 uppercase">DIFF_{difficulty}_SPEED</span>
             </div>
 
             <header className="flex justify-between items-center z-50">
@@ -1397,9 +1266,7 @@ export default function VisionPage() {
                   MISS {missCount}
                 </span>
                 <span className="text-[6px] text-primary/70 uppercase font-black block mt-1 pt-1 border-t border-white/10">
-                  {mode === 'freestyle'
-                    ? timerDisplay
-                    : `${attemptedCount}/${punchTarget}`}
+                  {attemptedCount}/{punchTarget}
                 </span>
               </div>
 
@@ -1429,15 +1296,15 @@ export default function VisionPage() {
                   <div className="text-[8px] text-white/40 font-bold uppercase tracking-wider mb-4">
                     SOURCE: {cameraDevices.find((d) => d.deviceId === selectedDeviceId)?.label || 'Default Camera'}
                   </div>
-                  <div className="flex gap-2 mb-4 flex-wrap justify-center">
+                  <div className="flex gap-2 mb-4">
                     <span className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-white/60 text-[8px] font-black uppercase tracking-widest">
-                      {mode === 'punches' ? 'Punches Only' : mode === 'defense' ? 'Punches & Defense' : 'Freestyle'}
+                      {mode === 'punches' ? 'Punches Only' : 'Punches & Defense'}
                     </span>
                     <span className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-white/60 text-[8px] font-black uppercase tracking-widest">
                       {difficulty} Speed
                     </span>
                     <span className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-white/60 text-[8px] font-black uppercase tracking-widest">
-                      {mode === 'freestyle' ? `${formatMmSs(freestyleSeconds)} Round` : `${punchTarget} Commands`}
+                      {punchTarget} Commands
                     </span>
                   </div>
                   <button

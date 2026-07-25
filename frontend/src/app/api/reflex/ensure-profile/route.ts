@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
 
   const { data: existing } = await supabaseAdmin.from('reflex_profiles').select('*').eq('uid', uid).maybeSingle();
   if (existing) {
-    return NextResponse.json({ profile: existing });
+    return NextResponse.json({ profile: existing, isNew: false });
   }
 
   // Try a few times in case of a (rare) referral_code collision.
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (!error) {
-      return NextResponse.json({ profile: data });
+      return NextResponse.json({ profile: data, isNew: true });
     }
     // 23505 = unique_violation (Postgres) — collision on referral_code, retry.
     if (error.code !== '23505') {

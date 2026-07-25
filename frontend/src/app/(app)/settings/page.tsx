@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRankState } from '@/lib/rank-client';
+import { useMyProfile } from '@/lib/profile-client';
 import { getRankInfoByLevel } from '@/components/ui/RankBadge';
 import { 
   User, 
@@ -48,6 +49,22 @@ export default function SettingsPage() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [profileData, setProfileData] = useState<OnboardingData>({});
+  const { profile: myProfile, updateProfile: updateMyProfile } = useMyProfile();
+
+  // Keep the local display shape (ringName/promise/etc.) in sync whenever
+  // the authoritative Supabase profile loads or changes — this is what
+  // makes edits made on another device show up here too after a refresh.
+  useEffect(() => {
+    if (!myProfile) return;
+    setProfileData((prev) => ({
+      ...prev,
+      ...(myProfile.display_name ? { ringName: myProfile.display_name, ring_name: myProfile.display_name } : {}),
+      ...(myProfile.age != null ? { age: myProfile.age } : {}),
+      ...(myProfile.profession ? { profession: myProfile.profession } : {}),
+      ...(myProfile.avatar_url ? { avatar_url: myProfile.avatar_url } : {}),
+      ...(myProfile.promise_word ? { promise: myProfile.promise_word, promise_trigger: myProfile.promise_word } : {}),
+    }));
+  }, [myProfile]);
 
   const { rankState } = useRankState();
   const streakVal = rankState?.current_streak ?? 0;
@@ -116,13 +133,18 @@ export default function SettingsPage() {
     if (editField === 'ringName') {
       updated.ringName = editValue;
       updated.ring_name = editValue;
+      updateMyProfile({ displayName: editValue }).catch(console.error);
     } else if (editField === 'promise') {
       updated.promise = editValue;
       updated.promise_trigger = editValue;
+      updateMyProfile({ promiseWord: editValue }).catch(console.error);
     } else if (editField === 'avatar_url') {
       updated.avatar_url = editValue;
+      updateMyProfile({ avatarUrl: editValue }).catch(console.error);
     }
 
+    // Local cache stays in sync for pages that still read
+    // 'boxing_onboarding_data' directly (kept for compatibility).
     localStorage.setItem('boxing_onboarding_data', JSON.stringify(updated));
     setProfileData(updated);
     setEditField(null);
