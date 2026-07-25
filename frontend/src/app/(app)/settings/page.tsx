@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRankState } from '@/lib/rank-client';
 import { useMyProfile } from '@/lib/profile-client';
+import { signOutFirebase } from '@/lib/firebase-auth';
 import { getRankInfoByLevel } from '@/components/ui/RankBadge';
 import { 
   User, 
@@ -194,7 +195,13 @@ export default function SettingsPage() {
     setDebriefDays(daysActive);
     setDebriefDrills(totalDrills);
 
-    const API_KEY = "AIzaSyDsDknqBZPVmj-gPd_Bbmi-gs6lEAlVUYM";
+    const API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    if (!API_KEY) {
+      setDebriefGenerating(false);
+      const noKeyText = "AI COMLINK OFFLINE. NO API KEY CONFIGURED.";
+      setDebriefText(noKeyText);
+      return;
+    }
     const name = profileData.ringName || profileData.ring_name || 'FIGHTER';
     const primaryGoal = profileData.primary_goal || 'unbeatable speed';
     const promiseVal = profileData.promise || profileData.promise_trigger || 'to never break the chain';
@@ -278,15 +285,21 @@ Keep it under 120 words. Focus on their discipline and the evolution of their po
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (confirm("Log out of session? Identity data will remain on device.")) {
-      // Clear login state and return to login gate
-      localStorage.removeItem('boxing_guest_mode');
+      try {
+        await signOutFirebase();
+      } catch (e) {
+        console.error('Firebase sign-out failed:', e);
+      }
+      // Local onboarding/profile cache intentionally stays — it's what lets
+      // a returning login restore instantly instead of re-running
+      // onboarding. Firebase sign-out is what actually ends the session.
       router.push('/');
     }
   };
 
-  const avatarUrl = profileData.avatar_url || 'https://i.pravatar.cc/150?u=viktor';
+  const avatarUrl = profileData.avatar_url || null;
   const name = profileData.ringName || profileData.ring_name || 'FIGHTER';
   const promise = profileData.promise || profileData.promise_trigger || 'TO BE UNSTOPPABLE';
 
@@ -312,13 +325,17 @@ Keep it under 120 words. Focus on their discipline and the evolution of their po
         <div className="flex items-center gap-4">
           <div 
             onClick={() => openEdit('avatar_url', 'Avatar Image URL')}
-            className="w-14 h-14 rounded-full border-2 border-primary/80 shadow-[0_0_15px_rgba(226,255,59,0.3)] overflow-hidden bg-black/40 relative group cursor-pointer"
+            className="w-14 h-14 rounded-full border-2 border-primary/80 shadow-[0_0_15px_rgba(226,255,59,0.3)] overflow-hidden bg-black/40 relative group cursor-pointer stealth-sensitive flex items-center justify-center"
           >
-            <img 
-              src={avatarUrl} 
-              alt="Avatar" 
-              className="w-full h-full object-cover group-hover:opacity-40 transition-opacity"
-            />
+            {avatarUrl ? (
+              <img 
+                src={avatarUrl} 
+                alt="Avatar" 
+                className="w-full h-full object-cover group-hover:opacity-40 transition-opacity"
+              />
+            ) : (
+              <span className="text-lg font-black text-primary">{name.charAt(0)}</span>
+            )}
             <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
               <Camera className="w-4 h-4 text-white" />
             </div>
@@ -327,7 +344,7 @@ Keep it under 120 words. Focus on their discipline and the evolution of their po
             <div className="text-[10px] font-black text-white/50 tracking-wider uppercase mb-0.5">
               ATHLETE PROFILE
             </div>
-            <h1 className="text-xl font-black italic uppercase leading-none text-white tracking-wide">
+            <h1 className="text-xl font-black italic uppercase leading-none text-white tracking-wide stealth-sensitive">
               {name}&apos;s Vault
             </h1>
           </div>
@@ -353,7 +370,7 @@ Keep it under 120 words. Focus on their discipline and the evolution of their po
                 onClick={() => openEdit('ringName', 'Fighter Name')}
               />
             </div>
-            <h2 className="text-xl font-black italic text-white uppercase leading-none">
+            <h2 className="text-xl font-black italic text-white uppercase leading-none stealth-sensitive">
               &ldquo;{name}&rdquo;
             </h2>
           </div>
@@ -404,7 +421,7 @@ Keep it under 120 words. Focus on their discipline and the evolution of their po
               <span className="text-[7px] font-black text-white/30 tracking-wider block uppercase">
                 PHONE
               </span>
-              <span className="text-xs font-black text-white uppercase mt-0.5 block">
+              <span className="text-xs font-black text-white uppercase mt-0.5 block stealth-sensitive">
                 {profileData.phone_number || 'Guest Mode'}
               </span>
             </div>
@@ -420,7 +437,7 @@ Keep it under 120 words. Focus on their discipline and the evolution of their po
               <span className="text-[7px] font-black text-white/30 tracking-wider block uppercase">
                 STREAK
               </span>
-              <span className="text-xs font-black text-white uppercase mt-0.5 block">
+              <span className="text-xs font-black text-white uppercase mt-0.5 block stealth-sensitive">
                 🔥 {streakVal} DAYS
               </span>
             </div>
@@ -470,11 +487,39 @@ Keep it under 120 words. Focus on their discipline and the evolution of their po
               <h4 className="text-xs font-black uppercase text-white leading-none">
                 PRO SUBSCRIPTION
               </h4>
-              <span className="text-[8px] font-black text-primary uppercase block mt-1">
-                ACTIVE • RENEWS OCT 20
-              </span>
+              {(() => {
+                const until = myProfile?.subscription_until ? new Date(myProfile.subscription_until) : null;
+                const isActive = !!until && until.getTime() > Date.now();
+                if (isActive) {
+                  return (
+                    <span className="text-[8px] font-black text-primary uppercase block mt-1">
+                      ACTIVE • RENEWS {until!.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </span>
+                  );
+                }
+                if (until) {
+                  return (
+                    <span className="text-[8px] font-black text-red-400 uppercase block mt-1">
+                      EXPIRED • {until.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </span>
+                  );
+                }
+                return (
+                  <span className="text-[8px] font-black text-white/40 uppercase block mt-1">
+                    NOT SUBSCRIBED
+                  </span>
+                );
+              })()}
             </div>
           </div>
+          {(!myProfile?.subscription_until || new Date(myProfile.subscription_until).getTime() <= Date.now()) && (
+            <button
+              onClick={() => router.push('/checkout?plan=monthly')}
+              className="px-3 py-1.5 rounded-xl bg-primary text-black text-[9px] font-black uppercase tracking-wider"
+            >
+              Upgrade
+            </button>
+          )}
         </GlassCard>
 
         {/* Weekly AI Recap Button */}

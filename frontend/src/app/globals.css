@@ -70,4 +70,17 @@ body {
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.2);
   }
+
+  /* Stealth Mode — blurs personally-identifying info (ring name, streak
+     count, phone number) so a glance at the screen doesn't reveal who's
+     training or how long their streak is. Tap-and-hold (or focus, for
+     keyboard/assistive nav) temporarily reveals it. */
+  .stealth-active .stealth-sensitive {
+    filter: blur(8px);
+    transition: filter 0.15s ease;
+  }
+  .stealth-active .stealth-sensitive:active,
+  .stealth-active .stealth-sensitive:focus-within {
+    filter: blur(0);
+  }
 }
