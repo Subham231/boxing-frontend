@@ -73,7 +73,16 @@ const OtpVerification: React.FC = () => {
       // onboarding (subscription offer / final promise) into the app.
       cacheProfileLocally(profile);
       try {
-        localStorage.setItem('boxing_onboarding_complete', 'true');
+        // Must match exactly what app/(app)/layout.tsx's guard checks for,
+        // or a returning user passes OTP but then gets bounced straight
+        // back to onboarding by the protected-layout redirect.
+        localStorage.setItem('boxing_onboarding_done', 'true');
+        const existingRaw = localStorage.getItem('boxing_onboarding_data');
+        const existing = existingRaw ? JSON.parse(existingRaw) : {};
+        localStorage.setItem(
+          'boxing_onboarding_data',
+          JSON.stringify({ ...existing, onboarding_completed: true })
+        );
       } catch { }
       router.replace('/dashboard');
     } catch (e) {
