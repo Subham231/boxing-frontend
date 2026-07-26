@@ -23,7 +23,6 @@ import { isPlausibleReactionTime, looksAutomated, createTabLock } from '@/lib/re
 import { useFirebaseUser } from '@/lib/useFirebaseUser';
 import { submitReflexScoreSecure, getUserWeeklyRank } from '@/lib/firebase-reflex';
 import PhoneLoginGate from '@/components/reflex/PhoneLoginGate';
-import ReferralCard from '@/components/reflex/ReferralCard';
 import WeeklyLeaderboard from '@/components/reflex/WeeklyLeaderboard';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
@@ -720,10 +719,7 @@ export default function ReflexPage() {
               </GlassCard>
             )
           ) : (
-            <>
-              <WeeklyLeaderboard gameId="reaction_tap" topN={10} currentUid={fbUser.uid} />
-              <ReferralCard uid={fbUser.uid} />
-            </>
+            <WeeklyLeaderboard gameId="reaction_tap" topN={10} currentUid={fbUser.uid} />
           )}
         </>
       )}

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { NeonButton } from '@/components/ui/NeonButton';
 
@@ -24,17 +24,20 @@ interface SpotlightTourProps {
 }
 
 const PADDING = 10;
+// Estimated tooltip card height, used to keep it (and its Next button)
+// fully on-screen and above the fixed bottom nav.
+const TOOLTIP_HEIGHT_ESTIMATE = 230;
+const BOTTOM_NAV_CLEARANCE = 110;
+const TOP_CLEARANCE = 16;
 
 export default function SpotlightTour({ steps, onDone, storageKey }: SpotlightTourProps) {
   const [step, setStep] = useState(0);
   const [rect, setRect] = useState<Rect | null>(null);
+  const measureAttemptRef = useRef(0);
 
-  const measure = useCallback(() => {
+  const measureOnce = useCallback((): boolean => {
     const el = document.querySelector(steps[step]?.selector);
-    if (!el) {
-      setRect(null);
-      return;
-    }
+    if (!el) return false;
     const r = el.getBoundingClientRect();
     setRect({
       top: r.top - PADDING,
@@ -42,18 +45,57 @@ export default function SpotlightTour({ steps, onDone, storageKey }: SpotlightTo
       width: r.width + PADDING * 2,
       height: r.height + PADDING * 2,
     });
-    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    return true;
   }, [step, steps]);
 
   useEffect(() => {
-    // Small delay so scroll from a previous step settles before measuring
-    const t = setTimeout(measure, 80);
-    window.addEventListener('resize', measure);
+    measureAttemptRef.current = 0;
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const el = document.querySelector(steps[step]?.selector);
+    if (el) {
+      // Instant (not smooth) scroll — a smooth scrollIntoView animation
+      // running at the same time as the spotlight's own spring animation
+      // is what was causing the lag: two animations fighting over the
+      // same frames every single step. One animation (the spotlight
+      // easing to its new spot) is enough, and it reads as smoother, not
+      // less smooth.
+      el.scrollIntoView({ block: 'center', behavior: 'auto' });
+      // Measure AFTER the scroll has actually moved the page — measuring
+      // before (like the previous version did) captures the element's
+      // pre-scroll position, which is exactly why the highlight would
+      // land in the wrong place.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (!cancelled) measureOnce();
+        });
+      });
+    } else {
+      // Element not mounted yet (e.g. still loading) — retry a few times
+      // with backoff instead of silently giving up and showing no
+      // highlight at all.
+      const tryMeasure = () => {
+        if (cancelled) return;
+        const found = measureOnce();
+        if (!found && measureAttemptRef.current < 8) {
+          measureAttemptRef.current += 1;
+          retryTimer = setTimeout(tryMeasure, 150);
+        } else if (!found) {
+          setRect(null);
+        }
+      };
+      tryMeasure();
+    }
+
+    const onResize = () => measureOnce();
+    window.addEventListener('resize', onResize);
     return () => {
-      clearTimeout(t);
-      window.removeEventListener('resize', measure);
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      window.removeEventListener('resize', onResize);
     };
-  }, [measure]);
+  }, [step, steps, measureOnce]);
 
   const finish = () => {
     localStorage.setItem(storageKey, '1');
@@ -70,10 +112,20 @@ export default function SpotlightTour({ steps, onDone, storageKey }: SpotlightTo
 
   if (!steps.length) return null;
 
-  // Decide whether the tooltip sits above or below the spotlighted element
   const viewportH = typeof window !== 'undefined' ? window.innerHeight : 800;
+  const maxTop = Math.max(TOP_CLEARANCE, viewportH - BOTTOM_NAV_CLEARANCE - TOOLTIP_HEIGHT_ESTIMATE);
   const spaceBelow = rect ? viewportH - (rect.top + rect.height) : 0;
-  const tooltipBelow = rect ? spaceBelow > 220 : true;
+  const tooltipBelow = rect ? spaceBelow > TOOLTIP_HEIGHT_ESTIMATE : true;
+
+  // Always clamp within [TOP_CLEARANCE, maxTop] so the card — and
+  // crucially its Next button — can never end up pushed off-screen or
+  // behind the bottom nav, regardless of where the highlighted element
+  // sits on the page.
+  const tooltipTop = rect
+    ? tooltipBelow
+      ? Math.min(rect.top + rect.height + 16, maxTop)
+      : Math.max(Math.min(rect.top - TOOLTIP_HEIGHT_ESTIMATE - 16, maxTop), TOP_CLEARANCE)
+    : null;
 
   return (
     <motion.div
@@ -91,7 +143,7 @@ export default function SpotlightTour({ steps, onDone, storageKey }: SpotlightTo
             ? { top: rect.top, left: rect.left, width: rect.width, height: rect.height, opacity: 1 }
             : { top: viewportH / 2, left: '50%', width: 0, height: 0, opacity: 0 }
         }
-        transition={{ type: 'spring', stiffness: 260, damping: 28 }}
+        transition={{ type: 'spring', stiffness: 300, damping: 32 }}
         onClick={finish}
       />
 
@@ -100,7 +152,7 @@ export default function SpotlightTour({ steps, onDone, storageKey }: SpotlightTo
         <motion.div
           className="absolute rounded-3xl border-2 border-primary pointer-events-none shadow-[0_0_25px_rgba(226,255,59,0.5)]"
           animate={{ top: rect.top, left: rect.left, width: rect.width, height: rect.height, opacity: 1 }}
-          transition={{ type: 'spring', stiffness: 260, damping: 28 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 32 }}
         />
       )}
 
@@ -111,15 +163,9 @@ export default function SpotlightTour({ steps, onDone, storageKey }: SpotlightTo
           initial={{ opacity: 0, y: tooltipBelow ? -12 : 12 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: tooltipBelow ? -12 : 12 }}
-          transition={{ duration: 0.25 }}
-          className="fixed left-4 right-4 max-w-sm mx-auto bg-black/95 border border-primary/30 rounded-3xl p-5 shadow-2xl pointer-events-auto z-10 flex flex-col gap-4"
-          style={
-            rect
-              ? tooltipBelow
-                ? { top: rect.top + rect.height + 16 }
-                : { top: Math.max(rect.top - 190, 16) }
-              : { top: '50%', transform: 'translateY(-50%)' }
-          }
+          transition={{ duration: 0.2 }}
+          className="fixed left-4 right-4 max-w-sm mx-auto bg-black/95 border border-primary/30 rounded-3xl p-5 shadow-2xl pointer-events-auto z-10 flex flex-col gap-4 max-h-[70vh] overflow-y-auto"
+          style={{ top: tooltipTop ?? '50%', transform: tooltipTop === null ? 'translateY(-50%)' : undefined }}
         >
           <div className="flex justify-between items-center">
             <button
@@ -152,7 +198,7 @@ export default function SpotlightTour({ steps, onDone, storageKey }: SpotlightTo
               ))}
             </div>
 
-            <NeonButton onClick={next} className="px-5 py-2 h-9 text-xs">
+            <NeonButton onClick={next} className="px-5 py-2 h-9 text-xs shrink-0">
               {step === steps.length - 1 ? "LET'S GO 🥊" : 'NEXT'}
             </NeonButton>
           </div>

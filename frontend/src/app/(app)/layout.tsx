@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
 import { Loader2 } from 'lucide-react';
+import { useFirebaseUser } from '@/lib/useFirebaseUser';
 
 export default function ProtectedLayout({
   children,
@@ -11,10 +12,16 @@ export default function ProtectedLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const { user, loading: authLoading } = useFirebaseUser();
   const [checked, setChecked] = useState(false);
   const [allowed, setAllowed] = useState(false);
 
   useEffect(() => {
+    // Wait for Firebase to actually resolve the session before deciding —
+    // on a fresh page load `user` starts null for a moment even for a
+    // logged-in person, and bouncing on that would kick everyone out.
+    if (authLoading) return;
+
     const isOnboardingComplete = () => {
       if (localStorage.getItem('boxing_onboarding_done') === 'true') return true;
       try {
@@ -25,11 +32,13 @@ export default function ProtectedLayout({
       }
     };
 
-    if (!isOnboardingComplete()) {
+    // Onboarding-complete alone isn't enough — that flag intentionally
+    // survives logout (so a later login can restore local data instantly).
+    // The actual gate is: is there a real, active Firebase session?
+    if (!isOnboardingComplete() || !user) {
       if (typeof window !== 'undefined') {
         window.location.replace('/onboarding');
       } else {
-        // Fallback for server-side rendering, though this component is client-only
         router.replace('/onboarding');
       }
       setAllowed(false);
@@ -37,7 +46,7 @@ export default function ProtectedLayout({
       setAllowed(true);
     }
     setChecked(true);
-  }, [router]);
+  }, [router, user, authLoading]);
 
   if (!checked) {
     return (

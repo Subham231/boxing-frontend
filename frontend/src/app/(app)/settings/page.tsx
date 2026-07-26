@@ -27,6 +27,8 @@ import {
 } from 'lucide-react';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
+import ReferralCard from '@/components/reflex/ReferralCard';
+import { useFirebaseUser } from '@/lib/useFirebaseUser';
 
 interface OnboardingData {
   ringName?: string;
@@ -58,6 +60,7 @@ export default function SettingsPage() {
     }
   });
   const { profile: myProfile, updateProfile: updateMyProfile } = useMyProfile();
+  const { user: fbUser } = useFirebaseUser();
 
   // Keep the local display shape (ringName/promise/etc.) in sync whenever
   // the authoritative Supabase profile loads or changes — this is what
@@ -522,7 +525,6 @@ Keep it under 120 words. Focus on their discipline and the evolution of their po
             </button>
           )}
         </GlassCard>
-
         {/* Weekly AI Recap Button */}
         <div 
           onClick={triggerWeeklyDebrief}
@@ -544,6 +546,18 @@ Keep it under 120 words. Focus on their discipline and the evolution of their po
           <Sparkles className="w-4 h-4 text-primary animate-pulse" />
         </div>
       </div>
+
+      {/* REFERRALS — view/share your own code only. Referral codes can only
+          ever be redeemed once, at first signup (never on a later login,
+          never from here) — see /api/reflex/apply-referral. */}
+      {fbUser && (
+        <div className="flex flex-col gap-3.5">
+          <span className="text-[9px] font-black tracking-[3px] text-white/30 uppercase pl-2.5">
+            REFERRALS
+          </span>
+          <ReferralCard uid={fbUser.uid} />
+        </div>
+      )}
 
       {/* APP SETTINGS */}
       <div className="flex flex-col gap-3.5">
