@@ -14,7 +14,9 @@ import {
   StopCircle,
   RotateCcw,
   Shield,
-  ShieldAlert
+  ShieldAlert,
+  Sparkles,
+  Flame
 } from 'lucide-react';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
@@ -156,8 +158,16 @@ function ReactionTrendChart({ log }: { log: RepLogEntry[] }) {
 
 interface CoachCommand {
   text: string;
-  kind: 'punch' | 'defense';
+  kind: 'punch' | 'defense' | 'any';
 }
+
+const FREESTYLE_LINES = [
+  'FLOW FREELY',
+  'THROW ANYTHING',
+  'YOUR RHYTHM',
+  'NO SCRIPT — GO',
+  'KEEP MOVING',
+];
 
 const PUNCH_COMMANDS: CoachCommand[] = [
   { text: 'JAB', kind: 'punch' },
@@ -189,8 +199,8 @@ export default function VisionPage() {
 
   // Configuration
   const [voiceProfile, setVoiceProfile] = useState<'steel' | 'athena' | 'cyber'>('steel');
-  const [mode, setMode] = useState<'punches' | 'defense'>('punches');
-  const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
+  const [mode, setMode] = useState<'punches' | 'defense' | 'freestyle'>('punches');
+  const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard' | 'extreme'>('medium');
   const [punchTarget, setPunchTarget] = useState(50);
 
   // Camera / model loading
@@ -259,7 +269,7 @@ export default function VisionPage() {
 
   // Drill logic bookkeeping
   const awaitingRef = useRef(false);
-  const awaitingKindRef = useRef<'punch' | 'defense' | null>(null);
+  const awaitingKindRef = useRef<'punch' | 'defense' | 'any' | null>(null);
   const commandTimestampRef = useRef(0);
   const prevElbowExtendedRef = useRef(false);
   const prevMaxElbowAngleRef = useRef(0);
@@ -372,7 +382,7 @@ export default function VisionPage() {
         return v.name.includes('Google') || v.name.includes('Online');
       }) || voices[0];
       if (chosen) utterance.voice = chosen;
-      utterance.rate = difficultyRef.current === 'hard' ? 1.05 : difficultyRef.current === 'easy' ? 0.8 : 0.9;
+      utterance.rate = difficultyRef.current === 'extreme' ? 1.2 : difficultyRef.current === 'hard' ? 1.05 : difficultyRef.current === 'easy' ? 0.8 : 0.9;
       utterance.pitch = profile === 'steel' ? 0.75 : profile === 'athena' ? 1.05 : 0.9;
       synthRef.current.speak(utterance);
     } catch (e) {
@@ -702,27 +712,44 @@ export default function VisionPage() {
 
     if (!awaitingRef.current) return;
 
-    if (awaitingKindRef.current === 'punch' && punchRisingEdge) {
-      registerHit(now);
-    } else if (awaitingKindRef.current === 'defense' && defenseTriggered) {
-      registerHit(now);
+    const awaitingKind = awaitingKindRef.current;
+    if (awaitingKind === 'any') {
+      if (punchRisingEdge) {
+        registerHit(now, 'punch');
+      } else if (defenseTriggered) {
+        registerHit(now, 'defense');
+      }
+    } else if (awaitingKind === 'punch' && punchRisingEdge) {
+      registerHit(now, 'punch');
+    } else if (awaitingKind === 'defense' && defenseTriggered) {
+      registerHit(now, 'defense');
     }
   };
 
-  const registerHit = (now: number) => {
-    const kind = awaitingKindRef.current;
+  const registerHit = (now: number, triggeredKind: 'punch' | 'defense') => {
+    const isFreestyle = modeRef.current === 'freestyle';
     awaitingRef.current = false;
-    awaitingKindRef.current = null;
+    // Freestyle stays continuously "listening" — the next runCommands tick
+    // re-arms it immediately, no fixed prompt/miss cycle to reset.
+    if (!isFreestyle) awaitingKindRef.current = null;
+
     const reaction = now - commandTimestampRef.current;
     reactionTimesRef.current.push(reaction);
     hitCountRef.current += 1;
     setHitCount(hitCountRef.current);
 
+    if (isFreestyle) {
+      // No separate "prompt" step in freestyle — every hit both attempts
+      // and completes in the same motion.
+      attemptedRef.current = hitCountRef.current;
+      setAttemptedCount(attemptedRef.current);
+    }
+
     const peakVelocity = Math.round(currentRepPeakVelocityRef.current);
     repLogRef.current.push({
       index: repLogRef.current.length + 1,
-      command: activeCommandTextRef.current,
-      kind: kind || 'punch',
+      command: isFreestyle ? triggeredKind.toUpperCase() : activeCommandTextRef.current,
+      kind: triggeredKind,
       hit: true,
       reactionMs: Math.round(reaction),
       peakVelocity,
@@ -742,13 +769,41 @@ export default function VisionPage() {
       setTimerDisplay(`${mins}:${secs}`);
     }, 1000);
 
-    const gap = difficultyRef.current === 'hard' ? 2200 : difficultyRef.current === 'easy' ? 4000 : 3000;
+    const gap = difficultyRef.current === 'extreme' ? 1500
+      : difficultyRef.current === 'hard' ? 2200
+      : difficultyRef.current === 'easy' ? 4000
+      : 3000;
 
     const runCommands = () => {
       if (stageRef.current !== 'camera') return;
 
       if (isTrackingInadequateRef.current) {
         drillTimerRef.current = setTimeout(runCommands, 300);
+        return;
+      }
+
+      if (modeRef.current === 'freestyle') {
+        // No fixed prompt, no "missed" concept — the fighter throws
+        // whatever, whenever. Every real punch or defensive move detected
+        // counts as a hit (see analyzeFrame/registerHit). This just keeps
+        // re-arming detection and checks the target every tick.
+        if (hitCountRef.current >= punchTargetRef.current) {
+          stopAndAnalyse();
+          return;
+        }
+        if (!awaitingRef.current) {
+          awaitingRef.current = true;
+          awaitingKindRef.current = 'any';
+          const line = FREESTYLE_LINES[Math.floor(Math.random() * FREESTYLE_LINES.length)];
+          setActiveCommand(line);
+          activeCommandTextRef.current = line;
+          commandTimestampRef.current = performance.now();
+          currentRepPeakVelocityRef.current = 0;
+          if (hitCountRef.current === 0) {
+            speakCommand('Freestyle. Flow freely — throw anything, anytime.');
+          }
+        }
+        drillTimerRef.current = setTimeout(runCommands, 350);
         return;
       }
 
@@ -1091,29 +1146,41 @@ export default function VisionPage() {
               <span className="text-[8px] font-black text-white/40 tracking-wider uppercase block">
                 DRILL COMBAT MODE
               </span>
-              <div className="grid grid-cols-2 gap-3.5">
+              <div className="grid grid-cols-3 gap-2.5">
                 <button
                   onClick={() => setMode('punches')}
-                  className={`flex flex-col items-center justify-center p-4 rounded-3xl border text-left transition-all ${mode === 'punches'
+                  className={`flex flex-col items-center justify-center p-3.5 rounded-3xl border text-left transition-all ${mode === 'punches'
                       ? 'bg-primary/15 border-primary text-primary shadow-[0_0_12px_rgba(226,255,59,0.2)]'
                       : 'bg-black/40 border-white/5 text-white/50 hover:text-white'
                     }`}
                 >
                   <Target className="w-5 h-5 mb-2" />
-                  <span className="text-[10px] font-black uppercase">PUNCHES ONLY</span>
-                  <span className="text-[6px] text-white/30 mt-0.5">Jab, Cross, Hook, Uppercut</span>
+                  <span className="text-[9px] font-black uppercase">PUNCHES</span>
+                  <span className="text-[6px] text-white/30 mt-0.5 text-center">Jab, Cross, Hook, Uppercut</span>
                 </button>
 
                 <button
                   onClick={() => setMode('defense')}
-                  className={`flex flex-col items-center justify-center p-4 rounded-3xl border text-left transition-all ${mode === 'defense'
+                  className={`flex flex-col items-center justify-center p-3.5 rounded-3xl border text-left transition-all ${mode === 'defense'
                       ? 'bg-red-500/10 border-red-500 text-red-500 shadow-[0_0_12px_rgba(239,68,68,0.2)]'
                       : 'bg-black/40 border-white/5 text-white/50 hover:text-white'
                     }`}
                 >
                   <Shield className="w-5 h-5 mb-2" />
-                  <span className="text-[10px] font-black uppercase">PUNCHES &amp; DEFENSE</span>
-                  <span className="text-[6px] text-white/30 mt-0.5">Slips, Rolls, Head Movement</span>
+                  <span className="text-[9px] font-black uppercase">DEFENSE</span>
+                  <span className="text-[6px] text-white/30 mt-0.5 text-center">Slips, Rolls, Head Move</span>
+                </button>
+
+                <button
+                  onClick={() => setMode('freestyle')}
+                  className={`flex flex-col items-center justify-center p-3.5 rounded-3xl border text-left transition-all ${mode === 'freestyle'
+                      ? 'bg-accent/10 border-accent text-accent shadow-[0_0_12px_rgba(0,240,255,0.2)]'
+                      : 'bg-black/40 border-white/5 text-white/50 hover:text-white'
+                    }`}
+                >
+                  <Sparkles className="w-5 h-5 mb-2" />
+                  <span className="text-[9px] font-black uppercase">FREESTYLE</span>
+                  <span className="text-[6px] text-white/30 mt-0.5 text-center">No script — flow freely</span>
                 </button>
               </div>
             </div>
@@ -1122,11 +1189,12 @@ export default function VisionPage() {
               <span className="text-[8px] font-black text-white/40 tracking-wider uppercase block">
                 SPEED DIFFICULTY LEVEL
               </span>
-              <div className="grid grid-cols-3 gap-2.5">
+              <div className="grid grid-cols-4 gap-2">
                 {[
                   { key: 'easy', label: 'EASY', color: 'text-green-400 border-green-500/30' },
                   { key: 'medium', label: 'MEDIUM', color: 'text-primary border-primary/30' },
                   { key: 'hard', label: 'HARD', color: 'text-red-500 border-red-500/30' },
+                  { key: 'extreme', label: 'EXTREME', color: 'text-fuchsia-400 border-fuchsia-500/30' },
                 ].map((choice) => (
                   <button
                     key={choice.key}
@@ -1134,11 +1202,12 @@ export default function VisionPage() {
                       setDifficulty(choice.key as any);
                       speakCommand(`${choice.label} level.`);
                     }}
-                    className={`py-3 rounded-2xl border text-[10px] font-black transition-all ${difficulty === choice.key
+                    className={`py-3 rounded-2xl border text-[9px] font-black transition-all flex flex-col items-center gap-1 ${difficulty === choice.key
                         ? `bg-white/[0.08] ${choice.color} text-white`
                         : 'bg-black/40 border-white/5 text-white/55 hover:text-white'
                       }`}
                   >
+                    {choice.key === 'extreme' && <Flame className="w-3 h-3" />}
                     {choice.label}
                   </button>
                 ))}
@@ -1191,7 +1260,7 @@ export default function VisionPage() {
                 className="w-full accent-primary bg-white/10 rounded-lg cursor-pointer"
               />
               <span className="text-[7px] font-black text-white/30 tracking-widest uppercase mt-3 block">
-                Recommended: {difficulty === 'easy' ? '20' : difficulty === 'medium' ? '35' : '55'} commands
+                Recommended: {difficulty === 'easy' ? '20' : difficulty === 'medium' ? '35' : difficulty === 'hard' ? '55' : '70'} commands
               </span>
             </div>
 
@@ -1298,7 +1367,7 @@ export default function VisionPage() {
                   </div>
                   <div className="flex gap-2 mb-4">
                     <span className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-white/60 text-[8px] font-black uppercase tracking-widest">
-                      {mode === 'punches' ? 'Punches Only' : 'Punches & Defense'}
+                      {mode === 'punches' ? 'Punches Only' : mode === 'defense' ? 'Punches & Defense' : 'Freestyle'}
                     </span>
                     <span className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-white/60 text-[8px] font-black uppercase tracking-widest">
                       {difficulty} Speed

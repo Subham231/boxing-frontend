@@ -19,11 +19,26 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+html {
+  height: 100%;
+  /* Prevents iOS Safari's rubber-band overscroll from visually detaching
+     position:fixed elements (like the bottom nav) from the viewport edge
+     during a bounce-scroll. */
+  overscroll-behavior-y: none;
+}
+
 body {
   background-color: var(--bg-dark);
   color: var(--text);
   overflow-x: hidden;
+  /* 100vh on mobile is the LAYOUT viewport, which doesn't shrink when the
+     address bar or on-screen keyboard appears — that mismatch between the
+     layout and visual viewport is what makes fixed-position elements (like
+     the bottom nav) appear to jump. 100dvh tracks the actual visible area;
+     100vh stays as a fallback for browsers that don't support dvh yet. */
   min-height: 100vh;
+  min-height: 100dvh;
+  overscroll-behavior-y: none;
 }
 
 @layer components {

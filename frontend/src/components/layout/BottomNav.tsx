@@ -30,7 +30,20 @@ export function BottomNav() {
   };
 
   return (
-    <nav className="fixed bottom-0 left-0 w-full h-[90px] bg-[#08090b] border-t border-white/10 grid grid-cols-[1fr_1fr_1fr_70px_1fr_1fr_1fr] items-center px-1 z-[999] shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
+    <nav
+      className="fixed bottom-0 left-0 w-full bg-[#08090b] border-t border-white/10 grid grid-cols-[1fr_1fr_1fr_70px_1fr_1fr_1fr] items-center px-1 z-[999] shadow-[0_-10px_40px_rgba(0,0,0,0.5)]"
+      style={{
+        height: 'calc(90px + env(safe-area-inset-bottom))',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+        // Own compositing layer — stops the browser from repainting/
+        // reflowing this element (which reads as a "jump") on scroll,
+        // route change, or when the on-screen keyboard opens/closes.
+        transform: 'translateZ(0)',
+        WebkitTransform: 'translateZ(0)',
+        backfaceVisibility: 'hidden',
+        willChange: 'transform',
+      }}
+    >
       {navItems.map((item) => {
         const Icon = item.icon;
         const active = isActive(item.href);

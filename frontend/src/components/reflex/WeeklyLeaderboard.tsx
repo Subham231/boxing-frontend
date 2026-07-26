@@ -52,11 +52,11 @@ export default function WeeklyLeaderboard({ gameId, topN = 5, currentUid, compac
             >
               <div className="flex items-center gap-3">
                 <span className={`text-xs font-black w-5 text-center ${i === 0 ? 'text-primary' : 'text-white/40'}`}>#{i + 1}</span>
-                <span className="text-xs font-bold text-white">{mine ? 'You' : maskPhone(row.reflex_profiles?.phone || '')}</span>
+                <span className="text-xs font-bold text-white">{mine ? 'You' : (row.reflex_profiles?.display_name || maskPhone(row.reflex_profiles?.phone || ''))}</span>
               </div>
               <div className="text-right">
-                <span className="text-xs font-black text-primary block">{row.weekly_score?.toFixed(3)}s</span>
-                {!compact && <span className="text-[8px] text-white/30 font-bold uppercase">Best: {row.best_score?.toFixed(3)}s</span>}
+                <span className="text-xs font-black text-primary block">{formatScore(gameId, row.weekly_score)}</span>
+                {!compact && <span className="text-[8px] text-white/30 font-bold uppercase">Best: {formatScore(gameId, row.best_score)}</span>}
               </div>
             </div>
           );
@@ -76,4 +76,9 @@ export default function WeeklyLeaderboard({ gameId, topN = 5, currentUid, compac
 function maskPhone(phone: string): string {
   if (!phone) return 'Fighter';
   return `••• ${phone.slice(-4)}`;
+}
+
+function formatScore(gameId: 'reaction_tap' | 'combo_flash', score: number | null): string {
+  if (score == null) return '--';
+  return gameId === 'reaction_tap' ? `${score.toFixed(3)}s` : `${Math.round(score)} pts`;
 }

@@ -49,7 +49,14 @@ interface OnboardingData {
 export default function SettingsPage() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
-  const [profileData, setProfileData] = useState<OnboardingData>({});
+  const [profileData, setProfileData] = useState<OnboardingData>(() => {
+    if (typeof window === 'undefined') return {};
+    try {
+      return JSON.parse(localStorage.getItem('boxing_onboarding_data') || '{}');
+    } catch {
+      return {};
+    }
+  });
   const { profile: myProfile, updateProfile: updateMyProfile } = useMyProfile();
 
   // Keep the local display shape (ringName/promise/etc.) in sync whenever
@@ -94,12 +101,6 @@ export default function SettingsPage() {
     if (typeof window !== 'undefined') {
       synthRef.current = window.speechSynthesis;
     }
-
-    // Load onboarding data
-    try {
-      const data = JSON.parse(localStorage.getItem('boxing_onboarding_data') || '{}');
-      setProfileData(data);
-    } catch (e) {}
 
     // Load app settings
     try {

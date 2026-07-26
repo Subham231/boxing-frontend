@@ -37,6 +37,7 @@ export function useMyProfile() {
   const { user, loading: userLoading } = useFirebaseUser();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,9 +45,11 @@ export function useMyProfile() {
     if (!user) {
       setProfile(null);
       setLoading(false);
+      setError(null);
       return;
     }
     setLoading(true);
+    setError(null);
     ensureUserProfile(user)
       .then(({ profile: p }) => {
         if (cancelled) return;
@@ -54,8 +57,12 @@ export function useMyProfile() {
         cacheProfileLocally(p);
         setLoading(false);
       })
-      .catch(() => {
-        if (!cancelled) setLoading(false);
+      .catch((e) => {
+        console.error('Failed to load profile from Supabase:', e);
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : 'Could not load profile.');
+          setLoading(false);
+        }
       });
     return () => {
       cancelled = true;
@@ -89,5 +96,5 @@ export function useMyProfile() {
     return updated;
   }
 
-  return { profile, loading, updateProfile };
+  return { profile, loading, error, updateProfile };
 }

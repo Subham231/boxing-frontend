@@ -1,21 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyFirebaseIdToken } from '@/lib/server/firebase-admin';
 import { supabaseAdmin } from '@/lib/server/supabase-admin';
+import { getCurrentWeekId, isLowerBetter } from '@/lib/week-id';
 
 export const runtime = 'nodejs';
 
 const MIN_PLAUSIBLE_REACTION_SECONDS = 0.12;
 const MAX_PLAUSIBLE_REACTION_SECONDS = 3.0;
 const MAX_ROUNDS_PER_SUBMISSION = 5;
+const MIN_PLAUSIBLE_COMBO_SCORE = 0;
+const MAX_PLAUSIBLE_COMBO_SCORE = 10000;
 
-function getCurrentWeekId(date = new Date()): string {
-  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  const weekNo = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
-  return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
-}
 
 export async function POST(req: NextRequest) {
   if (!supabaseAdmin) {
@@ -38,27 +33,44 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}));
   const gameId = body.gameId;
-  const roundTimes = body.roundTimes;
 
-  if (gameId !== 'reaction_tap') {
+  if (gameId !== 'reaction_tap' && gameId !== 'combo_flash') {
     return NextResponse.json({ accepted: false, reason: 'Unsupported game id.' }, { status: 400 });
   }
-  if (!Array.isArray(roundTimes) || roundTimes.length === 0 || roundTimes.length > MAX_ROUNDS_PER_SUBMISSION) {
-    return NextResponse.json({ accepted: false, reason: 'Invalid round data.' }, { status: 400 });
+
+  let avg: number;
+
+  if (gameId === 'reaction_tap') {
+    const roundTimes = body.roundTimes;
+    if (!Array.isArray(roundTimes) || roundTimes.length === 0 || roundTimes.length > MAX_ROUNDS_PER_SUBMISSION) {
+      return NextResponse.json({ accepted: false, reason: 'Invalid round data.' }, { status: 400 });
+    }
+    // Re-validate every round independently of whatever the client claims.
+    for (const t of roundTimes) {
+      if (typeof t !== 'number' || !Number.isFinite(t)) {
+        return NextResponse.json({ accepted: false, reason: 'Malformed round time.' }, { status: 400 });
+      }
+      if (t < MIN_PLAUSIBLE_REACTION_SECONDS || t > MAX_PLAUSIBLE_REACTION_SECONDS) {
+        return NextResponse.json({ accepted: false, reason: 'Round time outside plausible human range.' });
+      }
+    }
+    avg = roundTimes.reduce((a: number, b: number) => a + b, 0) / roundTimes.length;
+  } else {
+    // Combo Flash: a single already-computed average points-per-level
+    // score (higher = better) — there's no "round times" concept here,
+    // it's not a reaction-time game.
+    const comboScore = body.comboScore;
+    if (typeof comboScore !== 'number' || !Number.isFinite(comboScore)) {
+      return NextResponse.json({ accepted: false, reason: 'Malformed combo score.' }, { status: 400 });
+    }
+    if (comboScore < MIN_PLAUSIBLE_COMBO_SCORE || comboScore > MAX_PLAUSIBLE_COMBO_SCORE) {
+      return NextResponse.json({ accepted: false, reason: 'Combo score outside plausible range.' });
+    }
+    avg = comboScore;
   }
 
-  // Re-validate every round independently of whatever the client claims.
-  for (const t of roundTimes) {
-    if (typeof t !== 'number' || !Number.isFinite(t)) {
-      return NextResponse.json({ accepted: false, reason: 'Malformed round time.' }, { status: 400 });
-    }
-    if (t < MIN_PLAUSIBLE_REACTION_SECONDS || t > MAX_PLAUSIBLE_REACTION_SECONDS) {
-      return NextResponse.json({ accepted: false, reason: 'Round time outside plausible human range.' });
-    }
-  }
-
-  const avg = roundTimes.reduce((a: number, b: number) => a + b, 0) / roundTimes.length;
   const weekId = getCurrentWeekId();
+  const lowerBetter = isLowerBetter(gameId);
 
   const { data: existing } = await supabaseAdmin
     .from('reflex_scores')
@@ -85,9 +97,19 @@ export async function POST(req: NextRequest) {
   const newGamesPlayed = existing.games_played + 1;
   const prevAvg = existing.avg_reaction_time ?? avg;
   const newLifetimeAvg = (prevAvg * existing.games_played + avg) / newGamesPlayed;
-  const newBest = existing.best_score == null ? avg : Math.min(existing.best_score, avg);
+  const newBest = existing.best_score == null
+    ? avg
+    : lowerBetter
+      ? Math.min(existing.best_score, avg)
+      : Math.max(existing.best_score, avg);
   const sameWeek = existing.week_id === weekId;
-  const newWeekly = !sameWeek ? avg : existing.weekly_score == null ? avg : Math.min(existing.weekly_score, avg);
+  const newWeekly = !sameWeek
+    ? avg
+    : existing.weekly_score == null
+      ? avg
+      : lowerBetter
+        ? Math.min(existing.weekly_score, avg)
+        : Math.max(existing.weekly_score, avg);
 
   const { error } = await supabaseAdmin
     .from('reflex_scores')

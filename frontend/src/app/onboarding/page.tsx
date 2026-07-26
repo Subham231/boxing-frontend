@@ -24,6 +24,7 @@ import DailyConsistency from './components/DailyConsistency';
 import Ecosystem from './components/Ecosystem';
 import JourneyStart from './components/JourneyStart';
 import Identity from './components/Problem';
+import Commitment from './components/Commitment';
 import PromiseStep from './components/Promise';
 import OtpVerification from './components/OtpVerification';
 import SubscriptionOffer from './components/SubscriptionOffer';
@@ -122,6 +123,7 @@ const OnboardingFlow: React.FC = () => {
             <Welcome key="welcome" />,
             ...middleOrder.map((id) => MIDDLE_COMPONENTS[id]),
             <JourneyStart key="journey" />,
+            <Commitment key="commitment" />,
             <Identity key="identity" />,
             <PromiseStep key="promise" />,
             <OtpVerification key="otp" />,

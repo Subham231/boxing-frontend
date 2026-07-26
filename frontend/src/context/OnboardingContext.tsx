@@ -144,7 +144,7 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         }
     }, []);
 
-    const totalSteps = 23;
+    const totalSteps = 24;
 
     const updateData = (newData: Partial<OnboardingData>) => {
         setData(prev => {

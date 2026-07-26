@@ -21,18 +21,12 @@ import { supabase } from '@/lib/supabase';
 import { StreakManager } from '@/lib/streak-manager';
 import { isPlausibleReactionTime, looksAutomated, createTabLock } from '@/lib/reflex-anticheat';
 import { useFirebaseUser } from '@/lib/useFirebaseUser';
-import { submitReflexScoreSecure } from '@/lib/firebase-reflex';
+import { submitReflexScoreSecure, getUserWeeklyRank } from '@/lib/firebase-reflex';
 import PhoneLoginGate from '@/components/reflex/PhoneLoginGate';
 import ReferralCard from '@/components/reflex/ReferralCard';
 import WeeklyLeaderboard from '@/components/reflex/WeeklyLeaderboard';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
-
-interface LeaderboardRecord {
-  player_name: string;
-  score: number;
-  display_score: string;
-}
 
 export default function ReflexPage() {
   const router = useRouter();
@@ -97,8 +91,6 @@ export default function ReflexPage() {
   const cfLastTapRef = useRef<number>(0);
 
   // Leaderboard lists
-  const [rtLeaderboard, setRtLeaderboard] = useState<LeaderboardRecord[]>([]);
-  const [cfLeaderboard, setCfLeaderboard] = useState<LeaderboardRecord[]>([]);
   const [rtRank, setRtRank] = useState('PLAY TO RANK');
   const [cfRank, setCfRank] = useState('PLAY TO RANK');
 
@@ -110,6 +102,16 @@ export default function ReflexPage() {
   const cfTimerLeftRef = useRef<number>(0);
   const assessTimerRef = useRef<NodeJS.Timeout | null>(null);
   const assessIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (!fbUser) return;
+    getUserWeeklyRank('reaction_tap', fbUser.uid).then((rank) => {
+      if (rank) setRtRank(`#${rank} THIS WEEK`);
+    });
+    getUserWeeklyRank('combo_flash', fbUser.uid).then((rank) => {
+      if (rank) setCfRank(`#${rank} THIS WEEK`);
+    });
+  }, [fbUser]);
 
   useEffect(() => {
     setMounted(true);
@@ -318,7 +320,15 @@ export default function ReflexPage() {
       recordSession();
       if (avg && !rtFlaggedRef.current) {
         if (fbUser) {
-          submitReflexScoreSecure('reaction_tap', nextTimes).catch((e) => console.warn('[Firebase] score submit failed:', e));
+          submitReflexScoreSecure('reaction_tap', nextTimes)
+            .then((res) => {
+              if (res.accepted) {
+                getUserWeeklyRank('reaction_tap', fbUser.uid).then((rank) => {
+                  setRtRank(rank ? `#${rank} THIS WEEK` : 'PLAY TO RANK');
+                });
+              }
+            })
+            .catch((e) => console.warn('[Firebase] score submit failed:', e));
         }
       }
     } else {
@@ -487,6 +497,18 @@ export default function ReflexPage() {
     const avg = cfLevelScores.length > 0 ? Math.round(cfLevelScores.reduce((a, b) => a + b, 0) / cfLevelScores.length) : 0;
     setCfStatusText(won ? '🏆 CHAMPION! Max Level!' : `FINAL AVG: ${avg} pts/level`);
     recordSession();
+
+    if (avg > 0) {
+      submitReflexScoreSecure('combo_flash', avg)
+        .then((res) => {
+          if (res.accepted && fbUser) {
+            getUserWeeklyRank('combo_flash', fbUser.uid).then((rank) => {
+              setCfRank(rank ? `#${rank} THIS WEEK` : 'PLAY TO RANK');
+            });
+          }
+        })
+        .catch((e) => console.warn('[Firebase] combo score submit failed:', e));
+    }
   };
 
   // =========================================================================
@@ -874,40 +896,9 @@ export default function ReflexPage() {
           {rtActive ? 'PLAYING...' : 'START GAME'}
         </NeonButton>
 
-        {/* Reaction Tap Leaderboard */}
-        <div className="mt-5 border border-white/5 bg-black/25 rounded-2xl overflow-hidden">
-          <div className="bg-white/[0.02] px-4 py-2.5 border-b border-white/5 flex justify-between items-center">
-            <span className="text-[8px] font-black text-white/60 tracking-wider uppercase">
-              ⚡ Global Leaderboard (Reaction Tap)
-            </span>
-            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_6px_#22c55e]" />
-          </div>
-          <div className="flex flex-col">
-            {rtLeaderboard.length > 0 ? (
-              rtLeaderboard.map((row, idx) => (
-                <div 
-                  key={idx}
-                  className={`flex justify-between items-center px-4 py-2 text-[10px] border-b border-white/[0.02] last:border-0 ${
-                    row.player_name === playerName ? 'bg-primary/10 border-l-2 border-primary pl-3.5' : ''
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className={`font-black w-4 text-center ${
-                      idx === 0 ? 'text-amber-400' : idx === 1 ? 'text-zinc-300' : idx === 2 ? 'text-amber-700' : 'text-white/30'
-                    }`}>
-                      {idx + 1}
-                    </span>
-                    <span className="font-bold text-white/80 uppercase tracking-wide">{row.player_name}</span>
-                  </div>
-                  <span className="font-mono text-primary font-black">{row.display_score}s avg</span>
-                </div>
-              ))
-            ) : (
-              <div className="text-center py-4 text-[8px] font-black text-white/20 uppercase tracking-widest">
-                No scores yet. Be the first!
-              </div>
-            )}
-          </div>
+        {/* Reaction Tap Leaderboard — real, live weekly data (Sunday reset, lifetime best preserved) */}
+        <div className="mt-5">
+          <WeeklyLeaderboard gameId="reaction_tap" topN={10} currentUid={fbUser?.uid} compact />
         </div>
       </GlassCard>
 
@@ -1029,40 +1020,9 @@ export default function ReflexPage() {
           {cfActive ? 'PLAYING...' : 'START GAME'}
         </NeonButton>
 
-        {/* Combo Flash Leaderboard */}
-        <div className="mt-5 border border-white/5 bg-black/25 rounded-2xl overflow-hidden">
-          <div className="bg-white/[0.02] px-4 py-2.5 border-b border-white/5 flex justify-between items-center">
-            <span className="text-[8px] font-black text-white/60 tracking-wider uppercase">
-              ⚡ Global Leaderboard (Combo Flash)
-            </span>
-            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_6px_#22c55e]" />
-          </div>
-          <div className="flex flex-col">
-            {cfLeaderboard.length > 0 ? (
-              cfLeaderboard.map((row, idx) => (
-                <div 
-                  key={idx}
-                  className={`flex justify-between items-center px-4 py-2 text-[10px] border-b border-white/[0.02] last:border-0 ${
-                    row.player_name === playerName ? 'bg-primary/10 border-l-2 border-primary pl-3.5' : ''
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className={`font-black w-4 text-center ${
-                      idx === 0 ? 'text-amber-400' : idx === 1 ? 'text-zinc-300' : idx === 2 ? 'text-amber-700' : 'text-white/30'
-                    }`}>
-                      {idx + 1}
-                    </span>
-                    <span className="font-bold text-white/80 uppercase tracking-wide">{row.player_name}</span>
-                  </div>
-                  <span className="font-mono text-primary font-black">{row.display_score} avg pts</span>
-                </div>
-              ))
-            ) : (
-              <div className="text-center py-4 text-[8px] font-black text-white/20 uppercase tracking-widest">
-                No scores yet. Be the first!
-              </div>
-            )}
-          </div>
+        {/* Combo Flash Leaderboard — real, live weekly data (Sunday reset, lifetime best preserved) */}
+        <div className="mt-5">
+          <WeeklyLeaderboard gameId="combo_flash" topN={10} currentUid={fbUser?.uid} compact />
         </div>
       </GlassCard>
 
