@@ -30,7 +30,7 @@ import OtpVerification from './components/OtpVerification';
 import SubscriptionOffer from './components/SubscriptionOffer';
 import FinalPromise from './components/FinalPromise';
 
-export const ONBOARDING_ORDER_KEY = 'boxing_onboarding_screen_order';
+const ONBOARDING_ORDER_KEY = 'boxing_onboarding_screen_order';
 
 /** Middle pool — interactive quiz + static pitch screens, shuffled each new run */
 const MIDDLE_SCREEN_IDS = [

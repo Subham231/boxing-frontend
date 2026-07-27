@@ -52,13 +52,13 @@ export default function ProtectedLayout({
       if (!isExemptFromSubscriptionGate(pathname) && supabase) {
         const { data: profile } = await supabase
           .from('reflex_profiles')
-          .select('subscription_until')
+          .select('subscription_until, plan_expires_at')
           .eq('uid', user.uid)
           .maybeSingle();
 
         if (cancelled) return;
 
-        if (!isSubscriptionActive(profile?.subscription_until)) {
+        if (!isSubscriptionActive(profile)) {
           window.location.replace('/subscription');
           return;
         }

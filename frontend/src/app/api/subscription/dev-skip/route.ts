@@ -6,13 +6,9 @@ import { PLANS, PlanId } from '@/lib/server/entitlements';
 export const runtime = 'nodejs';
 
 // ============================================================================
-// DEV/TEST ONLY. Delete this whole route (and the "Skip (Dev)" button in
-// the subscription page) before shipping to production.
-//
-// Gated by NEXT_PUBLIC_ENABLE_DEV_SKIP — must be explicitly set to 'true'
-// in the deployment's env vars. Any deployment that doesn't set it (i.e.
-// production, unless someone deliberately misconfigures it) gets a 403
-// here no matter what the client sends.
+// DEVELOPMENT ONLY — gated by NEXT_PUBLIC_ENABLE_DEV_SKIP env var. Set it to
+// 'true' in dev/staging environments. Production deployments without this
+// env var (or set to anything else) return 403 automatically.
 // ============================================================================
 const DEV_MOCK_ALLOWED = process.env.NEXT_PUBLIC_ENABLE_DEV_SKIP === 'true';
 

@@ -48,8 +48,8 @@ export function BottomNav() {
         const Icon = item.icon;
         const active = isActive(item.href);
         return (
-          <Link key={item.label} href={item.href} className={twMerge(
-            "flex flex-col items-center justify-center gap-1.5 no-underline transition-all duration-200",
+          <Link key={item.label} href={item.href} aria-label={item.label} aria-current={active ? 'page' : undefined} className={twMerge(
+            "flex flex-col items-center justify-center gap-1.5 no-underline transition-all duration-200 min-w-[44px] min-h-[44px]",
             active ? "opacity-100 text-primary" : "opacity-40 text-white hover:opacity-70"
           )}>
             <Icon className={twMerge("w-5 h-5", active && "drop-shadow-[0_0_8px_var(--primary)]")} />
@@ -59,7 +59,7 @@ export function BottomNav() {
       })}
 
       {/* Hex Video Button */}
-      <Link href="/vision" className="relative -top-5 flex flex-col items-center cursor-pointer z-[1000] no-underline group select-none">
+      <Link href="/vision" aria-label="Video analysis" className="relative -top-5 flex flex-col items-center cursor-pointer z-[1000] no-underline group select-none">
         {/* Streak badge */}
         <div className="absolute -top-3.5 flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-gradient-to-r from-orange-500 to-yellow-400 text-black font-black text-[8px] tracking-wider shadow-[0_0_8px_rgba(249,115,22,0.4)] stealth-sensitive">
           <Flame className="w-2.5 h-2.5 fill-black stroke-none" />
@@ -85,8 +85,8 @@ export function BottomNav() {
         const Icon = item.icon;
         const active = isActive(item.href);
         return (
-          <Link key={item.label} href={item.href} className={twMerge(
-            "flex flex-col items-center justify-center gap-1.5 no-underline transition-all duration-200",
+          <Link key={item.label} href={item.href} aria-label={item.label} aria-current={active ? 'page' : undefined} className={twMerge(
+            "flex flex-col items-center justify-center gap-1.5 no-underline transition-all duration-200 min-w-[44px] min-h-[44px]",
             active ? "opacity-100 text-primary" : "opacity-40 text-white hover:opacity-70"
           )}>
             <Icon className={twMerge("w-5 h-5", active && "drop-shadow-[0_0_8px_var(--primary)]")} />

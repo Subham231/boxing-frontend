@@ -23,6 +23,12 @@ export interface UserProfile {
   plan?: string | null;
   plan_expires_at?: string | null;
   referral_bonus_5_claimed?: boolean;
+  // Profile fields saved via save-profile-details (reflex-schema-v2+).
+  display_name?: string | null;
+  age?: number | null;
+  profession?: string | null;
+  avatar_url?: string | null;
+  promise_word?: string | null;
 }
 
 let recaptchaVerifier: RecaptchaVerifier | null = null;
@@ -77,19 +83,22 @@ export async function sendOtp(phoneNumberE164: string, recaptchaContainerId: str
   return signInWithPhoneNumber(firebaseAuth, phoneNumberE164, verifier);
 }
 
-export async function confirmOtp(confirmation: ConfirmationResult, code: string, referralCodeEntered?: string): Promise<User> {
+export async function confirmOtp(
+  confirmation: ConfirmationResult,
+  code: string,
+  referralCodeEntered?: string,
+): Promise<{ user: User; isNew: boolean; profile: UserProfile }> {
   const cred = await confirmation.confirm(code);
   const user = cred.user;
-  await ensureUserProfile(user, referralCodeEntered);
+  const { profile, isNew } = await ensureUserProfile(user, referralCodeEntered);
   await claimReferralIfNeeded(user);
-  return user;
+  return { user, isNew, profile };
 }
 
-// Calls the server route, which verifies the Firebase ID token and
-// creates/returns the Supabase profile row (with a fresh referral code on
-// first login). All actual data writes happen server-side with the
-// Supabase service_role key — the client never writes profile data itself.
-export async function ensureUserProfile(user: User, referralCodeEntered?: string): Promise<UserProfile> {
+export async function ensureUserProfile(
+  user: User,
+  referralCodeEntered?: string,
+): Promise<{ profile: UserProfile; isNew: boolean }> {
   const idToken = await user.getIdToken();
   const res = await fetch('/api/reflex/ensure-profile', {
     method: 'POST',
@@ -97,8 +106,8 @@ export async function ensureUserProfile(user: User, referralCodeEntered?: string
     body: JSON.stringify({ referredBy: referralCodeEntered || null }),
   });
   if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || 'Could not create profile.');
-  const { profile } = await res.json();
-  return profile as UserProfile;
+  const { profile, isNew } = await res.json();
+  return { profile: profile as UserProfile, isNew: !!isNew };
 }
 
 export async function claimReferralIfNeeded(user: User): Promise<void> {
@@ -112,17 +121,23 @@ export async function claimReferralIfNeeded(user: User): Promise<void> {
   });
 }
 
-export async function saveProfileDetails(user: User, details: { displayName?: string; age?: number; profession?: string }): Promise<void> {
+export async function saveProfileDetails(
+  user: User,
+  details: { displayName?: string; age?: number; profession?: string; promiseWord?: string; avatarUrl?: string },
+): Promise<UserProfile | null> {
   const idToken = await user.getIdToken();
-  await fetch('/api/reflex/save-profile-details', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-    body: JSON.stringify(details),
-  }).catch(() => {
-    // Non-fatal — the core account (uid + phone) already exists even if
-    // these extra display fields fail to save; they can be retried later
-    // from a profile/settings screen.
-  });
+  try {
+    const res = await fetch('/api/reflex/save-profile-details', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+      body: JSON.stringify(details),
+    });
+    if (!res.ok) return null;
+    const { profile } = await res.json();
+    return (profile as UserProfile) || null;
+  } catch {
+    return null;
+  }
 }
 
 export function watchAuthState(callback: (user: User | null) => void) {
@@ -131,4 +146,18 @@ export function watchAuthState(callback: (user: User | null) => void) {
 
 export async function signOutFirebase() {
   await firebaseSignOut(firebaseAuth);
+}
+
+/** Calls the server-side referral application route. */
+export async function applyReferralCode(user: User, code: string): Promise<void> {
+  const token = await user.getIdToken();
+  const res = await fetch('/api/reflex/apply-referral', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ code }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(err.error || 'Could not apply referral code');
+  }
 }
