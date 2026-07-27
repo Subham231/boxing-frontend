@@ -23,6 +23,12 @@ export function cacheProfileLocally(profile: UserProfile) {
       avatar_url: profile.avatar_url || '',
       promise: profile.promise_word || '',
       promise_trigger: profile.promise_word || '',
+      // Spread in the full onboarding_data object so fields like goals,
+      // experience_level, persona, lifestyle, height, weight, etc. are
+      // restored from the server rather than falling back to localStorage.
+      ...(profile.onboarding_data && typeof profile.onboarding_data === 'object'
+        ? (profile.onboarding_data as Record<string, unknown>)
+        : {}),
     };
     localStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify(merged));
   } catch {

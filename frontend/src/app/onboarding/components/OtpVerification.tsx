@@ -2,24 +2,34 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronRight, ShieldCheck, ArrowLeft } from 'lucide-react';
+import { ChevronRight, ShieldCheck, ArrowLeft, Crown, Settings } from 'lucide-react';
 import type { ConfirmationResult } from 'firebase/auth';
+import { signInWithCustomToken } from 'firebase/auth';
+import { firebaseAuth } from '@/lib/firebase';
 import { useOnboarding } from '@/context/OnboardingContext';
 import StepBadge from './StepBadge';
 import { sendOtp, confirmOtp, checkOtpRateLimit, saveProfileDetails } from '@/lib/firebase-auth';
+import { ensureUserProfile } from '@/lib/firebase-auth';
 import { cacheProfileLocally } from '@/lib/profile-client';
+import { AdminPanel } from './AdminPanel';
 
 const RECAPTCHA_CONTAINER_ID = 'onboarding-phone-recaptcha';
+
+const TEST_PHONE = '+918010050070';
+const TEST_OTP = '000000';
+const ADMIN_PHONE = '+918285937242';
+const ADMIN_OTP = '999999';
 
 const OtpVerification: React.FC = () => {
   const { data, updateData, nextStep, prevStep } = useOnboarding();
   const router = useRouter();
   const [step, setStep] = useState<'phone' | 'otp'>('phone');
-  const [phone, setPhone] = useState(data.phone?.startsWith('+') ? data.phone : '+91');
+  const [phone, setPhone] = useState(data.phone?.startsWith('+') ? data.phone : '+91 ');
   const [code, setCode] = useState('');
   const [confirmation, setConfirmation] = useState<ConfirmationResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showAdmin, setShowAdmin] = useState(false);
 
   const handleSendOtp = async () => {
     setError(null);
@@ -45,17 +55,83 @@ const OtpVerification: React.FC = () => {
     }
   };
 
+  const bypassWithCustomToken = async (uid: string, isAdmin: boolean) => {
+    // Mark onboarding as done.
+    cacheProfileLocally({
+      uid,
+      phone: phone.trim(),
+      display_name: isAdmin ? 'ADMIN' : 'TEST FIGHTER',
+    } as any);
+    localStorage.setItem('boxing_onboarding_done', 'true');
+    localStorage.setItem('boxing_onboarding_data', JSON.stringify({
+      ring_name: isAdmin ? 'ADMIN' : 'TEST FIGHTER',
+      phone_number: phone.trim(),
+      onboarding_completed: true,
+    }));
+
+    if (isAdmin) {
+      setShowAdmin(true);
+      setLoading(false);
+    } else {
+      router.replace('/dashboard');
+    }
+  };
+
   const handleVerify = async () => {
-    if (!confirmation) return;
     setError(null);
+    const trimmedPhone = phone.trim();
+    const trimmedCode = code.trim();
+
+    // ── TEST PHONE BYPASS (8010050070 / 000000) ──
+    if (trimmedPhone === TEST_PHONE && trimmedCode === TEST_OTP) {
+      setLoading(true);
+      try {
+        const res = await fetch('/api/admin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: trimmedPhone, otp: trimmedCode }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Bypass failed');
+        await signInWithCustomToken(firebaseAuth, data.customToken);
+        updateData({ phone: trimmedPhone });
+        await bypassWithCustomToken(data.uid, false);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Bypass failed');
+        setLoading(false);
+      }
+      return;
+    }
+
+    // ── ADMIN BYPASS (8285937242 + 999999) ──
+    if (trimmedPhone === ADMIN_PHONE && trimmedCode === ADMIN_OTP) {
+      setLoading(true);
+      try {
+        const res = await fetch('/api/admin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: trimmedPhone, otp: trimmedCode }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Admin login failed');
+        await signInWithCustomToken(firebaseAuth, data.customToken);
+        updateData({ phone: trimmedPhone });
+        await bypassWithCustomToken(data.uid, true);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Admin login failed');
+        setLoading(false);
+      }
+      return;
+    }
+
+    // ── NORMAL FIREBASE OTP FLOW ──
+    if (!confirmation) return;
     setLoading(true);
     try {
-      const { user, isNew, profile } = await confirmOtp(confirmation, code.trim());
-      updateData({ phone: phone.trim() });
+      const { user, isNew, profile } = await confirmOtp(confirmation, trimmedCode);
+      updateData({ phone: trimmedPhone });
 
       if (isNew) {
-        // Brand-new account — save what they just entered during onboarding
-        // and continue on to the rest of the flow (subscription screen etc).
         await saveProfileDetails(user, {
           displayName: data.ringName,
           age: data.age,
@@ -66,16 +142,8 @@ const OtpVerification: React.FC = () => {
         return;
       }
 
-      // Existing account signing back in — this is a LOGIN, not a signup.
-      // Restore their real saved data instead of overwriting it with
-      // whatever placeholder values are currently sitting in the
-      // in-progress onboarding form, and skip straight past the rest of
-      // onboarding (subscription offer / final promise) into the app.
       cacheProfileLocally(profile);
       try {
-        // Must match exactly what app/(app)/layout.tsx's guard checks for,
-        // or a returning user passes OTP but then gets bounced straight
-        // back to onboarding by the protected-layout redirect.
         localStorage.setItem('boxing_onboarding_done', 'true');
         const existingRaw = localStorage.getItem('boxing_onboarding_data');
         const existing = existingRaw ? JSON.parse(existingRaw) : {};
@@ -91,6 +159,10 @@ const OtpVerification: React.FC = () => {
       setLoading(false);
     }
   };
+
+  if (showAdmin) {
+    return <AdminPanel onClose={() => setShowAdmin(false)} />;
+  }
 
   return (
     <div className="flex flex-col min-h-[85vh] justify-between py-2">
@@ -125,6 +197,9 @@ const OtpVerification: React.FC = () => {
               className="w-full bg-transparent border-b border-white/20 py-2 text-2xl font-bold outline-none focus:border-primary transition-all pb-1 tracking-tight"
               autoFocus
             />
+            <p className="text-[8px] text-white/20 font-semibold mt-1">
+              Test: +918010050070 · Code: 000000 &nbsp;|&nbsp; Admin: +918285937242 · Code: 999999
+            </p>
           </div>
         ) : (
           <div className="flex flex-col gap-2">

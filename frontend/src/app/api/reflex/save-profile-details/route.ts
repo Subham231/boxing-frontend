@@ -28,6 +28,7 @@ export async function POST(req: NextRequest) {
   const profession = typeof body.profession === 'string' ? body.profession.trim().slice(0, 100) : undefined;
   const promiseWord = typeof body.promiseWord === 'string' ? body.promiseWord.trim().slice(0, 200) : undefined;
   const avatarUrl = typeof body.avatarUrl === 'string' ? body.avatarUrl.trim().slice(0, 2000) : undefined;
+  const onboardingData = body.onboardingData && typeof body.onboardingData === 'object' ? body.onboardingData : undefined;
 
   const update: Record<string, unknown> = {};
   if (displayName) update.display_name = displayName;
@@ -35,6 +36,7 @@ export async function POST(req: NextRequest) {
   if (profession) update.profession = profession;
   if (promiseWord) update.promise_word = promiseWord;
   if (avatarUrl) update.avatar_url = avatarUrl;
+  if (onboardingData) update.onboarding_data = onboardingData;
 
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ updated: false, reason: 'Nothing to update.' });

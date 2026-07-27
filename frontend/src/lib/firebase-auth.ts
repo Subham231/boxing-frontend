@@ -29,6 +29,8 @@ export interface UserProfile {
   profession?: string | null;
   avatar_url?: string | null;
   promise_word?: string | null;
+  // Bulk onboarding payload saved via sync-to-supabase (v7+).
+  onboarding_data?: Record<string, unknown> | null;
 }
 
 let recaptchaVerifier: RecaptchaVerifier | null = null;

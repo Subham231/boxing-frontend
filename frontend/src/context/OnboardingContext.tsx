@@ -110,6 +110,17 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const [data, setData] = useState<OnboardingData>(defaultData);
     const [isLoaded, setIsLoaded] = useState(false);
 
+    async function getFirebaseIdToken(): Promise<string | null> {
+        try {
+            const { firebaseAuth } = await import('@/lib/firebase');
+            const user = firebaseAuth.currentUser;
+            if (!user) return null;
+            return user.getIdToken();
+        } catch {
+            return null;
+        }
+    }
+
     useEffect(() => {
         try {
             const stored = JSON.parse(localStorage.getItem('boxing_onboarding_data') || '{}');
@@ -181,7 +192,21 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         localStorage.setItem('boxing_onboarding_done', 'true');
         localStorage.removeItem('boxing_onboarding_screen_order');
         updateData({ hasCompletedOnboarding: true });
-        console.log('Onboarding saved:', payload);
+
+        // Persist the full onboarding payload to Supabase so a returning user
+        // sees the same persona, lifestyle, goals, etc. on any device.
+        try {
+            const token = await getFirebaseIdToken();
+            if (token) {
+                await fetch('/api/reflex/save-profile-details', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ onboardingData: payload }),
+                });
+            }
+        } catch {
+            // Non-fatal — local cache still has the data; next sync will retry.
+        }
     };
 
     return (
