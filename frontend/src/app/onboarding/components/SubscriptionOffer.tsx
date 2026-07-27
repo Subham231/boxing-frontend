@@ -18,19 +18,19 @@ const PLANS = [
     features: ['Daily Grind access', 'Basic Planner', 'Reflex Enhancer'],
   },
   {
-    id: 'monthly',
-    name: 'Pro Monthly',
-    price: '₹829',
+    id: 'monthly_pro',
+    name: 'Monthly Pro',
+    price: '₹699',
     period: '/mo',
-    features: ['Everything in Free', 'Unlimited Planner Regeneration', 'Full Guru Library', 'Advanced Analytics'],
+    features: ['2 AI Video Analyses / day', '2 Planner Generations / week'],
     highlight: true,
   },
   {
     id: 'yearly',
-    name: 'Pro Yearly',
-    price: '₹6,500',
+    name: 'Yearly',
+    price: '₹6,629',
     period: '/yr',
-    features: ['Everything in Pro Monthly', '2 months free', 'Priority support'],
+    features: ['Unlimited AI Video Analyses', 'Unlimited Planner Generations', 'Premium Guru unlocked', 'Elite Member badge'],
   },
 ];
 
@@ -39,7 +39,7 @@ type EarnTab = 'referral' | 'share';
 const SubscriptionOffer: React.FC = () => {
   const router = useRouter();
   const { nextStep, prevStep } = useOnboarding();
-  const [selected, setSelected] = useState<string>('monthly');
+  const [selected, setSelected] = useState<string>('monthly_pro');
   const [earnTab, setEarnTab] = useState<EarnTab>('referral');
   const [referralInput, setReferralInput] = useState('');
   const [referralLoading, setReferralLoading] = useState(false);
@@ -52,8 +52,12 @@ const SubscriptionOffer: React.FC = () => {
       localStorage.setItem('boxing_selected_plan', selected);
     }
 
-    if (selected === 'monthly' || selected === 'yearly') {
-      router.push(`/checkout?plan=${selected}`);
+    if (selected === 'monthly_pro' || selected === 'yearly') {
+      // The legacy /checkout + /api/razorpay/* flow only ever wrote to the
+      // old `subscription_until` column and doesn't know about plans, daily/
+      // weekly limits, or Elite status — it's superseded by /subscription,
+      // which is what actually grants entitlement under the new system.
+      router.push('/subscription');
     } else {
       nextStep();
     }

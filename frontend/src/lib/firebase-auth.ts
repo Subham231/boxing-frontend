@@ -17,6 +17,12 @@ export interface UserProfile {
   has_claimed_referral_bonus: boolean;
   subscription_until: string | null;
   created_at: string;
+  // Added by the Premium Subscription system (reflex-schema-v6.sql).
+  // Optional because older cached client bundles / rows created before the
+  // migration ran may not have them yet.
+  plan?: string | null;
+  plan_expires_at?: string | null;
+  referral_bonus_5_claimed?: boolean;
 }
 
 let recaptchaVerifier: RecaptchaVerifier | null = null;

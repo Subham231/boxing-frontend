@@ -16,8 +16,14 @@ export default function ReferralCard({ uid }: { uid: string }) {
 
   if (!profile) return null;
 
-  const progressInCycle = profile.referral_count % 5;
-  const subActive = profile.subscription_until ? new Date(profile.subscription_until) > new Date() : false;
+  // One-time reward: exactly 5 referrals, granted once ever — not a
+  // repeating every-5 cycle. Progress caps at 5/5 and stays there.
+  const progress = Math.min(profile.referral_count, 5);
+  const rewardClaimed = !!profile.referral_bonus_5_claimed;
+  const rewardStillActive =
+    rewardClaimed && profile.plan === 'referral_reward' && profile.plan_expires_at
+      ? new Date(profile.plan_expires_at) > new Date()
+      : false;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(profile.referral_code).then(() => {
@@ -30,7 +36,9 @@ export default function ReferralCard({ uid }: { uid: string }) {
     <GlassCard className="p-5 border-primary/20 bg-primary/[0.03] flex flex-col gap-4">
       <div className="flex items-center gap-2">
         <Gift className="w-4 h-4 text-primary" />
-        <span className="text-[10px] font-black text-primary uppercase tracking-widest">Refer 5 Friends, Get 1 Month Free</span>
+        <span className="text-[10px] font-black text-primary uppercase tracking-widest">
+          {rewardClaimed ? 'Referral Reward Claimed' : 'Refer 5 Friends, Get 14 Days Premium'}
+        </span>
       </div>
 
       <div className="flex items-center justify-between bg-black/40 border border-white/10 rounded-2xl px-4 py-3">
@@ -40,19 +48,26 @@ export default function ReferralCard({ uid }: { uid: string }) {
         </button>
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <div className="flex justify-between text-[9px] font-black uppercase text-white/40">
-          <span>{progressInCycle} / 5 Referrals</span>
-          <span>{profile.referral_count} Total</span>
+      {!rewardClaimed && (
+        <div className="flex flex-col gap-1.5">
+          <div className="flex justify-between text-[9px] font-black uppercase text-white/40">
+            <span>{progress} / 5 Referrals</span>
+            <span>{profile.referral_count} Total</span>
+          </div>
+          <div className="h-2 rounded-full bg-white/5 overflow-hidden">
+            <div className="h-full bg-primary rounded-full transition-all duration-700" style={{ width: `${(progress / 5) * 100}%` }} />
+          </div>
         </div>
-        <div className="h-2 rounded-full bg-white/5 overflow-hidden">
-          <div className="h-full bg-primary rounded-full transition-all duration-700" style={{ width: `${(progressInCycle / 5) * 100}%` }} />
-        </div>
-      </div>
+      )}
 
-      {subActive && (
+      {rewardStillActive && (
         <div className="text-[10px] font-black text-primary uppercase text-center bg-primary/10 border border-primary/20 rounded-xl py-2">
-          Reward Active until {new Date(profile.subscription_until!).toLocaleDateString()}
+          14-Day Reward Active until {new Date(profile.plan_expires_at!).toLocaleDateString()}
+        </div>
+      )}
+      {rewardClaimed && !rewardStillActive && (
+        <div className="text-[10px] font-black text-white/40 uppercase text-center bg-white/5 border border-white/10 rounded-xl py-2">
+          Reward already used — one-time per account
         </div>
       )}
     </GlassCard>

@@ -15,6 +15,7 @@ import {
 } from '@/lib/guru-progress';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { MetricsGrid } from '@/components/guru/GuruCharts';
+import { firebaseAuth } from '@/lib/firebase';
 
 const CATEGORY_LABELS: Record<string, string> = { punches: 'PUNCH', stances: 'STANCE', kicks: 'KICK', defense: 'DEFENSE' };
 
@@ -33,6 +34,38 @@ export default function TechniqueDetailPage() {
   const technique = useMemo(() => getTechniqueById(techId), [techId]);
   const categoryKey = useMemo(() => getCategoryOf(techId) || '', [techId]);
   const categoryLabel = CATEGORY_LABELS[categoryKey] || categoryKey.toUpperCase();
+
+  // "Advanced" techniques are the Premium Guru skills gated to Yearly/Elite
+  // subscribers. This is checked server-side (never trusting a cached
+  // client flag) the moment the page loads.
+  const isPremiumTechnique = technique?.difficulty === 'Advanced';
+  const [checkingAccess, setCheckingAccess] = useState(true);
+  const [hasEliteAccess, setHasEliteAccess] = useState(false);
+
+  useEffect(() => {
+    if (!isPremiumTechnique) {
+      setCheckingAccess(false);
+      return;
+    }
+    const unsub = firebaseAuth.onAuthStateChanged(async (user) => {
+      if (!user) {
+        setHasEliteAccess(false);
+        setCheckingAccess(false);
+        return;
+      }
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch('/api/subscription/status', { headers: { Authorization: `Bearer ${token}` } });
+        const data = await res.json();
+        setHasEliteAccess(!!data.premiumGuru);
+      } catch {
+        setHasEliteAccess(false);
+      } finally {
+        setCheckingAccess(false);
+      }
+    });
+    return () => unsub();
+  }, [isPremiumTechnique]);
 
   const relatedTechniques = useMemo(() => {
     if (!technique) return [];
@@ -60,6 +93,38 @@ export default function TechniqueDetailPage() {
     return (
       <div className="flex-1 flex flex-col items-center justify-center py-10 text-white/40 font-bold uppercase text-xs">
         Technique not found. <Link href="/guru" className="text-primary mt-2 uppercase font-black tracking-wider">Back to Guru</Link>
+      </div>
+    );
+  }
+
+  if (isPremiumTechnique && checkingAccess) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center py-16 text-white/40 font-bold uppercase text-xs gap-3">
+        <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+        Verifying access…
+      </div>
+    );
+  }
+
+  if (isPremiumTechnique && !hasEliteAccess) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center py-16 px-6 text-center gap-4">
+        <div className="w-16 h-16 rounded-full bg-primary/10 border-2 border-primary flex items-center justify-center text-primary text-2xl">
+          🔒
+        </div>
+        <h2 className="text-xl font-black uppercase italic text-white">Premium Guru Skill</h2>
+        <p className="text-xs text-white/50 font-semibold max-w-[280px] leading-relaxed">
+          {technique.name} is part of the Premium Guru library — advanced techniques unlocked exclusively for Yearly / Elite members.
+        </p>
+        <Link
+          href="/subscription"
+          className="mt-2 px-6 py-3 rounded-2xl bg-primary text-black text-xs font-black uppercase tracking-widest"
+        >
+          Unlock with Yearly Plan
+        </Link>
+        <Link href="/guru" className="text-white/40 text-[10px] uppercase font-black tracking-widest mt-1">
+          Back to Guru
+        </Link>
       </div>
     );
   }

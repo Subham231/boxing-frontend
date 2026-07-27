@@ -29,6 +29,7 @@ import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
 // @ts-ignore — JS utility modules
 import { generateLocalPlanner } from '@/utils/localPlannerEngine';
+import { firebaseAuth } from '@/lib/firebase';
 // @ts-ignore
 import { requestLocalNotificationPermission, scheduleLocalWorkoutReminder } from '@/utils/localNotificationService';
 
@@ -191,6 +192,30 @@ export default function PlannerPage() {
   // does the real work and returns the plan (or throws), while the wizard
   // itself owns showing the generation ceremony/progress UI.
   const handleGenerate = async (profile: PlannerProfile): Promise<WeeklyPlan> => {
+    // Server-side entitlement + weekly-usage-limit check — the only thing
+    // that can actually authorize generating a new plan. Re-validated
+    // fresh against Supabase on every generation, never trusted from any
+    // client-side state.
+    const user = firebaseAuth.currentUser;
+    if (!user) {
+      router.push('/subscription');
+      throw new Error('Please log in to generate a plan.');
+    }
+    const token = await user.getIdToken();
+    const gateRes = await fetch('/api/subscription/use-planner', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    });
+    const gateData = await gateRes.json();
+    if (!gateRes.ok || !gateData.allowed) {
+      router.push('/subscription');
+      throw new Error(
+        gateData.reason === 'weekly_limit_reached'
+          ? `Weekly planner limit reached (${gateData.used}/${gateData.limit}). Upgrade your plan or wait for next week.`
+          : 'An active subscription is required to generate a plan.'
+      );
+    }
+
     if (wizardMode === 'regenerate') {
       // Fresh protocol incoming — clear old completion history so Daily
       // Grind doesn't show stale "done" states against new exercises.

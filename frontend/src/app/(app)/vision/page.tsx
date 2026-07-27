@@ -21,6 +21,7 @@ import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
 import { completeSessionSecure } from '@/lib/rank-client';
 import { logVisionSession, getReflexTier } from '@/lib/session-log';
+import { firebaseAuth } from '@/lib/firebase';
 
 // ---------------------------------------------------------------------------
 // Landmark indices we care about (MediaPipe Pose / BlazePose 33-point model)
@@ -276,6 +277,8 @@ export default function VisionPage() {
   const [attemptedCount, setAttemptedCount] = useState(0);
   const [activeCommand, setActiveCommand] = useState('');
   const [isCommandSpeaking, setIsCommandSpeaking] = useState(false);
+  const [subscriptionChecking, setSubscriptionChecking] = useState(false);
+  const [subscriptionError, setSubscriptionError] = useState<string | null>(null);
   const isMuted = false;
   const [isTrackingInadequate, setIsTrackingInadequate] = useState(false);
   const elapsedSecondsRef = useRef(0);
@@ -611,6 +614,41 @@ export default function VisionPage() {
   };
 
   const startCalibration = async () => {
+    // Server-side entitlement + usage-limit check — the ONLY thing that can
+    // actually grant an AI Video Analysis session. Nothing client-side
+    // (a previous status fetch, a cached flag, etc.) is trusted here; this
+    // call re-validates fresh against Supabase every time.
+    setSubscriptionError(null);
+    setSubscriptionChecking(true);
+    try {
+      const user = firebaseAuth.currentUser;
+      if (!user) {
+        setSubscriptionChecking(false);
+        setSubscriptionError('Please log in to start an AI analysis session.');
+        return;
+      }
+      const token = await user.getIdToken();
+      const res = await fetch('/api/subscription/use-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setSubscriptionChecking(false);
+      if (!res.ok || !data.allowed) {
+        if (data.reason === 'daily_limit_reached') {
+          setSubscriptionError(`Daily analysis limit reached (${data.used}/${data.limit}). Upgrade your plan or come back tomorrow.`);
+        } else {
+          setSubscriptionError('An active subscription is required for AI Video Analysis.');
+        }
+        router.push('/subscription');
+        return;
+      }
+    } catch (e) {
+      setSubscriptionChecking(false);
+      setSubscriptionError('Could not verify subscription. Check your connection and try again.');
+      return;
+    }
+
     setCameraError(null);
     setEngineStatus('loading');
     setStage('camera');
@@ -1769,8 +1807,15 @@ export default function VisionPage() {
               </div>
             )}
 
-            <NeonButton onClick={startCalibration} className="w-full h-14 mt-2">
-              START CALIBRATION
+            {subscriptionError && (
+              <div className="flex items-start gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-2xl">
+                <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                <p className="text-[10px] font-semibold text-red-400 leading-tight">{subscriptionError}</p>
+              </div>
+            )}
+
+            <NeonButton onClick={startCalibration} disabled={subscriptionChecking} className="w-full h-14 mt-2">
+              {subscriptionChecking ? 'CHECKING SUBSCRIPTION…' : 'START CALIBRATION'}
             </NeonButton>
           </motion.div>
         )}

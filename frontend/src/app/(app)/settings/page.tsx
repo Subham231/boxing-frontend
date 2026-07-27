@@ -95,6 +95,19 @@ export default function SettingsPage() {
 
   // Edit fields modal
   const [editField, setEditField] = useState<'ringName' | 'promise' | 'avatar_url' | null>(null);
+  const [entitlement, setEntitlement] = useState<any>(null);
+  const isElite = !!entitlement?.isElite;
+
+  useEffect(() => {
+    if (!fbUser) return;
+    fbUser.getIdToken()
+      .then((token) => fetch('/api/subscription/status', { headers: { Authorization: `Bearer ${token}` } }))
+      .then((res) => res.json())
+      .then((data) => setEntitlement(data))
+      .catch(() => {
+        // Non-fatal — badge/status card just won't show if the check fails.
+      });
+  }, [fbUser]);
   const [editValue, setEditValue] = useState('');
 
   // Debrief Overlay State
@@ -356,8 +369,13 @@ Keep it under 120 words. Focus on their discipline and the evolution of their po
             <div className="text-[10px] font-black text-white/50 tracking-wider uppercase mb-0.5">
               ATHLETE PROFILE
             </div>
-            <h1 className="text-xl font-black italic uppercase leading-none text-white tracking-wide stealth-sensitive">
+            <h1 className="text-xl font-black italic uppercase leading-none text-white tracking-wide stealth-sensitive flex items-center gap-2">
               {name}&apos;s Vault
+              {isElite && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/15 border border-primary/40 text-primary text-[8px] font-black tracking-widest normal-case not-italic">
+                  <Crown className="w-3 h-3" /> ELITE
+                </span>
+              )}
             </h1>
           </div>
         </div>
@@ -497,36 +515,26 @@ Keep it under 120 words. Focus on their discipline and the evolution of their po
             </div>
             <div>
               <h4 className="text-xs font-black uppercase text-white leading-none">
-                PRO SUBSCRIPTION
+                {entitlement?.planName || 'SUBSCRIPTION'}
               </h4>
-              {(() => {
-                const until = myProfile?.subscription_until ? new Date(myProfile.subscription_until) : null;
-                const isActive = !!until && until.getTime() > Date.now();
-                if (isActive) {
-                  return (
-                    <span className="text-[8px] font-black text-primary uppercase block mt-1">
-                      ACTIVE • RENEWS {until!.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                    </span>
-                  );
-                }
-                if (until) {
-                  return (
-                    <span className="text-[8px] font-black text-red-400 uppercase block mt-1">
-                      EXPIRED • {until.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                    </span>
-                  );
-                }
-                return (
-                  <span className="text-[8px] font-black text-white/40 uppercase block mt-1">
-                    NOT SUBSCRIBED
-                  </span>
-                );
-              })()}
+              {entitlement?.active ? (
+                <span className="text-[8px] font-black text-primary uppercase block mt-1">
+                  ACTIVE • RENEWS {entitlement.expiresAt ? new Date(entitlement.expiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : ''}
+                </span>
+              ) : entitlement?.expiresAt ? (
+                <span className="text-[8px] font-black text-red-400 uppercase block mt-1">
+                  EXPIRED • {new Date(entitlement.expiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                </span>
+              ) : (
+                <span className="text-[8px] font-black text-white/40 uppercase block mt-1">
+                  NOT SUBSCRIBED
+                </span>
+              )}
             </div>
           </div>
-          {(!myProfile?.subscription_until || new Date(myProfile.subscription_until).getTime() <= Date.now()) && (
+          {!entitlement?.active && (
             <button
-              onClick={() => router.push('/checkout?plan=monthly')}
+              onClick={() => router.push('/subscription')}
               className="px-3 py-1.5 rounded-xl bg-primary text-black text-[9px] font-black uppercase tracking-wider"
             >
               Upgrade
@@ -615,6 +623,20 @@ Keep it under 120 words. Focus on their discipline and the evolution of their po
               }`}
             />
           </button>
+        </div>
+
+        {/* Subscription */}
+        <div
+          onClick={() => router.push('/subscription')}
+          className="glass-card p-4 rounded-3xl border border-white/5 bg-black/40 flex justify-between items-center cursor-pointer select-none hover:border-white/10"
+        >
+          <div className="flex items-center gap-4">
+            <Crown className="w-4 h-4 text-primary" />
+            <span className="text-xs font-black uppercase text-white">
+              SUBSCRIPTION{isElite ? ' — ELITE' : ''}
+            </span>
+          </div>
+          <ChevronRight className="w-4 h-4 text-white/20" />
         </div>
 
         {/* Replay Tutorial */}
