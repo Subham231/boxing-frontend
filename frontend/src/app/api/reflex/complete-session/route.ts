@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyFirebaseIdToken } from '@/lib/server/firebase-admin';
 import { supabaseAdmin } from '@/lib/server/supabase-admin';
 import { applySessionProgress, type RankState } from '@/lib/rank-system';
+import { isSubscriptionActive } from '@/lib/subscription';
 
 export const runtime = 'nodejs';
 
@@ -23,6 +24,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid or expired token.' }, { status: 401 });
   }
   const uid = decoded.uid;
+
+  const { data: profile } = await supabaseAdmin
+    .from('reflex_profiles')
+    .select('subscription_until')
+    .eq('uid', uid)
+    .maybeSingle();
+
+  if (!isSubscriptionActive(profile?.subscription_until)) {
+    return NextResponse.json(
+      { error: 'Your subscription has ended. Upgrade to keep using the AI Analyser.' },
+      { status: 402 }
+    );
+  }
+
   const now = new Date().toISOString();
 
   const { data: existing } = await supabaseAdmin.from('user_streaks').select('*').eq('uid', uid).maybeSingle();

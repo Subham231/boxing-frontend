@@ -1,10 +1,12 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
 import { Loader2 } from 'lucide-react';
 import { useFirebaseUser } from '@/lib/useFirebaseUser';
+import { supabase } from '@/lib/supabase';
+import { isSubscriptionActive, isExemptFromSubscriptionGate } from '@/lib/subscription';
 
 export default function ProtectedLayout({
   children,
@@ -12,6 +14,7 @@ export default function ProtectedLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, loading: authLoading } = useFirebaseUser();
   const [checked, setChecked] = useState(false);
   const [allowed, setAllowed] = useState(false);
@@ -32,21 +35,46 @@ export default function ProtectedLayout({
       }
     };
 
-    // Onboarding-complete alone isn't enough — that flag intentionally
-    // survives logout (so a later login can restore local data instantly).
-    // The actual gate is: is there a real, active Firebase session?
-    if (!isOnboardingComplete() || !user) {
-      if (typeof window !== 'undefined') {
+    let cancelled = false;
+
+    const run = async () => {
+      // Onboarding-complete alone isn't enough — that flag intentionally
+      // survives logout (so a later login can restore local data instantly).
+      // The actual gate is: is there a real, active Firebase session?
+      if (!isOnboardingComplete() || !user) {
         window.location.replace('/onboarding');
-      } else {
-        router.replace('/onboarding');
+        return;
       }
-      setAllowed(false);
-    } else {
-      setAllowed(true);
-    }
-    setChecked(true);
-  }, [router, user, authLoading]);
+
+      // Subscription gate — checked on every protected page load, not just
+      // once after signup, so an expiry that happens mid-session (or on a
+      // totally different day) is caught the next time the app is opened.
+      if (!isExemptFromSubscriptionGate(pathname) && supabase) {
+        const { data: profile } = await supabase
+          .from('reflex_profiles')
+          .select('subscription_until')
+          .eq('uid', user.uid)
+          .maybeSingle();
+
+        if (cancelled) return;
+
+        if (!isSubscriptionActive(profile?.subscription_until)) {
+          window.location.replace('/subscription');
+          return;
+        }
+      }
+
+      if (!cancelled) {
+        setAllowed(true);
+        setChecked(true);
+      }
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [router, user, authLoading, pathname]);
 
   if (!checked) {
     return (

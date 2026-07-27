@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyFirebaseIdToken } from '@/lib/server/firebase-admin';
 import { supabaseAdmin } from '@/lib/server/supabase-admin';
 import { getCurrentWeekId, isLowerBetter } from '@/lib/week-id';
+import { isSubscriptionActive } from '@/lib/subscription';
 
 export const runtime = 'nodejs';
 
@@ -30,6 +31,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ accepted: false, reason: 'Invalid or expired token.' }, { status: 401 });
   }
   const uid = decoded.uid;
+
+  const { data: profile } = await supabaseAdmin
+    .from('reflex_profiles')
+    .select('subscription_until')
+    .eq('uid', uid)
+    .maybeSingle();
+
+  if (!isSubscriptionActive(profile?.subscription_until)) {
+    return NextResponse.json(
+      { accepted: false, reason: 'Your subscription has ended. Upgrade to keep competing on the leaderboard.' },
+      { status: 402 }
+    );
+  }
 
   const body = await req.json().catch(() => ({}));
   const gameId = body.gameId;
