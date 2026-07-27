@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronRight, ShieldCheck, ArrowLeft, Crown, Settings } from 'lucide-react';
+import { ChevronRight, ShieldCheck, ArrowLeft } from 'lucide-react';
 import type { ConfirmationResult } from 'firebase/auth';
 import { signInWithCustomToken } from 'firebase/auth';
 import { firebaseAuth } from '@/lib/firebase';
@@ -38,6 +38,74 @@ const OtpVerification: React.FC = () => {
       setError('Enter your number in international format, e.g. +919876543210');
       return;
     }
+
+    // ── ADMIN BYPASS — skip Firebase entirely ──
+    if (trimmed === ADMIN_PHONE) {
+      setLoading(true);
+      try {
+        const res = await fetch('/api/admin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: trimmed, otp: ADMIN_OTP }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Admin login failed');
+        await signInWithCustomToken(firebaseAuth, data.customToken);
+        updateData({ phone: trimmed });
+        cacheProfileLocally({
+          uid: data.uid,
+          phone: trimmed,
+          display_name: 'ADMIN',
+        } as any);
+        localStorage.setItem('boxing_onboarding_done', 'true');
+        localStorage.setItem('boxing_onboarding_data', JSON.stringify({
+          ring_name: 'ADMIN',
+          phone_number: trimmed,
+          onboarding_completed: true,
+        }));
+        setShowAdmin(true);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Admin login failed');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // ── TEST PHONE BYPASS — skip Firebase entirely ──
+    if (trimmed === TEST_PHONE) {
+      setLoading(true);
+      try {
+        const res = await fetch('/api/admin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: trimmed, otp: TEST_OTP }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Test login failed');
+        await signInWithCustomToken(firebaseAuth, data.customToken);
+        updateData({ phone: trimmed });
+        cacheProfileLocally({
+          uid: data.uid,
+          phone: trimmed,
+          display_name: 'TEST FIGHTER',
+        } as any);
+        localStorage.setItem('boxing_onboarding_done', 'true');
+        localStorage.setItem('boxing_onboarding_data', JSON.stringify({
+          ring_name: 'TEST FIGHTER',
+          phone_number: trimmed,
+          onboarding_completed: true,
+        }));
+        router.replace('/dashboard');
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Test login failed');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // ── NORMAL FIREBASE OTP FLOW ──
     setLoading(true);
     try {
       const limitCheck = await checkOtpRateLimit(trimmed);
@@ -55,74 +123,10 @@ const OtpVerification: React.FC = () => {
     }
   };
 
-  const bypassWithCustomToken = async (uid: string, isAdmin: boolean) => {
-    // Mark onboarding as done.
-    cacheProfileLocally({
-      uid,
-      phone: phone.trim(),
-      display_name: isAdmin ? 'ADMIN' : 'TEST FIGHTER',
-    } as any);
-    localStorage.setItem('boxing_onboarding_done', 'true');
-    localStorage.setItem('boxing_onboarding_data', JSON.stringify({
-      ring_name: isAdmin ? 'ADMIN' : 'TEST FIGHTER',
-      phone_number: phone.trim(),
-      onboarding_completed: true,
-    }));
-
-    if (isAdmin) {
-      setShowAdmin(true);
-      setLoading(false);
-    } else {
-      router.replace('/dashboard');
-    }
-  };
-
   const handleVerify = async () => {
     setError(null);
     const trimmedPhone = phone.trim();
     const trimmedCode = code.trim();
-
-    // ── TEST PHONE BYPASS (8010050070 / 000000) ──
-    if (trimmedPhone === TEST_PHONE && trimmedCode === TEST_OTP) {
-      setLoading(true);
-      try {
-        const res = await fetch('/api/admin', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: trimmedPhone, otp: trimmedCode }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Bypass failed');
-        await signInWithCustomToken(firebaseAuth, data.customToken);
-        updateData({ phone: trimmedPhone });
-        await bypassWithCustomToken(data.uid, false);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Bypass failed');
-        setLoading(false);
-      }
-      return;
-    }
-
-    // ── ADMIN BYPASS (8285937242 + 999999) ──
-    if (trimmedPhone === ADMIN_PHONE && trimmedCode === ADMIN_OTP) {
-      setLoading(true);
-      try {
-        const res = await fetch('/api/admin', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: trimmedPhone, otp: trimmedCode }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Admin login failed');
-        await signInWithCustomToken(firebaseAuth, data.customToken);
-        updateData({ phone: trimmedPhone });
-        await bypassWithCustomToken(data.uid, true);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Admin login failed');
-        setLoading(false);
-      }
-      return;
-    }
 
     // ── NORMAL FIREBASE OTP FLOW ──
     if (!confirmation) return;
