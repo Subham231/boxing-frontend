@@ -79,11 +79,11 @@ export default function AnalyticsPage() {
     loadData();
   }, []);
 
-  // Prefer the live Supabase display name over the localStorage fallback
-  // once the profile loads.
+  // Supabase is the single source of truth once the profile has loaded —
+  // set unconditionally so a stale locally-cached name can't linger.
   useEffect(() => {
-    if (myProfile?.display_name) {
-      setPlayerName(myProfile.display_name.toUpperCase());
+    if (myProfile) {
+      setPlayerName((myProfile.display_name || 'FIGHTER').toUpperCase());
     }
   }, [myProfile]);
 

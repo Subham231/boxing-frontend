@@ -149,12 +149,13 @@ export default function DashboardPage() {
 
   }, []);
 
-  // Prefer the live Supabase display name over the localStorage fallback
-  // once the profile loads (e.g. right after a login restore, or after an
-  // edit made on the Settings page or another device).
+  // Supabase is the single source of truth for the display name once the
+  // profile has loaded — set unconditionally (even to the default) so a
+  // stale locally-cached name (e.g. from testing a different account on
+  // this device) can never linger just because Supabase happens to be null.
   useEffect(() => {
-    if (myProfile?.display_name) {
-      setRingName(myProfile.display_name.toUpperCase());
+    if (myProfile) {
+      setRingName((myProfile.display_name || 'FIGHTER').toUpperCase());
     }
   }, [myProfile]);
 

@@ -16,11 +16,13 @@ export function cacheProfileLocally(profile: UserProfile) {
     const existing = JSON.parse(localStorage.getItem(LOCAL_CACHE_KEY) || '{}');
     const merged = {
       ...existing,
-      ...(profile.display_name ? { ringName: profile.display_name, ring_name: profile.display_name } : {}),
-      ...(profile.age != null ? { age: profile.age } : {}),
-      ...(profile.profession ? { profession: profile.profession } : {}),
-      ...(profile.avatar_url ? { avatar_url: profile.avatar_url } : {}),
-      ...(profile.promise_word ? { promise: profile.promise_word, promise_trigger: profile.promise_word } : {}),
+      ringName: profile.display_name || 'FIGHTER',
+      ring_name: profile.display_name || 'FIGHTER',
+      age: profile.age ?? undefined,
+      profession: profile.profession || '',
+      avatar_url: profile.avatar_url || '',
+      promise: profile.promise_word || '',
+      promise_trigger: profile.promise_word || '',
     };
     localStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify(merged));
   } catch {

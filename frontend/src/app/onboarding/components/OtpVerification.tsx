@@ -15,7 +15,7 @@ const OtpVerification: React.FC = () => {
   const { data, updateData, nextStep, prevStep } = useOnboarding();
   const router = useRouter();
   const [step, setStep] = useState<'phone' | 'otp'>('phone');
-  const [phone, setPhone] = useState(data.phone?.startsWith('+') ? data.phone : '');
+  const [phone, setPhone] = useState(data.phone?.startsWith('+') ? data.phone : '+91');
   const [code, setCode] = useState('');
   const [confirmation, setConfirmation] = useState<ConfirmationResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -25,7 +25,7 @@ const OtpVerification: React.FC = () => {
     setError(null);
     const trimmed = phone.trim();
     if (!/^\+[1-9]\d{7,14}$/.test(trimmed)) {
-      setError('Enter your number in international format, e.g. +14155551234');
+      setError('Enter your number in international format, e.g. +919876543210');
       return;
     }
     setLoading(true);
@@ -121,7 +121,7 @@ const OtpVerification: React.FC = () => {
               type="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              placeholder="+14155551234"
+              placeholder="+919876543210"
               className="w-full bg-transparent border-b border-white/20 py-2 text-2xl font-bold outline-none focus:border-primary transition-all pb-1 tracking-tight"
               autoFocus
             />

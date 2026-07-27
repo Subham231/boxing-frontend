@@ -62,18 +62,26 @@ export default function SettingsPage() {
   const { profile: myProfile, updateProfile: updateMyProfile } = useMyProfile();
   const { user: fbUser } = useFirebaseUser();
 
-  // Keep the local display shape (ringName/promise/etc.) in sync whenever
-  // the authoritative Supabase profile loads or changes — this is what
-  // makes edits made on another device show up here too after a refresh.
+  // The authoritative source for these fields is Supabase, full stop.
+  // Local cache (the lazy initializer above) only exists so something
+  // reasonable renders for the instant before the Supabase fetch resolves.
+  // Once it resolves, every field is set from it UNCONDITIONALLY — even to
+  // an empty/default value if Supabase has null — otherwise a null field
+  // silently lets old cached data (e.g. left over from testing a different
+  // account in the same browser) keep showing forever, which is exactly
+  // the "Supabase says X but the app shows Y" bug this fixes.
   useEffect(() => {
     if (!myProfile) return;
     setProfileData((prev) => ({
       ...prev,
-      ...(myProfile.display_name ? { ringName: myProfile.display_name, ring_name: myProfile.display_name } : {}),
-      ...(myProfile.age != null ? { age: myProfile.age } : {}),
-      ...(myProfile.profession ? { profession: myProfile.profession } : {}),
-      ...(myProfile.avatar_url ? { avatar_url: myProfile.avatar_url } : {}),
-      ...(myProfile.promise_word ? { promise: myProfile.promise_word, promise_trigger: myProfile.promise_word } : {}),
+      ringName: myProfile.display_name || 'FIGHTER',
+      ring_name: myProfile.display_name || 'FIGHTER',
+      age: myProfile.age ?? undefined,
+      profession: myProfile.profession || '',
+      avatar_url: myProfile.avatar_url || '',
+      promise: myProfile.promise_word || '',
+      promise_trigger: myProfile.promise_word || '',
+      phone_number: myProfile.phone || prev.phone_number,
     }));
   }, [myProfile]);
 
