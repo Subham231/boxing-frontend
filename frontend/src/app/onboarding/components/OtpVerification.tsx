@@ -33,7 +33,7 @@ const OtpVerification: React.FC = () => {
 
   const handleSendOtp = async () => {
     setError(null);
-    const trimmed = phone.trim();
+    const trimmed = phone.replace(/\s+/g, '').trim();
     if (!/^\+[1-9]\d{7,14}$/.test(trimmed)) {
       setError('Enter your number in international format, e.g. +919876543210');
       return;
@@ -125,7 +125,7 @@ const OtpVerification: React.FC = () => {
 
   const handleVerify = async () => {
     setError(null);
-    const trimmedPhone = phone.trim();
+    const trimmedPhone = phone.replace(/\s+/g, '').trim();
     const trimmedCode = code.trim();
 
     // ── NORMAL FIREBASE OTP FLOW ──
