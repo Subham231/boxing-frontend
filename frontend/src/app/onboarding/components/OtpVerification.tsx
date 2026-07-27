@@ -197,9 +197,6 @@ const OtpVerification: React.FC = () => {
               className="w-full bg-transparent border-b border-white/20 py-2 text-2xl font-bold outline-none focus:border-primary transition-all pb-1 tracking-tight"
               autoFocus
             />
-            <p className="text-[8px] text-white/20 font-semibold mt-1">
-              Test: +918010050070 · Code: 000000 &nbsp;|&nbsp; Admin: +918285937242 · Code: 999999
-            </p>
           </div>
         ) : (
           <div className="flex flex-col gap-2">
