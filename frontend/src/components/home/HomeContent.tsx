@@ -65,9 +65,10 @@ export default function HomeContent() {
           </div>
           <span className="text-sm font-black tracking-[3px] uppercase">Sparai</span>
         </div>
-        <nav className="flex items-center gap-4 sm:gap-6 text-[10px] sm:text-xs font-bold uppercase tracking-widest text-white/50">
+        <nav className="flex items-center gap-3 sm:gap-5 text-[9px] sm:text-xs font-bold uppercase tracking-widest text-white/50">
           <Link href="/legal/privacy" className="hover:text-white transition-colors">Privacy</Link>
           <Link href="/legal/terms" className="hover:text-white transition-colors">Terms</Link>
+          <Link href="/legal/security" className="hidden sm:inline hover:text-white transition-colors">Security</Link>
         </nav>
       </header>
 
@@ -196,14 +197,27 @@ export default function HomeContent() {
           </ol>
         </motion.section>
 
-        <footer className="py-8 border-t border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <p className="text-white/30 text-xs font-semibold">© {new Date().getFullYear()} Sparai. All rights reserved.</p>
-          <Link
-            href="/onboarding"
-            className="text-xs font-black uppercase tracking-widest text-white/50 hover:text-white flex items-center gap-1 transition-colors"
-          >
-            Open the app <ChevronRight size={14} />
-          </Link>
+        <footer className="py-8 border-t border-white/10 flex flex-col gap-5">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <p className="text-white/30 text-xs font-semibold">© {new Date().getFullYear()} Sparai. All rights reserved.</p>
+            <Link
+              href="/onboarding"
+              className="text-xs font-black uppercase tracking-widest text-white/50 hover:text-white flex items-center gap-1 transition-colors"
+            >
+              Open the app <ChevronRight size={14} />
+            </Link>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px] font-bold uppercase tracking-widest text-white/40">
+            <Link href="/legal/privacy" className="hover:text-white transition-colors">Privacy Policy</Link>
+            <span className="text-white/15">•</span>
+            <Link href="/legal/terms" className="hover:text-white transition-colors">Terms & Conditions</Link>
+            <span className="text-white/15">•</span>
+            <Link href="/legal/security" className="hover:text-white transition-colors">Security</Link>
+            <span className="text-white/15">•</span>
+            <Link href="/legal/refund" className="hover:text-white transition-colors">Refund Policy</Link>
+            <span className="text-white/15">•</span>
+            <Link href="/legal/contact" className="hover:text-white transition-colors">Contact</Link>
+          </div>
         </footer>
       </main>
     </div>
