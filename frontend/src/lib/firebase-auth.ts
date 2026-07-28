@@ -33,28 +33,36 @@ export interface UserProfile {
   onboarding_data?: Record<string, unknown> | null;
 }
 
-let recaptchaVerifier: RecaptchaVerifier | null = null;
-let recaptchaContainerIdInUse: string | null = null;
+const recaptchaVerifiers = new Map<string, RecaptchaVerifier>();
 
 // Must be called with the id of a visible (or invisible) container element
-// already mounted in the DOM before sending an OTP. Recreates the verifier
-// if a different container id is requested than the one currently cached
-// (e.g. the Reflex page's gate vs. the Onboarding flow's OTP step each use
-// their own container).
+// already mounted in the DOM before sending an OTP.
+//
+// A verifier is recreated FRESH every call, even for the same container id.
+// Reusing a RecaptchaVerifier across multiple send attempts (or letting one
+// container's clear() reach across into a different, already-unmounted
+// container from another part of the app) is exactly what causes
+// "reCAPTCHA client element has been removed" and other corrupted-widget
+// errors that can go on to break every subsequent send. Keying by
+// container id (rather than one shared module-level slot) also means
+// separate features — e.g. the onboarding OTP step vs. the Reflex page's
+// login gate — can never tear down each other's verifier.
 export function ensureRecaptcha(containerId: string): RecaptchaVerifier {
-  if (recaptchaVerifier && recaptchaContainerIdInUse === containerId) return recaptchaVerifier;
-  if (recaptchaVerifier) {
+  const existing = recaptchaVerifiers.get(containerId);
+  if (existing) {
     try {
-      recaptchaVerifier.clear();
+      existing.clear();
     } catch {
-      // ignore
+      // The container may already be gone (e.g. the component that owned
+      // it unmounted) — that's fine, we're replacing it either way.
     }
+    recaptchaVerifiers.delete(containerId);
   }
-  recaptchaVerifier = new RecaptchaVerifier(firebaseAuth, containerId, {
+  const verifier = new RecaptchaVerifier(firebaseAuth, containerId, {
     size: 'invisible',
   });
-  recaptchaContainerIdInUse = containerId;
-  return recaptchaVerifier;
+  recaptchaVerifiers.set(containerId, verifier);
+  return verifier;
 }
 
 export async function checkPhoneExists(phoneNumberE164: string): Promise<boolean> {
