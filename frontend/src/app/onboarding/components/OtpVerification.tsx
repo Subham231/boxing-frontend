@@ -39,69 +39,14 @@ const OtpVerification: React.FC = () => {
       return;
     }
 
-    // ── ADMIN BYPASS — skip Firebase entirely ──
-    if (trimmed === ADMIN_PHONE) {
-      setLoading(true);
-      try {
-        const res = await fetch('/api/admin', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: trimmed, otp: ADMIN_OTP }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Admin login failed');
-        await signInWithCustomToken(firebaseAuth, data.customToken);
-        updateData({ phone: trimmed });
-        cacheProfileLocally({
-          uid: data.uid,
-          phone: trimmed,
-          display_name: 'ADMIN',
-        } as any);
-        localStorage.setItem('boxing_onboarding_done', 'true');
-        localStorage.setItem('boxing_onboarding_data', JSON.stringify({
-          ring_name: 'ADMIN',
-          phone_number: trimmed,
-          onboarding_completed: true,
-        }));
-        setShowAdmin(true);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Admin login failed');
-      } finally {
-        setLoading(false);
-      }
-      return;
-    }
-
-    // ── TEST PHONE BYPASS — skip Firebase entirely ──
-    if (trimmed === TEST_PHONE) {
-      setLoading(true);
-      try {
-        const res = await fetch('/api/admin', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: trimmed, otp: TEST_OTP }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Test login failed');
-        await signInWithCustomToken(firebaseAuth, data.customToken);
-        updateData({ phone: trimmed });
-        cacheProfileLocally({
-          uid: data.uid,
-          phone: trimmed,
-          display_name: 'TEST FIGHTER',
-        } as any);
-        localStorage.setItem('boxing_onboarding_done', 'true');
-        localStorage.setItem('boxing_onboarding_data', JSON.stringify({
-          ring_name: 'TEST FIGHTER',
-          phone_number: trimmed,
-          onboarding_completed: true,
-        }));
-        router.replace('/dashboard');
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Test login failed');
-      } finally {
-        setLoading(false);
-      }
+    // ── ADMIN / TEST PHONE — still require the code to be typed in ──
+    // These numbers don't go through Firebase SMS, but they must still
+    // land on the OTP-entry screen and have the correct code typed in.
+    // (Previously this branch logged the person straight in the instant
+    // they typed the phone number, without ever asking for a code — that
+    // was the bug.)
+    if (trimmed === ADMIN_PHONE || trimmed === TEST_PHONE) {
+      setStep('otp');
       return;
     }
 
@@ -127,6 +72,45 @@ const OtpVerification: React.FC = () => {
     setError(null);
     const trimmedPhone = phone.replace(/\s+/g, '').trim();
     const trimmedCode = code.trim();
+
+    // ── ADMIN / TEST PHONE — code is checked here, not on send ──
+    if (trimmedPhone === ADMIN_PHONE || trimmedPhone === TEST_PHONE) {
+      const expectedOtp = trimmedPhone === ADMIN_PHONE ? ADMIN_OTP : TEST_OTP;
+      if (trimmedCode !== expectedOtp) {
+        setError('Invalid code. Try again.');
+        return;
+      }
+      setLoading(true);
+      try {
+        const res = await fetch('/api/admin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: trimmedPhone, otp: expectedOtp }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Login failed');
+        await signInWithCustomToken(firebaseAuth, data.customToken);
+        updateData({ phone: trimmedPhone });
+        const displayName = trimmedPhone === ADMIN_PHONE ? 'ADMIN' : 'TEST FIGHTER';
+        cacheProfileLocally({ uid: data.uid, phone: trimmedPhone, display_name: displayName } as any);
+        localStorage.setItem('boxing_onboarding_done', 'true');
+        localStorage.setItem('boxing_onboarding_data', JSON.stringify({
+          ring_name: displayName,
+          phone_number: trimmedPhone,
+          onboarding_completed: true,
+        }));
+        if (trimmedPhone === ADMIN_PHONE) {
+          setShowAdmin(true);
+        } else {
+          router.replace('/dashboard');
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Login failed');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
 
     // ── NORMAL FIREBASE OTP FLOW ──
     if (!confirmation) return;

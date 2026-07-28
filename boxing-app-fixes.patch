@@ -1,0 +1,207 @@
+diff --git a/frontend/src/app/(app)/settings/page.tsx b/frontend/src/app/(app)/settings/page.tsx
+index 090ac97..a98a026 100644
+--- a/frontend/src/app/(app)/settings/page.tsx
++++ b/frontend/src/app/(app)/settings/page.tsx
+@@ -59,7 +59,7 @@ export default function SettingsPage() {
+       return {};
+     }
+   });
+-  const { profile: myProfile, updateProfile: updateMyProfile } = useMyProfile();
++  const { profile: myProfile, error: myProfileError, updateProfile: updateMyProfile } = useMyProfile();
+   const { user: fbUser } = useFirebaseUser();
+ 
+   // The authoritative source for these fields is Supabase, full stop.
+@@ -388,6 +388,13 @@ Keep it under 120 words. Focus on their discipline and the evolution of their po
+         </button>
+       </header>
+ 
++      {myProfileError && (
++        <div className="flex items-center gap-2 px-4 py-3 rounded-xl border border-red-500/30 bg-red-500/10 text-red-300 text-xs font-semibold">
++          <AlertTriangle className="w-4 h-4 shrink-0" />
++          Couldn&apos;t load your profile from the server ({myProfileError}). Showing locally cached data — pull to refresh or check your connection.
++        </div>
++      )}
++
+       {/* Profile Details Block */}
+       <GlassCard className="p-6 border-white/5 bg-black/40 flex flex-col gap-4">
+         {/* Ring Name Section */}
+diff --git a/frontend/src/app/api/reflex/ensure-profile/route.ts b/frontend/src/app/api/reflex/ensure-profile/route.ts
+index bb98d5c..cb306dd 100644
+--- a/frontend/src/app/api/reflex/ensure-profile/route.ts
++++ b/frontend/src/app/api/reflex/ensure-profile/route.ts
+@@ -33,6 +33,21 @@ export async function POST(req: NextRequest) {
+     return NextResponse.json({ profile: existing, isNew: false });
+   }
+ 
++  // Guard against creating a second row for a phone number that's already
++  // registered under a different uid (this is what caused the same number
++  // to end up registered twice). If a row already exists for this phone,
++  // return that one instead of inserting a duplicate.
++  if (phone) {
++    const { data: byPhone } = await supabaseAdmin
++      .from('reflex_profiles')
++      .select('*')
++      .eq('phone', phone)
++      .maybeSingle();
++    if (byPhone) {
++      return NextResponse.json({ profile: byPhone, isNew: false });
++    }
++  }
++
+   // Try a few times in case of a (rare) referral_code collision.
+   for (let attempt = 0; attempt < 5; attempt++) {
+     const code = generateReferralCode();
+diff --git a/frontend/src/app/onboarding/components/OtpVerification.tsx b/frontend/src/app/onboarding/components/OtpVerification.tsx
+index fa4da32..691a6af 100644
+--- a/frontend/src/app/onboarding/components/OtpVerification.tsx
++++ b/frontend/src/app/onboarding/components/OtpVerification.tsx
+@@ -39,69 +39,14 @@ const OtpVerification: React.FC = () => {
+       return;
+     }
+ 
+-    // ── ADMIN BYPASS — skip Firebase entirely ──
+-    if (trimmed === ADMIN_PHONE) {
+-      setLoading(true);
+-      try {
+-        const res = await fetch('/api/admin', {
+-          method: 'POST',
+-          headers: { 'Content-Type': 'application/json' },
+-          body: JSON.stringify({ phone: trimmed, otp: ADMIN_OTP }),
+-        });
+-        const data = await res.json();
+-        if (!res.ok) throw new Error(data.error || 'Admin login failed');
+-        await signInWithCustomToken(firebaseAuth, data.customToken);
+-        updateData({ phone: trimmed });
+-        cacheProfileLocally({
+-          uid: data.uid,
+-          phone: trimmed,
+-          display_name: 'ADMIN',
+-        } as any);
+-        localStorage.setItem('boxing_onboarding_done', 'true');
+-        localStorage.setItem('boxing_onboarding_data', JSON.stringify({
+-          ring_name: 'ADMIN',
+-          phone_number: trimmed,
+-          onboarding_completed: true,
+-        }));
+-        setShowAdmin(true);
+-      } catch (e) {
+-        setError(e instanceof Error ? e.message : 'Admin login failed');
+-      } finally {
+-        setLoading(false);
+-      }
+-      return;
+-    }
+-
+-    // ── TEST PHONE BYPASS — skip Firebase entirely ──
+-    if (trimmed === TEST_PHONE) {
+-      setLoading(true);
+-      try {
+-        const res = await fetch('/api/admin', {
+-          method: 'POST',
+-          headers: { 'Content-Type': 'application/json' },
+-          body: JSON.stringify({ phone: trimmed, otp: TEST_OTP }),
+-        });
+-        const data = await res.json();
+-        if (!res.ok) throw new Error(data.error || 'Test login failed');
+-        await signInWithCustomToken(firebaseAuth, data.customToken);
+-        updateData({ phone: trimmed });
+-        cacheProfileLocally({
+-          uid: data.uid,
+-          phone: trimmed,
+-          display_name: 'TEST FIGHTER',
+-        } as any);
+-        localStorage.setItem('boxing_onboarding_done', 'true');
+-        localStorage.setItem('boxing_onboarding_data', JSON.stringify({
+-          ring_name: 'TEST FIGHTER',
+-          phone_number: trimmed,
+-          onboarding_completed: true,
+-        }));
+-        router.replace('/dashboard');
+-      } catch (e) {
+-        setError(e instanceof Error ? e.message : 'Test login failed');
+-      } finally {
+-        setLoading(false);
+-      }
++    // ── ADMIN / TEST PHONE — still require the code to be typed in ──
++    // These numbers don't go through Firebase SMS, but they must still
++    // land on the OTP-entry screen and have the correct code typed in.
++    // (Previously this branch logged the person straight in the instant
++    // they typed the phone number, without ever asking for a code — that
++    // was the bug.)
++    if (trimmed === ADMIN_PHONE || trimmed === TEST_PHONE) {
++      setStep('otp');
+       return;
+     }
+ 
+@@ -128,6 +73,45 @@ const OtpVerification: React.FC = () => {
+     const trimmedPhone = phone.replace(/\s+/g, '').trim();
+     const trimmedCode = code.trim();
+ 
++    // ── ADMIN / TEST PHONE — code is checked here, not on send ──
++    if (trimmedPhone === ADMIN_PHONE || trimmedPhone === TEST_PHONE) {
++      const expectedOtp = trimmedPhone === ADMIN_PHONE ? ADMIN_OTP : TEST_OTP;
++      if (trimmedCode !== expectedOtp) {
++        setError('Invalid code. Try again.');
++        return;
++      }
++      setLoading(true);
++      try {
++        const res = await fetch('/api/admin', {
++          method: 'POST',
++          headers: { 'Content-Type': 'application/json' },
++          body: JSON.stringify({ phone: trimmedPhone, otp: expectedOtp }),
++        });
++        const data = await res.json();
++        if (!res.ok) throw new Error(data.error || 'Login failed');
++        await signInWithCustomToken(firebaseAuth, data.customToken);
++        updateData({ phone: trimmedPhone });
++        const displayName = trimmedPhone === ADMIN_PHONE ? 'ADMIN' : 'TEST FIGHTER';
++        cacheProfileLocally({ uid: data.uid, phone: trimmedPhone, display_name: displayName } as any);
++        localStorage.setItem('boxing_onboarding_done', 'true');
++        localStorage.setItem('boxing_onboarding_data', JSON.stringify({
++          ring_name: displayName,
++          phone_number: trimmedPhone,
++          onboarding_completed: true,
++        }));
++        if (trimmedPhone === ADMIN_PHONE) {
++          setShowAdmin(true);
++        } else {
++          router.replace('/dashboard');
++        }
++      } catch (e) {
++        setError(e instanceof Error ? e.message : 'Login failed');
++      } finally {
++        setLoading(false);
++      }
++      return;
++    }
++
+     // ── NORMAL FIREBASE OTP FLOW ──
+     if (!confirmation) return;
+     setLoading(true);
+diff --git a/frontend/src/app/onboarding/components/Welcome.tsx b/frontend/src/app/onboarding/components/Welcome.tsx
+index 014bed4..aff6b5b 100644
+--- a/frontend/src/app/onboarding/components/Welcome.tsx
++++ b/frontend/src/app/onboarding/components/Welcome.tsx
+@@ -77,16 +77,16 @@ const Welcome: React.FC = () => {
+                 className="relative z-10 mt-10"
+             >
+                 <button
+-                    onClick={nextStep}
+-                    className="btn-primary w-full h-16 flex items-center justify-center gap-2 shadow-[0_10px_40px_rgba(226,255,59,0.25)]"
++                    onClick={() => goToStep(OTP_STEP)}
++                    className="w-full h-16 flex items-center justify-center gap-2 rounded-2xl bg-[#22c55e] hover:bg-[#16a34a] text-black font-black uppercase tracking-widest text-sm shadow-[0_10px_40px_rgba(34,197,94,0.35)] transition-colors"
+                 >
+-                    START MY JOURNEY <ChevronRight size={20} />
++                    LOG IN <ChevronRight size={20} />
+                 </button>
+                 <button
+-                    onClick={() => goToStep(OTP_STEP)}
++                    onClick={nextStep}
+                     className="w-full h-12 mt-3 text-[11px] font-black text-white/50 hover:text-white uppercase tracking-widest transition-colors"
+                 >
+-                    Already have an account? Login
++                    New here? Start my journey
+                 </button>
+             </motion.footer>
+         </div>

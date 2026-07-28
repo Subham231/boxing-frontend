@@ -33,6 +33,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ profile: existing, isNew: false });
   }
 
+  // Guard against creating a second row for a phone number that's already
+  // registered under a different uid (this is what caused the same number
+  // to end up registered twice). If a row already exists for this phone,
+  // return that one instead of inserting a duplicate.
+  if (phone) {
+    const { data: byPhone } = await supabaseAdmin
+      .from('reflex_profiles')
+      .select('*')
+      .eq('phone', phone)
+      .maybeSingle();
+    if (byPhone) {
+      return NextResponse.json({ profile: byPhone, isNew: false });
+    }
+  }
+
   // Try a few times in case of a (rare) referral_code collision.
   for (let attempt = 0; attempt < 5; attempt++) {
     const code = generateReferralCode();

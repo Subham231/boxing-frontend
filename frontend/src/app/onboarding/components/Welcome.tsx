@@ -77,16 +77,16 @@ const Welcome: React.FC = () => {
                 className="relative z-10 mt-10"
             >
                 <button
-                    onClick={nextStep}
-                    className="btn-primary w-full h-16 flex items-center justify-center gap-2 shadow-[0_10px_40px_rgba(226,255,59,0.25)]"
+                    onClick={() => goToStep(OTP_STEP)}
+                    className="w-full h-16 flex items-center justify-center gap-2 rounded-2xl bg-[#22c55e] hover:bg-[#16a34a] text-black font-black uppercase tracking-widest text-sm shadow-[0_10px_40px_rgba(34,197,94,0.35)] transition-colors"
                 >
-                    START MY JOURNEY <ChevronRight size={20} />
+                    LOG IN <ChevronRight size={20} />
                 </button>
                 <button
-                    onClick={() => goToStep(OTP_STEP)}
+                    onClick={nextStep}
                     className="w-full h-12 mt-3 text-[11px] font-black text-white/50 hover:text-white uppercase tracking-widest transition-colors"
                 >
-                    Already have an account? Login
+                    New here? Start my journey
                 </button>
             </motion.footer>
         </div>

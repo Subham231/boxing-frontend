@@ -59,7 +59,7 @@ export default function SettingsPage() {
       return {};
     }
   });
-  const { profile: myProfile, updateProfile: updateMyProfile } = useMyProfile();
+  const { profile: myProfile, error: myProfileError, updateProfile: updateMyProfile } = useMyProfile();
   const { user: fbUser } = useFirebaseUser();
 
   // The authoritative source for these fields is Supabase, full stop.
@@ -387,6 +387,13 @@ Keep it under 120 words. Focus on their discipline and the evolution of their po
           LOGOUT
         </button>
       </header>
+
+      {myProfileError && (
+        <div className="flex items-center gap-2 px-4 py-3 rounded-xl border border-red-500/30 bg-red-500/10 text-red-300 text-xs font-semibold">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          Couldn&apos;t load your profile from the server ({myProfileError}). Showing locally cached data — pull to refresh or check your connection.
+        </div>
+      )}
 
       {/* Profile Details Block */}
       <GlassCard className="p-6 border-white/5 bg-black/40 flex flex-col gap-4">
