@@ -45,6 +45,7 @@ interface OnboardingContextType {
     syncToSupabase: () => Promise<void>;
     nextStep: () => void;
     prevStep: () => void;
+    goToStep: (step: number) => void;
     currentStep: number;
     totalSteps: number;
     isLoaded: boolean;
@@ -181,6 +182,15 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1));
 
+    // Used by the "Already have an account? Login" shortcut on the Welcome
+    // screen — jumps straight to the OTP verification step (which already
+    // correctly detects and restores an existing account) instead of
+    // running a second, separate auth implementation.
+    const goToStep = (step: number) => {
+        persistProgress();
+        setCurrentStep(Math.max(1, Math.min(step, totalSteps + 1)));
+    };
+
     const syncToSupabase = async () => {
         if (typeof window === 'undefined') return;
         const payload = {
@@ -211,7 +221,7 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     return (
         <OnboardingContext.Provider
-            value={{ data, updateData, persistProgress, syncToSupabase, nextStep, prevStep, currentStep, totalSteps, isLoaded }}
+            value={{ data, updateData, persistProgress, syncToSupabase, nextStep, prevStep, goToStep, currentStep, totalSteps, isLoaded }}
         >
             {children}
         </OnboardingContext.Provider>

@@ -6,7 +6,12 @@ import { ChevronRight, Zap } from 'lucide-react';
 import { useOnboarding } from '@/context/OnboardingContext';
 
 const Welcome: React.FC = () => {
-    const { nextStep } = useOnboarding();
+    const { nextStep, goToStep, totalSteps } = useOnboarding();
+
+    // Screen order (see onboarding/page.tsx): ... PromiseStep,
+    // OtpVerification, SubscriptionOffer, FinalPromise — OTP is always
+    // third from the end.
+    const OTP_STEP = totalSteps - 2;
 
     return (
         <div className="relative flex flex-col min-h-[85vh] justify-between py-4 overflow-hidden">
@@ -76,6 +81,12 @@ const Welcome: React.FC = () => {
                     className="btn-primary w-full h-16 flex items-center justify-center gap-2 shadow-[0_10px_40px_rgba(226,255,59,0.25)]"
                 >
                     START MY JOURNEY <ChevronRight size={20} />
+                </button>
+                <button
+                    onClick={() => goToStep(OTP_STEP)}
+                    className="w-full h-12 mt-3 text-[11px] font-black text-white/50 hover:text-white uppercase tracking-widest transition-colors"
+                >
+                    Already have an account? Login
                 </button>
             </motion.footer>
         </div>
