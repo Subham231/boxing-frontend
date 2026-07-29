@@ -138,6 +138,51 @@ const DEEP_DIVE_TABS = [
   },
 ];
 
+// One row per major app feature — icon-based "visual" card + written
+// description, rendered one after another below the two previews above.
+const FEATURE_SHOWCASE = [
+  {
+    id: 'analysis', icon: Video, title: 'AI Video Analysis',
+    description: 'Record a round on your phone and Sparai breaks down your form — punch accuracy, technique score, and exactly what to fix, with your score tracked session over session.',
+    stat: { label: 'Last Session', value: '87/100', sub: '+6% technique' },
+  },
+  {
+    id: 'planner', icon: CalendarDays, title: 'Tactical Planner',
+    description: "A weekly training protocol built around your goals and experience level — today's workout, this week's roadmap, and recovery days all mapped out for you.",
+    stat: { label: 'This Week', value: 'Day 4 of 6', sub: 'Week 3 · Intermediate' },
+  },
+  {
+    id: 'grind', icon: Flame, title: 'Daily Grind',
+    description: "Every exercise for today broken into sets, reps, and rest time — check them off as you go and watch your completion bar fill in real time.",
+    stat: { label: 'Today', value: '2 of 6 done', sub: '32 min estimated' },
+  },
+  {
+    id: 'guru', icon: GraduationCap, title: 'Guru Skill Lessons',
+    description: 'Bite-sized technique lessons — slips, counters, footwork, body shots — that unlock as you progress, with a clear path from beginner fundamentals to advanced combos.',
+    stat: { label: 'Current Skill', value: '64% complete', sub: 'Slip & Counter' },
+  },
+  {
+    id: 'reflex', icon: Activity, title: 'Reflex Enhancer',
+    description: 'Fast-paced reaction drills that sharpen how quickly you see and respond — your best time, weekly average, and rank against other fighters are all tracked automatically.',
+    stat: { label: 'Personal Best', value: '198 ms', sub: 'Rank #12 this week' },
+  },
+  {
+    id: 'leaderboard', icon: Trophy, title: 'Leaderboards',
+    description: 'Separate rankings for overall training, reflex speed, and combo mastery, updated live each week — see exactly where you stand and who to chase.',
+    stat: { label: 'Fighter Rank', value: '#47', sub: 'Season 4' },
+  },
+  {
+    id: 'analytics', icon: BarChart3, title: 'Performance Analytics',
+    description: "Weekly and monthly graphs of your training time, streaks, and analysis scores — so improvement isn't just a feeling, it's a number you can see move.",
+    stat: { label: 'Performance Score', value: '87/100', sub: '+14% this week' },
+  },
+  {
+    id: 'subscription-feature', icon: Crown, title: 'Elite Subscription',
+    description: 'Unlock unlimited AI analyses, unlimited weekly planner regenerations, and premium Guru skills with an Elite membership — cancel anytime.',
+    stat: { label: 'Elite Plan', value: 'Unlimited usage', sub: '18 days remaining' },
+  },
+];
+
 function Ring({ pct, strokeClass }: { pct: number; strokeClass: string }) {
   const r = 24;
   const c = 2 * Math.PI * r;
@@ -211,6 +256,36 @@ function DeepDiveTabs() {
         </div>
       </motion.div>
     </div>
+  );
+}
+
+function FeatureRow({ feature, reversed }: { feature: typeof FEATURE_SHOWCASE[number]; reversed: boolean }) {
+  const Icon = feature.icon;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-60px' }}
+      transition={{ duration: 0.6 }}
+      className={`flex flex-col ${reversed ? 'sm:flex-row-reverse' : 'sm:flex-row'} items-center gap-5 sm:gap-8 py-6 border-b border-white/5 last:border-b-0`}
+    >
+      {/* Visual */}
+      <div className="w-full sm:w-[220px] shrink-0">
+        <div className="rounded-[22px] p-6 bg-white/[0.04] border border-white/10 flex flex-col items-center text-center gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+            <Icon className="w-6 h-6 text-primary" />
+          </div>
+          <p className="text-2xl font-black text-primary leading-none">{feature.stat.value}</p>
+          <p className="text-[9px] font-bold uppercase tracking-widest text-white/40">{feature.stat.label}</p>
+          <p className="text-[10px] font-semibold text-white/50">{feature.stat.sub}</p>
+        </div>
+      </div>
+      {/* Text */}
+      <div className="flex-1">
+        <h3 className="text-lg sm:text-xl font-black uppercase tracking-tight mb-2">{feature.title}</h3>
+        <p className="text-white/60 text-sm leading-relaxed font-medium">{feature.description}</p>
+      </div>
+    </motion.div>
   );
 }
 
@@ -519,6 +594,29 @@ export default function HomeContent() {
             </span>
           </div>
           <DeepDiveTabs />
+        </motion.section>
+
+        {/* Feature-by-feature showcase — one section per app feature,
+            visual + written description, alternating sides */}
+        <motion.section
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, margin: '-60px' }}
+          variants={fadeUp}
+          transition={{ duration: 0.6 }}
+          className="pb-10"
+        >
+          <h2 className="text-lg sm:text-xl font-black uppercase tracking-tight mb-2">
+            Everything inside Sparai
+          </h2>
+          <p className="text-white/50 text-xs sm:text-sm font-medium mb-2 max-w-2xl">
+            A closer look at each part of the app.
+          </p>
+          <div>
+            {FEATURE_SHOWCASE.map((feature, i) => (
+              <FeatureRow key={feature.id} feature={feature} reversed={i % 2 === 1} />
+            ))}
+          </div>
         </motion.section>
 
         {/* Data transparency — required for Google OAuth verification */}
