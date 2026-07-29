@@ -106,7 +106,10 @@ export default function HomeContent() {
           <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
             <Zap className="w-4 h-4 text-primary" />
           </div>
-          <span className="text-sm font-black tracking-[3px] uppercase">Sparai</span>
+          <div className="flex flex-col leading-none">
+            <span className="text-sm font-black tracking-[3px] uppercase">Sparai</span>
+            <span className="text-[8px] font-bold uppercase tracking-widest text-white/40 hidden sm:block">AI Boxing Coach App</span>
+          </div>
         </div>
         <nav className="flex items-center gap-3 sm:gap-5 text-[9px] sm:text-xs font-bold uppercase tracking-widest text-white/50">
           <Link href="/legal/privacy" className="hover:text-white transition-colors">Privacy</Link>
@@ -131,12 +134,16 @@ export default function HomeContent() {
             Sparai is your <span className="text-primary">AI boxing coach.</span>
           </h1>
           <p className="text-white/60 text-sm sm:text-base md:text-lg leading-relaxed max-w-2xl font-medium">
-            One app for your training program, live form analysis, reflex drills,
-            streaks, and rank — built to feel like a premium sports command center,
-            not a to-do list.
+            <strong className="text-white">Sparai</strong> is a mobile web app that gives boxers a
+            personalized training program, real-time AI feedback on punch form using your
+            phone&apos;s camera, reflex-speed drills, and weekly progress tracking with streaks
+            and a leaderboard — all in one place.
           </p>
-          <div className="w-full sm:w-auto">
+          <div className="w-full sm:w-auto flex flex-col sm:flex-row items-start sm:items-center gap-3">
             <HomeCta />
+            <Link href="/legal/privacy" className="text-[11px] font-bold text-white/40 hover:text-white/70 underline underline-offset-2 transition-colors">
+              Read our Privacy Policy
+            </Link>
           </div>
         </motion.section>
 
@@ -245,6 +252,24 @@ export default function HomeContent() {
                 ))}
               </div>
 
+              {/* AI Analysis + Reflex preview */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-[20px] p-3 bg-white/[0.04] border border-white/10 flex flex-col gap-1.5">
+                  <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-white/50 mb-0.5">
+                    <Video className="w-3.5 h-3.5 text-primary" /> AI Analysis
+                  </div>
+                  <p className="text-lg font-black text-primary leading-none">87<span className="text-[9px] text-white/40 font-bold"> /100</span></p>
+                  <p className="text-[8px] font-bold uppercase tracking-wide text-white/40">Last session · +6% technique</p>
+                </div>
+                <div className="rounded-[20px] p-3 bg-white/[0.04] border border-white/10 flex flex-col gap-1.5">
+                  <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-white/50 mb-0.5">
+                    <Activity className="w-3.5 h-3.5 text-primary" /> Reflex
+                  </div>
+                  <p className="text-lg font-black text-primary leading-none">214<span className="text-[9px] text-white/40 font-bold"> ms</span></p>
+                  <p className="text-[8px] font-bold uppercase tracking-wide text-white/40">Best time · Rank #12 weekly</p>
+                </div>
+              </div>
+
               {/* Weekly progress rings */}
               <div className="rounded-[20px] p-4 bg-white/[0.04] border border-white/10 flex items-center justify-around">
                 {WEEKLY_RINGS.map((ring) => (
@@ -302,6 +327,20 @@ export default function HomeContent() {
                 </div>
               </div>
 
+              {/* Achievement */}
+              <div className="rounded-[20px] p-4 bg-white/[0.04] border border-white/10 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center text-base">
+                    🏅
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-white/50 mb-0.5">Latest Badge</p>
+                    <p className="text-[11px] font-bold text-white/80">7 Day Streak</p>
+                  </div>
+                </div>
+                <span className="text-[9px] font-black uppercase tracking-widest text-primary">View All</span>
+              </div>
+
               {/* Subscription card */}
               <div className="rounded-[20px] p-4 bg-gradient-to-br from-primary/10 to-transparent border border-primary/20 flex items-center justify-between">
                 <div>
@@ -312,6 +351,39 @@ export default function HomeContent() {
                   Manage
                 </button>
               </div>
+            </div>
+          </div>
+        </motion.section>
+
+        {/* Data transparency — required for Google OAuth verification */}
+        <motion.section
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, margin: '-60px' }}
+          variants={fadeUp}
+          transition={{ duration: 0.6 }}
+          className="py-8 border-t border-white/10"
+        >
+          <h2 className="text-lg sm:text-xl font-black uppercase tracking-tight mb-2">
+            What data Sparai uses, and why
+          </h2>
+          <p className="text-white/50 text-xs sm:text-sm font-medium mb-4 max-w-2xl">
+            We only ask for what&apos;s needed to run the app. Here&apos;s exactly what we collect
+            and what it&apos;s used for — full detail is in our{' '}
+            <Link href="/legal/privacy" className="text-primary underline underline-offset-2">Privacy Policy</Link>.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="rounded-xl bg-white/[0.03] border border-white/5 p-4">
+              <p className="text-xs font-black uppercase tracking-wide text-primary mb-1.5">Phone Number</p>
+              <p className="text-[11px] text-white/60 font-medium leading-relaxed">Used only to verify your identity via one-time code (Firebase Phone Auth). No password is ever created or stored.</p>
+            </div>
+            <div className="rounded-xl bg-white/[0.03] border border-white/5 p-4">
+              <p className="text-xs font-black uppercase tracking-wide text-primary mb-1.5">Training Data</p>
+              <p className="text-[11px] text-white/60 font-medium leading-relaxed">Your goals, experience level, and progress are used to personalize your training program and track streaks.</p>
+            </div>
+            <div className="rounded-xl bg-white/[0.03] border border-white/5 p-4">
+              <p className="text-xs font-black uppercase tracking-wide text-primary mb-1.5">Camera (Optional)</p>
+              <p className="text-[11px] text-white/60 font-medium leading-relaxed">Used only during an active AI Form Analysis session to check your technique. Never recorded without your action.</p>
             </div>
           </div>
         </motion.section>
