@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import {
@@ -50,6 +50,94 @@ const MINI_STATS = [
   { label: 'Punch Trend', value: '↑ Sharper' },
 ];
 
+// Static demo content for the tabbed "Feature Deep Dive" section — every
+// feature gets its own dedicated tab per the spec, but data here is
+// illustrative/fixed since this is the public marketing page (no login).
+const DEEP_DIVE_TABS = [
+  {
+    id: 'analysis', label: 'AI Analysis', icon: Video,
+    stats: [
+      { k: 'Remaining Today', v: '3 of 5' },
+      { k: 'Last Score', v: '87 / 100' },
+      { k: 'Accuracy', v: '91%' },
+      { k: 'Technique', v: '83%' },
+      { k: 'Weekly Improvement', v: '+6%' },
+    ],
+    ctas: ['Analyze Video', 'View Previous Sessions'],
+  },
+  {
+    id: 'planner', label: 'Planner', icon: CalendarDays,
+    stats: [
+      { k: 'Protocol', v: 'Speed & Power' },
+      { k: 'Week / Day', v: 'Week 3 · Day 4' },
+      { k: 'Difficulty', v: 'Intermediate' },
+      { k: 'Weekly Progress', v: '4 of 6 sessions' },
+      { k: 'Generations Left', v: '2 this week' },
+    ],
+    ctas: ['Continue Workout', 'Open Full Planner'],
+  },
+  {
+    id: 'grind', label: 'Daily Grind', icon: Flame,
+    stats: [
+      { k: "Today's Exercises", v: '6 total' },
+      { k: 'Completed', v: '2 of 6' },
+      { k: 'Est. Duration', v: '32 min' },
+      { k: 'Rest Between Sets', v: '45 sec' },
+    ],
+    ctas: ["Start Today's Workout", 'View All Exercises'],
+  },
+  {
+    id: 'guru', label: 'Guru', icon: GraduationCap,
+    stats: [
+      { k: 'Current Skill', v: 'Slip & Counter' },
+      { k: 'Skill Progress', v: '64%' },
+      { k: 'Skills Completed', v: '11 of 24' },
+      { k: 'Recommended Next', v: 'Body Shot Setups' },
+    ],
+    ctas: ['Continue Learning', 'Browse Skills'],
+  },
+  {
+    id: 'reflex', label: 'Reflex', icon: Activity,
+    stats: [
+      { k: 'Personal Best', v: '198 ms' },
+      { k: 'Weekly Best', v: '214 ms' },
+      { k: 'Weekly Rank', v: '#12' },
+      { k: 'Games Played', v: '37' },
+    ],
+    ctas: ['Play Reflex', 'Weekly Leaderboard'],
+  },
+  {
+    id: 'leaderboard', label: 'Leaderboard', icon: Trophy,
+    stats: [
+      { k: 'Fighter Rank', v: '#47' },
+      { k: 'Reflex Rank', v: '#12' },
+      { k: 'Combo Rank', v: '#83' },
+      { k: 'Season', v: 'Season 4' },
+    ],
+    ctas: ['View Full Leaderboard'],
+  },
+  {
+    id: 'analytics', label: 'Analytics', icon: BarChart3,
+    stats: [
+      { k: 'Weekly Activity', v: '+14%' },
+      { k: 'Total Sessions', v: '58' },
+      { k: 'Training Time', v: '4h 20m this week' },
+      { k: 'Performance Score', v: '87 / 100' },
+    ],
+    ctas: ['Open Full Analytics'],
+  },
+  {
+    id: 'subscription', label: 'Subscription', icon: Crown,
+    stats: [
+      { k: 'Current Plan', v: 'Elite (Yearly)' },
+      { k: 'Days Remaining', v: '18' },
+      { k: 'Daily AI Usage', v: 'Unlimited' },
+      { k: 'Weekly Planner Usage', v: 'Unlimited' },
+    ],
+    ctas: ['Upgrade Subscription'],
+  },
+];
+
 function Ring({ pct, strokeClass }: { pct: number; strokeClass: string }) {
   const r = 24;
   const c = 2 * Math.PI * r;
@@ -66,6 +154,63 @@ function Ring({ pct, strokeClass }: { pct: number; strokeClass: string }) {
         transition={{ duration: 1.2, ease: 'easeOut', delay: 0.15 }}
       />
     </svg>
+  );
+}
+
+function DeepDiveTabs() {
+  const [active, setActive] = useState(DEEP_DIVE_TABS[0].id);
+  const tab = DEEP_DIVE_TABS.find((t) => t.id === active)!;
+
+  return (
+    <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4 sm:p-5">
+      {/* Tab row */}
+      <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1 mb-4">
+        {DEEP_DIVE_TABS.map(({ id, label, icon: Icon }) => {
+          const isActive = id === active;
+          return (
+            <button
+              key={id}
+              onClick={() => setActive(id)}
+              className={`shrink-0 flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[10px] font-black uppercase tracking-widest transition-colors ${
+                isActive ? 'bg-primary text-black' : 'bg-white/5 text-white/50 hover:text-white/80'
+              }`}
+            >
+              <Icon className="w-3.5 h-3.5" /> {label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Active tab content */}
+      <motion.div
+        key={tab.id}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35 }}
+        className="flex flex-col gap-4"
+      >
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          {tab.stats.map((s) => (
+            <div key={s.k} className="rounded-xl bg-white/[0.03] border border-white/5 p-3">
+              <p className="text-[8px] font-bold uppercase tracking-wide text-white/40 mb-1">{s.k}</p>
+              <p className="text-xs font-black text-primary leading-tight">{s.v}</p>
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {tab.ctas.map((cta, i) => (
+            <span
+              key={cta}
+              className={`text-[10px] font-black uppercase tracking-widest rounded-full px-4 py-2 ${
+                i === 0 ? 'bg-primary text-black' : 'bg-white/10 text-white/70 border border-white/10'
+              }`}
+            >
+              {cta}
+            </span>
+          ))}
+        </div>
+      </motion.div>
+    </div>
   );
 }
 
@@ -353,6 +498,27 @@ export default function HomeContent() {
               </div>
             </div>
           </div>
+        </motion.section>
+
+        {/* Feature deep-dive — every feature gets its own dedicated tab,
+            still static demo content, still no login required */}
+        <motion.section
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, margin: '-60px' }}
+          variants={fadeUp}
+          transition={{ duration: 0.6 }}
+          className="pb-10"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg sm:text-xl font-black uppercase tracking-tight">
+              Every feature, up close
+            </h2>
+            <span className="text-[9px] font-black uppercase tracking-widest text-white/30 border border-white/10 rounded-full px-2 py-1">
+              Preview
+            </span>
+          </div>
+          <DeepDiveTabs />
         </motion.section>
 
         {/* Data transparency — required for Google OAuth verification */}
