@@ -338,7 +338,7 @@ export default function HomeContent() {
         </nav>
       </header>
 
-      <main className="max-w-5xl mx-auto px-5 sm:px-6">
+      <main className="max-w-5xl mx-auto px-5 sm:px-6 pb-24 md:pb-0">
         {/* Hero */}
         <motion.section
           initial="hidden"
@@ -695,6 +695,17 @@ export default function HomeContent() {
           </div>
         </footer>
       </main>
+
+      {/* Sticky mobile CTA — mobile only; desktop already has the CTA
+          visible in the hero without scrolling far, so this stays hidden
+          from md breakpoint up. Safe-area padding keeps it clear of the
+          home-indicator bar on iOS. */}
+      <div
+        className="md:hidden fixed bottom-0 inset-x-0 z-50 border-t border-white/10 bg-black/85 backdrop-blur-xl px-4 pt-3"
+        style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
+      >
+        <HomeCta />
+      </div>
     </div>
   );
 }
