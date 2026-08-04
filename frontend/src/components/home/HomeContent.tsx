@@ -202,6 +202,65 @@ const SECURITY_POINTS = [
   { title: 'Payments via Razorpay', body: 'Subscription payments are handled by Razorpay, a PCI-DSS compliant processor — Sparai never sees or stores your card details.' },
 ];
 
+const JOURNEY_STAGES = [
+  { id: 'day1', label: 'Day 1', body: 'Onboarding builds your profile — goals, experience, equipment — and your first training session is generated around you.' },
+  { id: 'week1', label: 'Week 1', body: 'Your first AI form analyses land. You start seeing concretely what to fix, not just a feeling that something\u2019s off.' },
+  { id: 'month1', label: 'Month 1', body: 'Reflex times trend down, technique scores trend up, and a full month of streak and session data starts telling a clear story.' },
+  { id: 'champion', label: 'Champion', body: 'Consistent training, tracked and adjusted week over week — the compounding result of training smarter, not just harder.' },
+];
+
+const JOURNEY_MILESTONES = ['Better Accuracy', 'Faster Reflexes', 'More Power', 'Better Technique', 'Higher Confidence'];
+
+const AI_COACH_LINES = [
+  'Your jab accuracy improved by 12%.',
+  'Rotate your hips more on the cross.',
+  'Keep your guard higher after combinations.',
+  'You\u2019re improving faster than last week.',
+];
+
+const FIGHTER_TYPES = [
+  { id: 'beginner', label: 'Beginner', body: 'Start with fundamentals — stance, guard, and basic combinations — with a plan that scales up as your technique score improves.' },
+  { id: 'intermediate', label: 'Intermediate', body: 'Sharpen technique and combinations with tactical planning, form analysis, and reflex drills tuned to close specific gaps.' },
+  { id: 'professional', label: 'Professional', body: 'Fine-tune power, accuracy, and consistency with detailed session-over-session analytics and unlimited AI analysis on Elite.' },
+  { id: 'fitness', label: 'Fitness Boxing', body: 'Use the Daily Grind and reflex drills for a structured, trackable workout — no competitive goals required.' },
+  { id: 'kickboxing', label: 'Kickboxing', body: 'Apply the same form-analysis and reflex training approach to kickboxing fundamentals and combinations.' },
+  { id: 'boxing', label: 'Boxing', body: 'The core Sparai experience — AI form analysis, tactical planning, Guru lessons, and leaderboard ranking built around boxing.' },
+];
+
+const AI_PIPELINE = [
+  { step: 'Upload Video', body: 'Record a round on your phone, right in the app.' },
+  { step: 'AI Detects Body', body: 'Pose-detection locates your joints and limbs frame by frame.' },
+  { step: 'Tracks Movement', body: 'Your motion is tracked across the full clip, punch by punch.' },
+  { step: 'Measures Technique', body: 'Form, accuracy, and power are scored against good technique.' },
+  { step: 'Generates Report', body: 'You get a session score and specific, concrete feedback.' },
+  { step: 'Creates Training Plan', body: 'Your plan adjusts to reinforce whatever needs the most work.' },
+];
+
+// Honest, verifiable product facts — deliberately not invented usage/growth
+// numbers (e.g. "5,000+ sessions"), since Sparai has no audited figures to
+// back those claims yet.
+const PRODUCT_FACTS = [
+  { value: '33', label: 'Body Landmarks Tracked', sub: 'per frame, via pose detection' },
+  { value: '6', label: 'Core Training Modules', sub: 'Analysis, Planner, Grind, Guru, Reflex, Analytics' },
+  { value: '4', label: 'Subscription Tiers', sub: 'Monthly to Yearly Elite' },
+  { value: '0', label: 'Passwords Required', sub: 'phone OTP sign-in only' },
+];
+
+const WHY_PEOPLE_STAY = [
+  { title: 'Clarity, not guesswork', body: 'You stop wondering what you\u2019re doing wrong and start seeing it, session by session.' },
+  { title: 'Reflexes that actually improve', body: 'Reaction-time drills are tracked, so faster hands aren\u2019t just a feeling — they\u2019re a number going down.' },
+  { title: 'A plan that adapts to you', body: 'Your weekly plan reflects your actual level and progress, not a generic template.' },
+  { title: 'Discipline that compounds', body: 'Streaks and weekly tracking turn a few good sessions into a consistent habit.' },
+];
+
+const FAQ_ITEMS = [
+  { q: 'How accurate is Sparai\u2019s AI analysis?', a: 'Sparai uses pose-detection technology to track 33 body landmarks per frame, scoring your technique, accuracy, and power based on your recorded video. It\u2019s a training aid to help you spot patterns — not a certified coaching replacement.' },
+  { q: 'Do I need boxing experience to start?', a: 'No. Onboarding asks about your experience level and builds your plan around it, whether you\u2019re a complete beginner or training competitively.' },
+  { q: 'Can beginners use the AI Analysis feature?', a: 'Yes — it\u2019s designed to be useful at every level, from cleaning up basic stance and guard to refining advanced combinations.' },
+  { q: 'How does the AI analysis actually work?', a: 'You record a short clip, Sparai\u2019s pose-detection model tracks your movement frame by frame, measures it against good technique, and returns a score with specific feedback.' },
+  { q: 'Can I cancel my subscription anytime?', a: 'Yes. Subscriptions can be cancelled at any time from your account — see our Refund Policy for details on billing.' },
+];
+
 function Ring({ pct, strokeClass }: { pct: number; strokeClass: string }) {
   const r = 24;
   const c = 2 * Math.PI * r;
@@ -308,6 +367,146 @@ function FeatureRow({ feature, reversed }: { feature: typeof FEATURE_SHOWCASE[nu
   );
 }
 
+function JourneyTimeline() {
+  const [active, setActive] = useState(JOURNEY_STAGES[0].id);
+  const stage = JOURNEY_STAGES.find((s) => s.id === active)!;
+  return (
+    <div>
+      <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto scrollbar-hide pb-2">
+        {JOURNEY_STAGES.map((s, i) => (
+          <React.Fragment key={s.id}>
+            <button
+              onClick={() => setActive(s.id)}
+              className={`shrink-0 rounded-full px-4 py-2 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-colors ${
+                active === s.id ? 'bg-primary text-black' : 'bg-white/5 text-white/50 hover:text-white/80'
+              }`}
+            >
+              {s.label}
+            </button>
+            {i < JOURNEY_STAGES.length - 1 && <ChevronRight className="w-3.5 h-3.5 text-white/20 shrink-0" />}
+          </React.Fragment>
+        ))}
+      </div>
+      <motion.div
+        key={stage.id}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35 }}
+        className="mt-4 rounded-[20px] bg-white/[0.03] border border-white/10 p-4 sm:p-5"
+      >
+        <p className="text-white/70 text-sm font-medium leading-relaxed mb-4">{stage.body}</p>
+        <div className="flex flex-wrap gap-2">
+          {JOURNEY_MILESTONES.map((m) => (
+            <span key={m} className="text-[9px] font-black uppercase tracking-widest rounded-full px-3 py-1.5 bg-primary/10 border border-primary/20 text-primary">
+              {m}
+            </span>
+          ))}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+function FighterTypeTabs() {
+  const [active, setActive] = useState(FIGHTER_TYPES[0].id);
+  const type = FIGHTER_TYPES.find((t) => t.id === active)!;
+  return (
+    <div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-4">
+        {FIGHTER_TYPES.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setActive(t.id)}
+            className={`rounded-xl px-3 py-2.5 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-colors ${
+              active === t.id ? 'bg-primary text-black' : 'bg-white/5 text-white/50 hover:text-white/80'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <motion.p
+        key={type.id}
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="text-white/60 text-sm font-medium leading-relaxed rounded-[20px] bg-white/[0.03] border border-white/10 p-4 sm:p-5"
+      >
+        {type.body}
+      </motion.p>
+    </div>
+  );
+}
+
+function AiPipeline() {
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-stretch gap-2">
+      {AI_PIPELINE.map((p, i) => (
+        <React.Fragment key={p.step}>
+          <div className="flex-1 rounded-[18px] bg-white/[0.03] border border-white/10 p-3.5 flex flex-col gap-1.5">
+            <span className="text-[9px] font-black text-primary">{String(i + 1).padStart(2, '0')}</span>
+            <p className="text-[11px] font-black uppercase tracking-wide text-white/85">{p.step}</p>
+            <p className="text-[10px] text-white/50 font-medium leading-snug">{p.body}</p>
+          </div>
+          {i < AI_PIPELINE.length - 1 && (
+            <div className="hidden sm:flex items-center justify-center text-white/20">
+              <ChevronRight className="w-4 h-4" />
+            </div>
+          )}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
+function StatCounter({ value, label, sub }: { value: string; label: string; sub: string }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.5 }}
+      className="rounded-[20px] bg-white/[0.03] border border-white/10 p-5 flex flex-col gap-1"
+    >
+      <span className="text-3xl sm:text-4xl font-black text-primary leading-none">{value}</span>
+      <span className="text-[11px] font-black uppercase tracking-wide text-white/80 mt-1">{label}</span>
+      <span className="text-[10px] text-white/40 font-medium">{sub}</span>
+    </motion.div>
+  );
+}
+
+function FaqAccordion() {
+  const [openIdx, setOpenIdx] = useState<number | null>(0);
+  return (
+    <div className="flex flex-col gap-2">
+      {FAQ_ITEMS.map((item, i) => {
+        const isOpen = openIdx === i;
+        return (
+          <div key={item.q} className="rounded-xl border border-white/10 bg-white/[0.03] overflow-hidden">
+            <button
+              onClick={() => setOpenIdx(isOpen ? null : i)}
+              className="w-full flex items-center justify-between gap-3 px-4 py-3.5 text-left"
+            >
+              <span className="text-xs sm:text-sm font-bold text-white/85">{item.q}</span>
+              <ChevronRight className={`w-4 h-4 text-primary shrink-0 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+            </button>
+            {isOpen && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                transition={{ duration: 0.25 }}
+                className="px-4 pb-4"
+              >
+                <p className="text-[11px] sm:text-xs text-white/55 font-medium leading-relaxed">{item.a}</p>
+              </motion.div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function HomeContent() {
   return (
     <div className="relative min-h-screen bg-[#08080A] text-white font-sans overflow-x-hidden">
@@ -367,22 +566,101 @@ export default function HomeContent() {
           className="py-10 sm:py-16 flex flex-col items-start gap-5"
         >
           <span className="text-[10px] font-black tracking-[3px] text-primary uppercase flex items-center gap-1.5">
-            <Star className="w-3 h-3" /> Your Fighter Command Center
+            <Star className="w-3 h-3" /> AI-Powered Boxing Coach
           </span>
           <h1 className="text-3xl sm:text-5xl md:text-6xl font-black italic uppercase leading-[0.95] tracking-tighter">
-            Sparai is your <span className="text-primary">AI boxing coach.</span>
+            The future of boxing<br />training <span className="text-primary">starts here.</span>
           </h1>
           <p className="text-white/60 text-sm sm:text-base md:text-lg leading-relaxed max-w-2xl font-medium">
-            <strong className="text-white">Sparai</strong> is a mobile web app that gives boxers a
-            personalized training program, real-time AI feedback on punch form using your
-            phone&apos;s camera, reflex-speed drills, and weekly progress tracking with streaks
-            and a leaderboard — all in one place.
+            <strong className="text-white">Sparai</strong> is your personal AI boxing coach — it analyzes
+            every punch, tracks your progress, builds a training plan around your goals, and helps
+            you become a smarter, faster, stronger fighter. All through your phone.
           </p>
           <div className="w-full sm:w-auto flex flex-col sm:flex-row items-start sm:items-center gap-3">
             <HomeCta />
-            <Link href="/legal/privacy" className="text-[11px] font-bold text-white/40 hover:text-white/70 underline underline-offset-2 transition-colors">
-              Read our Privacy Policy
-            </Link>
+            <a
+              href="#explore"
+              className="w-full sm:w-auto text-center h-12 px-6 rounded-full border border-white/15 text-white/70 text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:border-primary/40 hover:text-white transition-colors"
+            >
+              <Play className="w-3.5 h-3.5 fill-current" /> See How It Works
+            </a>
+          </div>
+          <Link href="/legal/privacy" className="text-[11px] font-bold text-white/40 hover:text-white/70 underline underline-offset-2 transition-colors">
+            Read our Privacy Policy
+          </Link>
+        </motion.section>
+
+        {/* Why Sparai exists */}
+        <motion.section
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, margin: '-60px' }}
+          variants={fadeUp}
+          transition={{ duration: 0.6 }}
+          className="py-10 border-t border-white/10"
+        >
+          <h2 className="text-2xl sm:text-3xl font-black uppercase tracking-tight leading-tight mb-4">
+            Every great fighter needs<br className="hidden sm:block" /> a great coach.
+          </h2>
+          <div className="text-white/60 text-sm sm:text-base font-medium leading-relaxed max-w-2xl space-y-2">
+            <p>Most fighters train hard. Very few train intelligently.</p>
+            <p>Most athletes don&apos;t have access to a professional coach every single day.</p>
+            <p>Sparai bridges that gap with AI — watching your technique, studying your movement, measuring your progress, and guiding your improvement every day.</p>
+            <p className="text-white font-black">Instead of guessing what to improve, you&apos;ll know exactly what to improve.</p>
+          </div>
+        </motion.section>
+
+        {/* Boxing journey timeline */}
+        <motion.section
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, margin: '-60px' }}
+          variants={fadeUp}
+          transition={{ duration: 0.6 }}
+          className="py-10 border-t border-white/10"
+        >
+          <h2 className="text-lg sm:text-xl font-black uppercase tracking-tight mb-2">
+            Your boxing journey
+          </h2>
+          <p className="text-white/50 text-xs sm:text-sm font-medium mb-5 max-w-2xl">
+            Tap a stage to see what tends to improve, and when.
+          </p>
+          <JourneyTimeline />
+        </motion.section>
+
+        {/* Without vs With Sparai */}
+        <motion.section
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, margin: '-60px' }}
+          variants={fadeUp}
+          transition={{ duration: 0.6 }}
+          className="py-10 border-t border-white/10"
+        >
+          <h2 className="text-lg sm:text-xl font-black uppercase tracking-tight mb-5">
+            The difference AI coaching makes
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="rounded-[20px] p-5 bg-white/[0.02] border border-white/10">
+              <p className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-3">Without Sparai</p>
+              <ul className="flex flex-col gap-2.5">
+                {['Random practice', 'No feedback on form', 'Slow, unclear improvement', 'Mistakes you never notice'].map((t) => (
+                  <li key={t} className="flex items-start gap-2 text-sm text-white/50 font-medium">
+                    <span className="text-red-400 mt-0.5">✕</span> {t}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="rounded-[20px] p-5 bg-primary/[0.06] border border-primary/25">
+              <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-3">With Sparai</p>
+              <ul className="flex flex-col gap-2.5">
+                {['AI analyzes every punch', 'A tactical plan built for you', 'Real-time technique feedback', 'Weekly progress you can see', 'Continuous, guided improvement'].map((t) => (
+                  <li key={t} className="flex items-start gap-2 text-sm text-white/80 font-medium">
+                    <Check className="w-4 h-4 text-primary shrink-0 mt-0.5" /> {t}
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         </motion.section>
 
@@ -594,15 +872,50 @@ export default function HomeContent() {
           </div>
         </motion.section>
 
-        {/* Feature deep-dive — every feature gets its own dedicated tab,
-            still static demo content, still no login required */}
+        {/* Your Personal AI Coach */}
         <motion.section
           initial="hidden"
           whileInView="show"
           viewport={{ once: true, margin: '-60px' }}
           variants={fadeUp}
           transition={{ duration: 0.6 }}
-          className="pb-10"
+          className="py-10 border-t border-white/10"
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <Sparkles className="w-4 h-4 text-primary" />
+            <h2 className="text-lg sm:text-xl font-black uppercase tracking-tight">Your personal AI coach</h2>
+          </div>
+          <p className="text-white/50 text-xs sm:text-sm font-medium mb-5 max-w-2xl">
+            Sparai isn&apos;t here to replace a coach — it&apos;s a coach that&apos;s available around the clock, giving you specific feedback after every session.
+          </p>
+          <div className="flex flex-col gap-2.5 max-w-md">
+            {AI_COACH_LINES.map((line, i) => (
+              <motion.div
+                key={line}
+                initial={{ opacity: 0, x: -12 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.4, delay: i * 0.1 }}
+                className={`rounded-2xl px-4 py-2.5 text-sm font-semibold w-fit max-w-[85%] ${
+                  i % 2 === 0 ? 'bg-primary/10 border border-primary/25 text-white/90' : 'bg-white/5 border border-white/10 text-white/70'
+                }`}
+              >
+                {line}
+              </motion.div>
+            ))}
+          </div>
+        </motion.section>
+
+        {/* Feature deep-dive — every feature gets its own dedicated tab,
+            still static demo content, still no login required */}
+        <motion.section
+          id="explore"
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, margin: '-60px' }}
+          variants={fadeUp}
+          transition={{ duration: 0.6 }}
+          className="pb-10 scroll-mt-20"
         >
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg sm:text-xl font-black uppercase tracking-tight">
@@ -636,6 +949,38 @@ export default function HomeContent() {
               <FeatureRow key={feature.id} feature={feature} reversed={i % 2 === 1} />
             ))}
           </div>
+        </motion.section>
+
+        {/* Built for every fighter */}
+        <motion.section
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, margin: '-60px' }}
+          variants={fadeUp}
+          transition={{ duration: 0.6 }}
+          className="py-10 border-t border-white/10"
+        >
+          <h2 className="text-lg sm:text-xl font-black uppercase tracking-tight mb-2">Built for every fighter</h2>
+          <p className="text-white/50 text-xs sm:text-sm font-medium mb-5 max-w-2xl">
+            Whatever level you&apos;re training at, Sparai adapts to it.
+          </p>
+          <FighterTypeTabs />
+        </motion.section>
+
+        {/* How AI actually works */}
+        <motion.section
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, margin: '-60px' }}
+          variants={fadeUp}
+          transition={{ duration: 0.6 }}
+          className="py-10 border-t border-white/10"
+        >
+          <h2 className="text-lg sm:text-xl font-black uppercase tracking-tight mb-2">How the AI analysis works</h2>
+          <p className="text-white/50 text-xs sm:text-sm font-medium mb-5 max-w-2xl">
+            From a recorded video to a real training plan, in six steps.
+          </p>
+          <AiPipeline />
         </motion.section>
 
         {/* Data transparency — required for Google OAuth verification */}
@@ -689,6 +1034,74 @@ export default function HomeContent() {
             <li className="rounded-xl bg-white/[0.03] border border-white/5 p-3"><span className="text-primary font-black">3.</span> Train with guided sessions, AI form checks, reflex drills.</li>
             <li className="rounded-xl bg-white/[0.03] border border-white/5 p-3"><span className="text-primary font-black">4.</span> Track streaks and rank on the leaderboard, weekly.</li>
           </ol>
+        </motion.section>
+
+        {/* Why consistency wins */}
+        <motion.section
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, margin: '-60px' }}
+          variants={fadeUp}
+          transition={{ duration: 0.6 }}
+          className="py-10 border-t border-white/10"
+        >
+          <h2 className="text-lg sm:text-xl font-black uppercase tracking-tight mb-2 flex items-center gap-2">
+            <Flame className="w-4 h-4 text-primary" /> Why consistency wins
+          </h2>
+          <p className="text-white/50 text-xs sm:text-sm font-medium mb-5 max-w-2xl">
+            One great session doesn&apos;t make a fighter. A tracked, visible streak does.
+          </p>
+          <div className="flex items-center gap-2 sm:gap-3 overflow-x-auto scrollbar-hide">
+            {['Current Streak', 'Longer Streak', 'Better Habits', 'Better Boxer'].map((step, i, arr) => (
+              <React.Fragment key={step}>
+                <div className="shrink-0 rounded-2xl bg-white/[0.03] border border-white/10 px-4 py-3 flex items-center gap-2">
+                  <Flame className="w-3.5 h-3.5 text-primary" />
+                  <span className="text-[10px] sm:text-xs font-black uppercase tracking-wide text-white/80">{step}</span>
+                </div>
+                {i < arr.length - 1 && <ChevronRight className="w-4 h-4 text-white/20 shrink-0" />}
+              </React.Fragment>
+            ))}
+          </div>
+        </motion.section>
+
+        {/* Real progress, honest numbers */}
+        <motion.section
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, margin: '-60px' }}
+          variants={fadeUp}
+          transition={{ duration: 0.6 }}
+          className="py-10 border-t border-white/10"
+        >
+          <h2 className="text-lg sm:text-xl font-black uppercase tracking-tight mb-2">Real progress, not guesswork</h2>
+          <p className="text-white/50 text-xs sm:text-sm font-medium mb-5 max-w-2xl">
+            What&apos;s actually inside the app — no invented numbers, just what Sparai does.
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {PRODUCT_FACTS.map((f) => (
+              <StatCounter key={f.label} value={f.value} label={f.label} sub={f.sub} />
+            ))}
+          </div>
+        </motion.section>
+
+        {/* Why people stay */}
+        <motion.section
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, margin: '-60px' }}
+          variants={fadeUp}
+          transition={{ duration: 0.6 }}
+          className="py-10 border-t border-white/10"
+        >
+          <h2 className="text-lg sm:text-xl font-black uppercase tracking-tight mb-5">Why people stay</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {WHY_PEOPLE_STAY.map((r) => (
+              <div key={r.title} className="rounded-[18px] bg-white/[0.03] border border-white/10 p-4">
+                <p className="text-xs font-black uppercase tracking-wide text-primary mb-1.5">{r.title}</p>
+                <p className="text-[11px] sm:text-xs text-white/60 font-medium leading-relaxed">{r.body}</p>
+              </div>
+            ))}
+          </div>
         </motion.section>
 
         {/* Subscription plans — real pricing, matches /subscription exactly */}
@@ -777,6 +1190,19 @@ export default function HomeContent() {
           </div>
         </motion.section>
 
+        {/* FAQ */}
+        <motion.section
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, margin: '-60px' }}
+          variants={fadeUp}
+          transition={{ duration: 0.6 }}
+          className="py-10 border-t border-white/10"
+        >
+          <h2 className="text-lg sm:text-xl font-black uppercase tracking-tight mb-5">Frequently asked questions</h2>
+          <FaqAccordion />
+        </motion.section>
+
         {/* Second CTA banner */}
         <motion.section
           initial="hidden"
@@ -788,16 +1214,17 @@ export default function HomeContent() {
         >
           <div className="rounded-[28px] p-6 sm:p-10 bg-gradient-to-br from-primary/15 via-white/[0.03] to-transparent border border-primary/20 flex flex-col items-center text-center gap-4">
             <h2 className="text-2xl sm:text-3xl font-black uppercase tracking-tight leading-tight">
-              Your first round is on us.
+              Every champion starts somewhere.
             </h2>
             <p className="text-white/60 text-sm font-medium max-w-md">
-              Sign in with your phone number and build your training profile in under two minutes — no card required to start.
+              You don&apos;t become better by training harder. You become better by training smarter.
+              Sign in with your phone number and build your training profile in under two minutes.
             </p>
             <Link
               href="/onboarding"
               className="inline-flex items-center justify-center gap-2 h-12 px-8 rounded-full bg-primary text-black text-sm font-black uppercase tracking-widest hover:brightness-110 transition-all"
             >
-              Start Training <ChevronRight size={16} />
+              Start Training with Sparai <ChevronRight size={16} />
             </Link>
           </div>
         </motion.section>
