@@ -2,11 +2,12 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { motion } from 'framer-motion';
 import {
-  Zap, Flame, Trophy, ChevronRight, Video, CalendarDays,
+  Flame, Trophy, ChevronRight, Video, CalendarDays,
   Swords, Activity, BarChart3, Crown, Bell, Star, User,
-  Play, GraduationCap, Sparkles,
+  Play, GraduationCap, Sparkles, ShieldCheck, Check, Lock, Gift,
 } from 'lucide-react';
 import HomeCta from './HomeCta';
 
@@ -183,6 +184,24 @@ const FEATURE_SHOWCASE = [
   },
 ];
 
+// Real plan data — mirrors app/(app)/subscription/page.tsx exactly, so the
+// public homepage never shows numbers that don't match the actual app.
+const PRICING_PLANS = [
+  { name: 'Monthly', price: '₹629', period: '/ month', features: ['1 AI Video Analysis / day', '1 Planner Generation / week'] },
+  { name: 'Monthly Pro', price: '₹699', period: '/ month', features: ['2 AI Video Analyses / day', '2 Planner Generations / week'] },
+  { name: '3 Months', price: '₹1,629', period: '/ 3 months', features: ['3 AI Video Analyses / day', '3 Planner Generations / week'] },
+  {
+    name: 'Yearly', price: '₹6,629', period: '/ year', highlight: true,
+    features: ['Unlimited AI Video Analyses', 'Unlimited Planner Generations', 'Premium Guru skills unlocked', 'Elite Member badge'],
+  },
+];
+
+const SECURITY_POINTS = [
+  { title: 'Phone-Only Sign-In', body: 'Firebase Phone Auth verifies you with a one-time code — Sparai never creates or stores a password.' },
+  { title: 'Database & Encryption', body: 'Your profile and training data live in Supabase, encrypted at rest and in transit (TLS/SSL) between your device and our servers.' },
+  { title: 'Payments via Razorpay', body: 'Subscription payments are handled by Razorpay, a PCI-DSS compliant processor — Sparai never sees or stores your card details.' },
+];
+
 function Ring({ pct, strokeClass }: { pct: number; strokeClass: string }) {
   const r = 24;
   const c = 2 * Math.PI * r;
@@ -323,8 +342,8 @@ export default function HomeContent() {
       {/* Nav */}
       <header className="max-w-5xl mx-auto flex items-center justify-between px-5 sm:px-6 py-5">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
-            <Zap className="w-4 h-4 text-primary" />
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-2xl overflow-hidden flex items-center justify-center shrink-0 border border-white/10">
+            <Image src="/logo.jpg" alt="Sparai Logo" width={36} height={36} className="object-cover" />
           </div>
           <div className="flex flex-col leading-none">
             <span className="text-sm font-black tracking-[3px] uppercase">Sparai</span>
@@ -670,6 +689,117 @@ export default function HomeContent() {
             <li className="rounded-xl bg-white/[0.03] border border-white/5 p-3"><span className="text-primary font-black">3.</span> Train with guided sessions, AI form checks, reflex drills.</li>
             <li className="rounded-xl bg-white/[0.03] border border-white/5 p-3"><span className="text-primary font-black">4.</span> Track streaks and rank on the leaderboard, weekly.</li>
           </ol>
+        </motion.section>
+
+        {/* Subscription plans — real pricing, matches /subscription exactly */}
+        <motion.section
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, margin: '-60px' }}
+          variants={fadeUp}
+          transition={{ duration: 0.6 }}
+          className="py-8 border-t border-white/10"
+        >
+          <h2 className="text-lg sm:text-xl font-black uppercase tracking-tight mb-2 flex items-center gap-2">
+            <Crown className="w-4 h-4 text-primary" /> Plans & pricing
+          </h2>
+          <p className="text-white/50 text-xs sm:text-sm font-medium mb-4 max-w-2xl">
+            Start free during onboarding, upgrade whenever you want unlimited AI analyses. Cancel anytime.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {PRICING_PLANS.map((plan) => (
+              <div
+                key={plan.name}
+                className={`rounded-[20px] p-4 flex flex-col gap-3 border ${
+                  plan.highlight
+                    ? 'bg-gradient-to-br from-primary/15 to-transparent border-primary/30'
+                    : 'bg-white/[0.03] border-white/10'
+                }`}
+              >
+                {plan.highlight && (
+                  <span className="self-start text-[8px] font-black uppercase tracking-widest text-black bg-primary rounded-full px-2 py-1">
+                    Best Value
+                  </span>
+                )}
+                <p className="text-xs font-black uppercase tracking-wide text-white/80">{plan.name}</p>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-xl font-black text-white">{plan.price}</span>
+                  <span className="text-[10px] font-bold text-white/40">{plan.period}</span>
+                </div>
+                <ul className="flex flex-col gap-1.5 mt-1">
+                  {plan.features.map((f) => (
+                    <li key={f} className="flex items-start gap-1.5 text-[10px] font-semibold text-white/60 leading-snug">
+                      <Check className="w-3 h-3 text-primary shrink-0 mt-0.5" /> {f}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+          {/* Referral trial callout */}
+          <div className="mt-3 rounded-[20px] p-4 sm:p-5 bg-white/[0.03] border border-primary/20 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-5">
+            <div className="w-10 h-10 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+              <Gift className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-xs font-black uppercase tracking-wide text-white/90">Refer 5 friends, get 14 days free</p>
+              <p className="text-[11px] text-white/50 font-medium mt-0.5">
+                Share your referral code from the app — once 5 people sign up with it, you get a 14-day premium trial automatically.
+              </p>
+            </div>
+          </div>
+        </motion.section>
+
+        {/* Security & Data — names the actual infra, for both users and
+            Google OAuth reviewers */}
+        <motion.section
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, margin: '-60px' }}
+          variants={fadeUp}
+          transition={{ duration: 0.6 }}
+          className="py-8 border-t border-white/10"
+        >
+          <h2 className="text-lg sm:text-xl font-black uppercase tracking-tight mb-2 flex items-center gap-2">
+            <Lock className="w-4 h-4 text-primary" /> Your data is safe
+          </h2>
+          <p className="text-white/50 text-xs sm:text-sm font-medium mb-4 max-w-2xl">
+            Sparai is built on infrastructure that&apos;s encrypted by default — here&apos;s exactly what powers it.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {SECURITY_POINTS.map((point) => (
+              <div key={point.title} className="rounded-xl bg-white/[0.03] border border-white/5 p-4 flex flex-col gap-2">
+                <ShieldCheck className="w-4 h-4 text-primary" />
+                <p className="text-xs font-black uppercase tracking-wide text-white/80">{point.title}</p>
+                <p className="text-[11px] text-white/60 font-medium leading-relaxed">{point.body}</p>
+              </div>
+            ))}
+          </div>
+        </motion.section>
+
+        {/* Second CTA banner */}
+        <motion.section
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, margin: '-60px' }}
+          variants={fadeUp}
+          transition={{ duration: 0.6 }}
+          className="py-10"
+        >
+          <div className="rounded-[28px] p-6 sm:p-10 bg-gradient-to-br from-primary/15 via-white/[0.03] to-transparent border border-primary/20 flex flex-col items-center text-center gap-4">
+            <h2 className="text-2xl sm:text-3xl font-black uppercase tracking-tight leading-tight">
+              Your first round is on us.
+            </h2>
+            <p className="text-white/60 text-sm font-medium max-w-md">
+              Sign in with your phone number and build your training profile in under two minutes — no card required to start.
+            </p>
+            <Link
+              href="/onboarding"
+              className="inline-flex items-center justify-center gap-2 h-12 px-8 rounded-full bg-primary text-black text-sm font-black uppercase tracking-widest hover:brightness-110 transition-all"
+            >
+              Start Training <ChevronRight size={16} />
+            </Link>
+          </div>
         </motion.section>
 
         <footer className="py-8 border-t border-white/10 flex flex-col gap-5">

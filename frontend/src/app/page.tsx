@@ -34,5 +34,41 @@ export const metadata: Metadata = {
 };
 
 export default function HomePage() {
-  return <HomeContent />;
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'Organization',
+            name: 'Sparai',
+            url: SITE_URL,
+            logo: `${SITE_URL}/favicon.ico`,
+            contactPoint: {
+              '@type': 'ContactPoint',
+              contactType: 'customer support',
+              email: 'sk.ish24@gmail.com',
+            },
+          }),
+        }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'SoftwareApplication',
+            name: 'Sparai Boxing Trainer',
+            url: SITE_URL,
+            description: OG_DESCRIPTION,
+            operatingSystem: 'Web, Android, iOS',
+            applicationCategory: 'SportsApplication',
+            creator: { '@type': 'Organization', name: 'Sparai' },
+          }),
+        }}
+      />
+      <HomeContent />
+    </>
+  );
 }
