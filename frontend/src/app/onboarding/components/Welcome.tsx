@@ -46,6 +46,17 @@ const Welcome: React.FC = () => {
             <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
+                transition={{ delay: 0.1, duration: 0.6 }}
+                className="relative z-10 flex items-center gap-2"
+            >
+                <span className="text-lg font-black italic uppercase tracking-tight text-white">
+                    Spar<span className="text-primary">ai</span>
+                </span>
+            </motion.div>
+
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
                 transition={{ delay: 0.2, duration: 0.6 }}
                 className="relative z-10 flex items-center gap-2"
             >

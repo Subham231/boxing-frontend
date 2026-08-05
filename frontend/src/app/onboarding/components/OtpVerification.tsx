@@ -157,6 +157,9 @@ const OtpVerification: React.FC = () => {
       <div id={RECAPTCHA_CONTAINER_ID} />
 
       <header className="text-left mb-6">
+        <span className="text-sm font-black italic uppercase tracking-tight text-white block mb-3">
+          Spar<span className="text-primary">ai</span>
+        </span>
         <StepBadge />
         <h1 className="text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
           Verify your <span className="text-primary">fight number</span>.
