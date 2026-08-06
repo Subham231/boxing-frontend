@@ -1849,9 +1849,13 @@ export default function VisionPage() {
                 CAMERA SOURCE
               </span>
               {cameraDevices.length === 0 ? (
-                <div className="bg-black/40 border border-white/5 rounded-2xl px-4 py-3 text-[10px] text-white/40 font-bold uppercase text-center">
-                  No cameras found — grant camera permission and reopen this page.
-                </div>
+                <button
+                  onClick={enumerateCameras}
+                  className="bg-black/40 border border-primary/30 rounded-2xl px-4 py-4 text-[10px] text-white/70 font-black uppercase text-center hover:border-primary hover:text-primary transition-colors flex flex-col items-center gap-1.5"
+                >
+                  <Camera className="w-4 h-4" />
+                  Tap to Enable Camera Access
+                </button>
               ) : (
                 <select
                   value={selectedDeviceId}
