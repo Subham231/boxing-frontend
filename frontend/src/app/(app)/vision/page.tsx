@@ -22,7 +22,6 @@ import { NeonButton } from '@/components/ui/NeonButton';
 import { completeSessionSecure } from '@/lib/rank-client';
 import { logVisionSession, getReflexTier } from '@/lib/session-log';
 import { firebaseAuth } from '@/lib/firebase';
-import { useLocalStorage } from '@/hooks/useLocalStorage';
 
 // ---------------------------------------------------------------------------
 // Landmark indices we care about (MediaPipe Pose / BlazePose 33-point model)
@@ -65,11 +64,7 @@ const SKELETON_CONNECTIONS: [number, number][] = [
 const CORE_ANCHORS = [LM.L_SHOULDER, LM.R_SHOULDER, LM.L_HIP, LM.R_HIP];
 const VISIBILITY_THRESHOLD = 0.6;
 const CALIBRATION_HOLD_MS = 2000;
-// Brief occlusion (a fast-moving arm briefly blocking a landmark, a hand
-// crossing in front of the torso mid-combo) shouldn't pause a whole
-// freestyle round — give tracking loss a bit more grace before treating it
-// as a real problem than before.
-const TRACKING_LOSS_GRACE_MS = 700;
+const TRACKING_LOSS_GRACE_MS = 500;
 const TRACKING_RECOVERY_MS = 400;
 const REACTION_WINDOW_PAD_MS = 250;
 
@@ -99,14 +94,6 @@ const GUARD_REARM_MS = 70;
 // below this displacement (relative to shoulder width) there isn't enough
 // signal to say what shape was thrown, so we don't penalize it.
 const MIN_TRAJECTORY_CONFIDENCE = 0.18;
-// Safety valve for the GUARD -> STRIKE -> GUARD state machine: if the arm
-// never drops back below ELBOW_RETRACT_THRESHOLD (e.g. a fighter keeping a
-// high guard during a fast freestyle combo, where the elbow never fully
-// unbends between punches), the state machine used to get stuck in 'strike'
-// forever and silently stop detecting every punch after the first. No real
-// punch stays in the extended phase this long, so force a re-arm past this
-// point rather than waiting indefinitely for a full retract.
-const MAX_STRIKE_HOLD_MS = 550;
 
 // Wrist displacement (normalized by shoulder width) shape used to classify
 // what kind of punch was actually thrown, independent of what was called —
@@ -126,20 +113,7 @@ function expectedTrajectoryFor(command: string): 'straight' | 'hook' | 'uppercut
 }
 
 type PoseLandmark = { x: number; y: number; z?: number; visibility?: number };
-type Stage = 'welcome' | 'config' | 'guide' | 'camera' | 'analyzing' | 'results';
-
-// --- Setup-check thresholds --------------------------------------------
-// These gate the live "is the fighter framed correctly" indicators shown
-// before an analysis session starts. All are heuristics derived from
-// MediaPipe's normalized landmark coordinates and per-landmark visibility
-// confidence — there's no calibrated camera geometry here, so they're
-// deliberately forgiving rather than exact.
-const SETUP_LIMB_VISIBILITY = 0.5; // ankles/knees visible enough to count as "in frame"
-const SETUP_EDGE_MARGIN = 0.04; // keep this far from the top/bottom edge, unclipped
-const SETUP_MIN_BODY_HEIGHT_FRAC = 0.35; // nose-to-ankle span too small = standing too far back
-const SETUP_MAX_BODY_HEIGHT_FRAC = 0.98; // nose-to-ankle span this large = too close / feet likely clipped
-const SETUP_MIN_ANGLE_Z_DIFF = 0.045; // shoulder depth asymmetry needed to call the stance "angled" rather than square-on
-const SETUP_GOOD_LIGHTING_VIS = 0.75; // avg core-landmark visibility used as a lighting/contrast proxy
+type Stage = 'welcome' | 'config' | 'camera' | 'analyzing' | 'results';
 
 interface RepLogEntry {
   index: number;
@@ -155,7 +129,6 @@ interface RepLogEntry {
   footPivotScore: number; // 0-100, derived from measured rear-foot rotation during the strike
   trajectory: 'straight' | 'hook' | 'uppercut'; // what shape of punch was actually thrown, from real wrist-path data
   trajectoryMatch: boolean; // whether the thrown shape matched what was called
-  tMs: number; // real elapsed time (ms) since the drill/round started — drives pace and fatigue analysis
 }
 
 // Reference angular velocity (deg/sec) used to normalize speed into a 0-100
@@ -297,17 +270,6 @@ export default function VisionPage() {
   const [awaitingUserStart, setAwaitingUserStart] = useState(false);
   const awaitingUserStartRef = useRef(false);
 
-  // Live setup-check indicators, computed from real pose landmarks while
-  // the fighter is framing themselves up before tapping "Start Analysis".
-  const [setupChecks, setSetupChecks] = useState({
-    fullBody: false,
-    distance: false,
-    angle: false,
-    lighting: false,
-  });
-  const setupChecksRef = useRef(setupChecks);
-  const [hasSeenAnalysisGuide, setHasSeenAnalysisGuide] = useLocalStorage('sparai_vision_guide_seen', false);
-
   // Live session
   const [timerDisplay, setTimerDisplay] = useState('00:00');
   const [hitCount, setHitCount] = useState(0);
@@ -343,7 +305,6 @@ export default function VisionPage() {
   useEffect(() => { punchTargetRef.current = punchTarget; }, [punchTarget]);
   useEffect(() => { freestyleDurationRef.current = freestyleDuration; }, [freestyleDuration]);
   useEffect(() => { voiceProfileRef.current = voiceProfile; }, [voiceProfile]);
-  useEffect(() => { setupChecksRef.current = setupChecks; }, [setupChecks]);
 
   // DOM / media refs
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -381,7 +342,6 @@ export default function VisionPage() {
   const currentRepPeakVelocityRef = useRef(0);
   const repLogRef = useRef<RepLogEntry[]>([]);
   const activeCommandTextRef = useRef('');
-  const sessionStartRef = useRef(0); // performance.now() when the drill/round actually began — every tMs is relative to this
 
   // Punch state machine: 'guard' (arm folded/at rest) <-> 'strike' (arm
   // extended). A hysteresis band between ELBOW_RETRACT_THRESHOLD and
@@ -410,17 +370,6 @@ export default function VisionPage() {
   const wristBaselineRef = useRef({ L: { x: 0, y: 0 }, R: { x: 0, y: 0 } });
   const peakWristDisplacementRef = useRef({ dx: 0, dy: 0, mag: 0 });
   const lastShoulderWidthRef = useRef(0.2);
-
-  // Peak angular velocity / wrist speed seen during the current windup
-  // (i.e. since the arm last returned to guard), tracked every frame
-  // regardless of state. The GUARD -> STRIKE validation gate checks these
-  // peaks instead of a single instantaneous frame value — sampling only the
-  // exact frame where the elbow crosses the extend threshold is fragile
-  // against webcam frame-rate jitter/MediaPipe noise and was causing real
-  // punches to be missed even when they were clearly fast enough overall.
-  const windupPeakAngularVelocityRef = useRef(0);
-  const windupPeakWristSpeedRef = useRef(0);
-  const strikeEnteredAtRef = useRef(0);
 
   // -------------------------------------------------------------------------
   // Mount / MediaPipe script loading
@@ -741,15 +690,10 @@ export default function VisionPage() {
     peakFootPivotRef.current = 0;
     wristBaselineRef.current = { L: { x: 0, y: 0 }, R: { x: 0, y: 0 } };
     peakWristDisplacementRef.current = { dx: 0, dy: 0, mag: 0 };
-    windupPeakAngularVelocityRef.current = 0;
-    windupPeakWristSpeedRef.current = 0;
-    strikeEnteredAtRef.current = 0;
     goodHoldMsRef.current = 0;
     badHoldMsRef.current = 0;
     setIsTrackingInadequate(false);
     isTrackingInadequateRef.current = false;
-    setupChecksRef.current = { fullBody: false, distance: false, angle: false, lighting: false };
-    setSetupChecks(setupChecksRef.current);
 
     try {
       const videoConstraints: MediaTrackConstraints = selectedDeviceId
@@ -837,8 +781,94 @@ export default function VisionPage() {
       // begins once the user taps "Start Analysis" (see beginCalibration()).
     } catch (err) {
       console.error('Camera access failed:', err);
+
+      // If a specific device was selected and it failed (unplugged, busy,
+      // or constraints it can't satisfy), fall back to the default camera
+      // once before giving up — this is the single most common real-world
+      // cause of "unavailable" and it's silently recoverable.
+      const name = err instanceof Error ? err.name : '';
+      if (selectedDeviceId && (name === 'OverconstrainedError' || name === 'NotFoundError' || name === 'NotReadableError')) {
+        console.warn(`Selected camera device failed (${name}) — retrying with default camera.`);
+        setSelectedDeviceId('');
+        try {
+          const fallbackStream = await navigator.mediaDevices.getUserMedia({
+            video: { width: 640, height: 480, facingMode: 'user' },
+            audio: false,
+          });
+          streamRef.current = fallbackStream;
+          const videoEl = await waitForVideoElement();
+          if (videoEl) {
+            videoEl.srcObject = fallbackStream;
+            await new Promise<void>((resolve) => {
+              videoEl.onloadedmetadata = () => {
+                if (canvasRef.current) {
+                  canvasRef.current.width = videoEl.videoWidth || 640;
+                  canvasRef.current.height = videoEl.videoHeight || 480;
+                }
+                resolve();
+              };
+            });
+            try { await videoEl.play(); } catch { }
+
+            setCalibStatus('LOADING AI MODEL...');
+            const mpReady = await waitForMediaPipe();
+            if (mpReady) {
+              setEngineStatus('ready');
+              setCalibStatus('CAMERA READY');
+              setAwaitingUserStart(true);
+              awaitingUserStartRef.current = true;
+
+              const mpPose = (window as any).Pose;
+              const pose = new mpPose({
+                locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`,
+              });
+              pose.setOptions({
+                modelComplexity: 1,
+                smoothLandmarks: true,
+                enableSegmentation: false,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5,
+              });
+              pose.onResults(onPoseResults);
+              poseRef.current = pose;
+
+              const detectLoop = async () => {
+                const video = videoRef.current;
+                if (video && video.readyState >= 2 && poseRef.current) {
+                  try {
+                    await poseRef.current.send({ image: video });
+                  } catch (sendErr) {
+                    console.warn('Pose detection frame failed:', sendErr);
+                  }
+                }
+                rafIdRef.current = requestAnimationFrame(detectLoop);
+              };
+              rafIdRef.current = requestAnimationFrame(detectLoop);
+              return; // fallback succeeded — skip the error screen entirely
+            }
+          }
+        } catch (fallbackErr) {
+          console.error('Fallback default camera also failed:', fallbackErr);
+        }
+      }
+
+      // Specific, actionable message per real getUserMedia failure mode,
+      // instead of one generic message for every cause.
+      let message = 'Camera access was denied, no camera is available, or the selected device could not be opened. Grant camera permission, pick a different source, and try again.';
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        message = 'Camera permission was denied. Open your browser\u2019s site settings, allow camera access for this page, then reload and try again.';
+      } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+        message = 'No camera was found on this device. Connect a camera, or open this page on a device that has one.';
+      } else if (name === 'NotReadableError' || name === 'TrackStartError') {
+        message = 'Your camera is already in use by another app or browser tab. Close whatever else is using it, then retry.';
+      } else if (name === 'OverconstrainedError' || name === 'ConstraintNotSatisfiedError') {
+        message = 'The selected camera couldn\u2019t be opened. Pick a different camera source below, then retry.';
+      } else if (name === 'SecurityError') {
+        message = 'Camera access is blocked on this connection. Sparai needs to be loaded over HTTPS to use the camera.';
+      }
+
       setEngineStatus('failed');
-      setCameraError('Camera access was denied, no camera is available, or the selected device could not be opened. Grant camera permission, pick a different source, and try again.');
+      setCameraError(message);
       cleanupSession();
     }
   };
@@ -895,24 +925,12 @@ export default function VisionPage() {
       ctx.clearRect(0, 0, w, h);
       goodTrackingRef.current = false;
       handleTrackingLoss(dt);
-      if (awaitingUserStartRef.current) {
-        const cleared = { fullBody: false, distance: false, angle: false, lighting: false };
-        setupChecksRef.current = cleared;
-        setSetupChecks(cleared);
-      }
       return;
     }
 
     const coreVisibility = CORE_ANCHORS.map((idx) => landmarks[idx]?.visibility ?? 0);
     const minVis = Math.min(...coreVisibility);
     goodTrackingRef.current = minVis >= VISIBILITY_THRESHOLD;
-
-    // Live setup-check indicators — only worth computing while the fighter
-    // is still framing up before a session (awaitingUserStart), so this
-    // never runs during an actual recorded drill.
-    if (awaitingUserStartRef.current) {
-      updateSetupChecks(landmarks, coreVisibility);
-    }
 
     drawSkeleton(landmarks, ctx, w, h);
 
@@ -947,57 +965,6 @@ export default function VisionPage() {
     if (isTrackingInadequateRef.current && goodHoldMsRef.current >= TRACKING_RECOVERY_MS) {
       isTrackingInadequateRef.current = false;
       setIsTrackingInadequate(false);
-    }
-  };
-
-  // -------------------------------------------------------------------------
-  // Live setup-check indicators shown before a session starts. Every value
-  // here is read straight off the current frame's landmarks — nothing is
-  // simulated or defaulted to "pass" when data is missing.
-  // -------------------------------------------------------------------------
-  const updateSetupChecks = (landmarks: PoseLandmark[], coreVisibility: number[]) => {
-    const nose = landmarks[LM.NOSE];
-    const lS = landmarks[LM.L_SHOULDER], rS = landmarks[LM.R_SHOULDER];
-    const lAnkle = landmarks[LM.L_ANKLE], rAnkle = landmarks[LM.R_ANKLE];
-    const lKnee = landmarks[LM.L_KNEE], rKnee = landmarks[LM.R_KNEE];
-
-    const ankleVisOk =
-      (lAnkle?.visibility ?? 0) > SETUP_LIMB_VISIBILITY || (rAnkle?.visibility ?? 0) > SETUP_LIMB_VISIBILITY;
-    const kneeVisOk =
-      (lKnee?.visibility ?? 0) > SETUP_LIMB_VISIBILITY || (rKnee?.visibility ?? 0) > SETUP_LIMB_VISIBILITY;
-    const lowestAnkleY = Math.max(lAnkle?.y ?? 0, rAnkle?.y ?? 0);
-    const notClippedTopOrBottom =
-      !!nose && nose.y > SETUP_EDGE_MARGIN && lowestAnkleY > 0 && lowestAnkleY < 1 - SETUP_EDGE_MARGIN;
-    const fullBody = ankleVisOk && kneeVisOk && notClippedTopOrBottom;
-
-    let distance = false;
-    if (nose && lowestAnkleY > 0) {
-      const bodyHeightFrac = Math.abs(lowestAnkleY - nose.y);
-      distance = bodyHeightFrac >= SETUP_MIN_BODY_HEIGHT_FRAC && bodyHeightFrac <= SETUP_MAX_BODY_HEIGHT_FRAC;
-    }
-
-    // A square-on stance has near-zero depth difference between the
-    // shoulders; turning ~45 degrees (or more) creates real z-separation.
-    // This can't measure an exact degree value from a single camera, so it
-    // only confirms "clearly angled," not a precise 45 degrees.
-    let angle = false;
-    if (lS && rS && lS.z !== undefined && rS.z !== undefined) {
-      angle = Math.abs(lS.z - rS.z) >= SETUP_MIN_ANGLE_Z_DIFF;
-    }
-
-    const avgVisibility = coreVisibility.reduce((a, b) => a + b, 0) / (coreVisibility.length || 1);
-    const lighting = avgVisibility >= SETUP_GOOD_LIGHTING_VIS;
-
-    const next = { fullBody, distance, angle, lighting };
-    const prev = setupChecksRef.current;
-    if (
-      prev.fullBody !== next.fullBody ||
-      prev.distance !== next.distance ||
-      prev.angle !== next.angle ||
-      prev.lighting !== next.lighting
-    ) {
-      setupChecksRef.current = next;
-      setSetupChecks(next);
     }
   };
 
@@ -1072,16 +1039,6 @@ export default function VisionPage() {
 
     prevAngleTsRef.current = now;
     prevMaxElbowAngleRef.current = smoothedAngle;
-
-    // Accumulate this windup's peak signals every single frame (not just
-    // while "awaiting" a called command) so the validation gate below has
-    // a real peak to check against instead of one noisy instantaneous frame.
-    if (angularVel > 0 && angularVel < 3000 && angularVel > windupPeakAngularVelocityRef.current) {
-      windupPeakAngularVelocityRef.current = angularVel;
-    }
-    if (wristSpeedRef.current > windupPeakWristSpeedRef.current) {
-      windupPeakWristSpeedRef.current = wristSpeedRef.current;
-    }
 
     // --- Torso rotation tracking (hip/shoulder engagement) ---------------
     let shoulderAngle = shoulderBaselineAngleRef.current;
@@ -1174,24 +1131,12 @@ export default function VisionPage() {
     const dwelledInGuard = now - guardEnteredAtRef.current >= GUARD_REARM_MS;
     if (elbowStateRef.current === 'guard' && dwelledInGuard && smoothedAngle > ELBOW_EXTEND_THRESHOLD) {
       elbowStateRef.current = 'strike';
-      strikeEnteredAtRef.current = now;
-      // Validate against the peak signals seen across the whole windup, not
-      // just this one frame — a real punch's fastest moment is often 1-2
-      // frames before the exact frame the angle crosses the threshold.
-      if (
-        windupPeakAngularVelocityRef.current >= MIN_PUNCH_ANGULAR_VELOCITY &&
-        windupPeakWristSpeedRef.current >= MIN_WRIST_SPEED
-      ) {
+      if (angularVel >= MIN_PUNCH_ANGULAR_VELOCITY && wristSpeedRef.current >= MIN_WRIST_SPEED) {
         punchValidated = true;
       }
-    } else if (
-      elbowStateRef.current === 'strike' &&
-      (smoothedAngle < ELBOW_RETRACT_THRESHOLD || now - strikeEnteredAtRef.current >= MAX_STRIKE_HOLD_MS)
-    ) {
+    } else if (elbowStateRef.current === 'strike' && smoothedAngle < ELBOW_RETRACT_THRESHOLD) {
       elbowStateRef.current = 'guard';
       guardEnteredAtRef.current = now;
-      windupPeakAngularVelocityRef.current = 0;
-      windupPeakWristSpeedRef.current = 0;
     }
 
     let noseOffset = 0;
@@ -1269,7 +1214,6 @@ export default function VisionPage() {
       footPivotScore,
       trajectory,
       trajectoryMatch,
-      tMs: Math.round(now - sessionStartRef.current),
     });
   };
 
@@ -1299,7 +1243,6 @@ export default function VisionPage() {
       footPivotScore,
       trajectory,
       trajectoryMatch: true, // no called shape to compare against in freestyle
-      tMs: Math.round(now - sessionStartRef.current),
     });
 
     currentRepPeakVelocityRef.current = 0;
@@ -1309,7 +1252,6 @@ export default function VisionPage() {
   // Drill / command loop
   // -------------------------------------------------------------------------
   const startDrill = () => {
-    sessionStartRef.current = performance.now();
     if (modeRef.current === 'freestyle') {
       startFreestyleRound();
       return;
@@ -1355,7 +1297,6 @@ export default function VisionPage() {
           footPivotScore: 0,
           trajectory: 'straight',
           trajectoryMatch: false,
-          tMs: Math.round(performance.now() - sessionStartRef.current),
         });
       }
 
@@ -1460,7 +1401,6 @@ export default function VisionPage() {
         footPivotScore: 0,
         trajectory: 'straight',
         trajectoryMatch: false,
-        tMs: Math.round(performance.now() - sessionStartRef.current),
       });
     }
     awaitingRef.current = false;
@@ -1477,7 +1417,6 @@ export default function VisionPage() {
     }
 
     const isFreestyle = modeRef.current === 'freestyle';
-    const isDefenseMode = modeRef.current === 'defense';
     const totalAttempts = isFreestyle ? hitCountRef.current : hitCountRef.current + missCountRef.current;
 
     if (totalAttempts < 3) {
@@ -1486,49 +1425,13 @@ export default function VisionPage() {
       return;
     }
 
-    const log = repLogRef.current;
-    const mean = (arr: number[]) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
-    const stddev = (arr: number[]) => {
-      if (arr.length < 2) return 0;
-      const m = mean(arr);
-      return Math.sqrt(mean(arr.map((v) => (v - m) ** 2)));
-    };
-    // Splits a time-ordered set of reps into "first half of the session" vs
-    // "second half," by real elapsed time (tMs) rather than rep count — used
-    // to detect fatigue/drop-off across a drill or round instead of just
-    // reporting a single flat average for the whole session.
-    const splitByHalf = <T extends { tMs: number }>(entries: T[]): { first: T[]; second: T[] } | null => {
-      if (entries.length < 4) return null;
-      const maxT = Math.max(...entries.map((e) => e.tMs));
-      if (maxT <= 0) return null;
-      const mid = maxT / 2;
-      const first = entries.filter((e) => e.tMs < mid);
-      const second = entries.filter((e) => e.tMs >= mid);
-      if (first.length < 2 || second.length < 2) return null;
-      return { first, second };
-    };
-    const buildCommandBreakdown = (commands: string[], kindFilter: 'punch' | 'defense') =>
-      commands
-        .map((cmd) => {
-          const attempts = log.filter((r) => r.command === cmd && r.kind === kindFilter);
-          const hits = attempts.filter((r) => r.hit);
-          const reflexes = hits.map((r) => r.reactionMs).filter((v): v is number => v !== null);
-          const powers = hits.map((r) => r.estimatedPower);
-          return {
-            command: cmd,
-            attempts: attempts.length,
-            hits: hits.length,
-            accuracy: attempts.length ? Math.round((hits.length / attempts.length) * 100) : 0,
-            avgReflex: reflexes.length ? Math.round(mean(reflexes)) : null,
-            avgPower: powers.length ? Math.round(mean(powers)) : 0,
-          };
-        })
-        .filter((b) => b.attempts > 0);
-
     const accuracy = isFreestyle ? 100 : Math.round((hitCountRef.current / totalAttempts) * 100);
-    const avgReaction = reactionTimesRef.current.length ? Math.round(mean(reactionTimesRef.current)) : null;
-    const reflexConsistencyMs = reactionTimesRef.current.length >= 3 ? Math.round(stddev(reactionTimesRef.current)) : null;
-    const avgTrackingConfidence = trackingSamplesRef.current.length ? mean(trackingSamplesRef.current) : 0;
+    const avgReaction = reactionTimesRef.current.length
+      ? Math.round(reactionTimesRef.current.reduce((a, b) => a + b, 0) / reactionTimesRef.current.length)
+      : null;
+    const avgTrackingConfidence = trackingSamplesRef.current.length
+      ? trackingSamplesRef.current.reduce((a, b) => a + b, 0) / trackingSamplesRef.current.length
+      : 0;
 
     const stanceScore = Math.round(avgTrackingConfidence * 100);
     const reflexScore = avgReaction
@@ -1560,6 +1463,7 @@ export default function VisionPage() {
 
     // Build a real, per-command mistakes breakdown from the actual rep log —
     // nothing here is invented, it's all aggregated from logged reps.
+    const log = repLogRef.current;
     const missesByCommand: Record<string, number> = {};
     log.filter((r) => !r.hit).forEach((r) => {
       missesByCommand[r.command] = (missesByCommand[r.command] || 0) + 1;
@@ -1575,29 +1479,10 @@ export default function VisionPage() {
     const allHits = log.filter((r) => r.hit);
     const hitsOnly = allHits.filter((r) => r.reactionMs !== null);
     const punchHits = allHits.filter((r) => r.kind === 'punch');
-
     if (hitsOnly.length > 0) {
       const slowest = hitsOnly.reduce((a, b) => ((a.reactionMs ?? 0) > (b.reactionMs ?? 0) ? a : b));
       if ((slowest.reactionMs ?? 0) > 700) {
         mistakes.push(`Slowest reaction was on ${slowest.command} at ${slowest.reactionMs}ms — noticeably behind your average.`);
-      }
-    }
-
-    // --- Reflex consistency & mid-session fatigue (Punches / Defense only —
-    // freestyle has no called-command reaction times to measure this from) --
-    let reflexFatigueMs: number | null = null;
-    if (!isFreestyle) {
-      if (reflexConsistencyMs !== null && avgReaction && reflexConsistencyMs > avgReaction * 0.45) {
-        mistakes.push(`Reaction times were inconsistent (±${reflexConsistencyMs}ms around your average) — some calls were answered instantly, others were late. Stay in a ready position between commands instead of resetting.`);
-      }
-      const reflexHalves = splitByHalf(hitsOnly);
-      if (reflexHalves) {
-        const firstAvg = mean(reflexHalves.first.map((r) => r.reactionMs as number));
-        const secondAvg = mean(reflexHalves.second.map((r) => r.reactionMs as number));
-        reflexFatigueMs = Math.round(secondAvg - firstAvg);
-        if (reflexFatigueMs > 60) {
-          mistakes.push(`Reactions slowed by ${reflexFatigueMs}ms in the second half of the session — fatigue crept into your reflexes. Build conditioning or shorten sessions until your pace holds up.`);
-        }
       }
     }
 
@@ -1611,10 +1496,10 @@ export default function VisionPage() {
         mistakes.push(`Weakest strike was ${weakestStrike.command} at ${weakestStrike.peakVelocity}°/s — extend fully through the target.`);
       }
 
-      avgRotation = mean(punchHits.map((r) => r.rotationScore));
-      avgKneeDrive = mean(punchHits.map((r) => r.kneeDriveScore));
-      avgWeightTransfer = mean(punchHits.map((r) => r.weightTransferScore));
-      avgFootPivot = mean(punchHits.map((r) => r.footPivotScore));
+      avgRotation = punchHits.reduce((sum, r) => sum + r.rotationScore, 0) / punchHits.length;
+      avgKneeDrive = punchHits.reduce((sum, r) => sum + r.kneeDriveScore, 0) / punchHits.length;
+      avgWeightTransfer = punchHits.reduce((sum, r) => sum + r.weightTransferScore, 0) / punchHits.length;
+      avgFootPivot = punchHits.reduce((sum, r) => sum + r.footPivotScore, 0) / punchHits.length;
       trajectoryAccuracy = isFreestyle ? 100 : Math.round(
         (punchHits.filter((r) => r.trajectoryMatch).length / punchHits.length) * 100
       );
@@ -1647,130 +1532,25 @@ export default function VisionPage() {
             : 'Several punches didn\'t match the expected trajectory shape for the call — focus on clean punch-specific paths.'
         );
       }
-    }
 
-    // ---- Mode-specific breakdowns & analysis --------------------------
-    let punchTypeBreakdown: ReturnType<typeof buildCommandBreakdown> = [];
-    let defenseBreakdown: ReturnType<typeof buildCommandBreakdown> = [];
-    let punchAccuracy: number | null = null;
-    let punchAvgReflex: number | null = null;
-    let defenseAccuracy: number | null = null;
-    let defenseAvgReflex: number | null = null;
-    let punchesPerMinute: number | null = null;
-    let paceConsistencyPct: number | null = null; // % — lower means steadier output, higher means bursty/erratic
-    let fatiguePowerPct: number | null = null; // negative = power dropped off across the round
-
-    if (isFreestyle) {
-      // -------- Freestyle: continuous-output analysis (no called commands,
-      // so the signal here is volume, rhythm, and drop-off, not accuracy) --
-      const roundSeconds = freestyleDurationRef.current;
-      punchesPerMinute = roundSeconds > 0 ? Math.round((hitCountRef.current / roundSeconds) * 60) : null;
-
-      const times = punchHits.map((r) => r.tMs).sort((a, b) => a - b);
-      const intervals: number[] = [];
-      for (let i = 1; i < times.length; i++) intervals.push(times[i] - times[i - 1]);
-      if (intervals.length >= 3) {
-        const intervalMean = mean(intervals);
-        const intervalStd = stddev(intervals);
-        paceConsistencyPct = intervalMean > 0 ? Math.round((intervalStd / intervalMean) * 100) : null;
-      }
-
-      const powerHalves = splitByHalf(punchHits);
-      if (powerHalves) {
-        const firstPower = mean(powerHalves.first.map((r) => r.estimatedPower));
-        const secondPower = mean(powerHalves.second.map((r) => r.estimatedPower));
-        if (firstPower > 0) fatiguePowerPct = Math.round(((secondPower - firstPower) / firstPower) * 100);
-      }
-
-      if (punchesPerMinute !== null && punchesPerMinute < 40) {
-        mistakes.push(`Output was light at ${punchesPerMinute} punches/min — keep your hands moving more continuously through the round instead of pausing between combos.`);
-      }
-      if (paceConsistencyPct !== null && paceConsistencyPct > 70) {
-        mistakes.push('Punch pacing was erratic — long pauses mixed with bursts. Work on a steadier, more continuous rhythm rather than stop-start flurries.');
-      }
-      if (fatiguePowerPct !== null && fatiguePowerPct <= -15) {
-        mistakes.push(`Strike power dropped ${Math.abs(fatiguePowerPct)}% in the second half of the round — pace your energy early so you can finish as strong as you started.`);
-      }
-    } else if (isDefenseMode) {
-      // -------- Defense mode: split punching skill from defensive-read
-      // skill instead of pooling them into one accuracy number, since
-      // they're genuinely different abilities (throwing vs reacting/dodging).
-      const punchAttempts = log.filter((r) => r.kind === 'punch');
-      const punchHitsD = punchAttempts.filter((r) => r.hit);
-      const defenseAttempts = log.filter((r) => r.kind === 'defense');
-      const defenseHitsD = defenseAttempts.filter((r) => r.hit);
-
-      punchAccuracy = punchAttempts.length ? Math.round((punchHitsD.length / punchAttempts.length) * 100) : null;
-      defenseAccuracy = defenseAttempts.length ? Math.round((defenseHitsD.length / defenseAttempts.length) * 100) : null;
-      const punchReflexes = punchHitsD.map((r) => r.reactionMs).filter((v): v is number => v !== null);
-      const defenseReflexes = defenseHitsD.map((r) => r.reactionMs).filter((v): v is number => v !== null);
-      punchAvgReflex = punchReflexes.length ? Math.round(mean(punchReflexes)) : null;
-      defenseAvgReflex = defenseReflexes.length ? Math.round(mean(defenseReflexes)) : null;
-
-      punchTypeBreakdown = buildCommandBreakdown(PUNCH_COMMANDS.map((c) => c.text), 'punch');
-      defenseBreakdown = buildCommandBreakdown(DEFENSE_COMMANDS.map((c) => c.text), 'defense');
-
-      if (punchAccuracy !== null && defenseAccuracy !== null && Math.abs(punchAccuracy - defenseAccuracy) >= 20) {
-        if (defenseAccuracy < punchAccuracy) {
-          mistakes.push(`Defensive reads lagged well behind your punching — ${defenseAccuracy}% on slips/rolls vs ${punchAccuracy}% on punches. Drill head movement on its own before mixing it back in with offense.`);
-          flaw = `Defense is the clear gap this session — ${defenseAccuracy}% vs ${punchAccuracy}% on punches.`;
-          advice = 'Isolate slip/roll drills without punches mixed in until the movement is automatic, then reintroduce combinations.';
-        } else {
-          mistakes.push(`Punch execution lagged behind your defense — ${punchAccuracy}% vs ${defenseAccuracy}% on defensive calls. Slow the striking drills down until the mechanics are automatic.`);
-          flaw = `Punching is the clear gap this session — ${punchAccuracy}% vs ${defenseAccuracy}% on defense.`;
-          advice = 'Drop to a slower difficulty and rebuild clean punch mechanics before mixing defense back in.';
-        }
-      }
-      const weakestDefenseMove = defenseBreakdown.length
-        ? [...defenseBreakdown].sort((a, b) => a.accuracy - b.accuracy)[0]
-        : null;
-      if (weakestDefenseMove && weakestDefenseMove.attempts >= 2 && weakestDefenseMove.accuracy < 60) {
-        mistakes.push(`${weakestDefenseMove.command} was your weakest defensive read at ${weakestDefenseMove.accuracy}% (${weakestDefenseMove.hits}/${weakestDefenseMove.attempts}) — drill that movement in isolation.`);
-      }
-    } else {
-      // -------- Punches mode: break accuracy down per punch type so "which
-      // specific punch is weak" is visible instead of one pooled number --
-      punchTypeBreakdown = buildCommandBreakdown(PUNCH_COMMANDS.map((c) => c.text), 'punch');
-      const weakestPunch = punchTypeBreakdown.length
-        ? [...punchTypeBreakdown].sort((a, b) => a.accuracy - b.accuracy)[0]
-        : null;
-      if (weakestPunch && weakestPunch.attempts >= 2 && weakestPunch.accuracy < 70) {
-        mistakes.push(`${weakestPunch.command} was your weakest call at ${weakestPunch.accuracy}% (${weakestPunch.hits}/${weakestPunch.attempts}) — isolate that punch in your next session.`);
-        if (weakestPunch.accuracy < accuracy - 15) {
-          flaw = `${weakestPunch.command} is dragging your accuracy down — ${weakestPunch.accuracy}% vs ${accuracy}% overall.`;
-          advice = `Slow down specifically on ${weakestPunch.command} until it's as clean and fast as your other punches, then bring the speed back up.`;
-        }
+      if (isFreestyle) {
+        // No accuracy/reflex signal in freestyle — overall score is a pure
+        // technique composite instead.
+        overallScore = Math.round(
+          (powerScore + stanceScore + avgRotation + avgKneeDrive + avgWeightTransfer + avgFootPivot) / 6
+        );
+        const techScores = [
+          { name: 'rotation', value: avgRotation, flaw: 'Torso rotation was the weak link across your combos.', advice: 'Drive power from your hips and shoulders on every strike, not just your arm.' },
+          { name: 'knee', value: avgKneeDrive, flaw: 'Knee drive was minimal through most of the round.', advice: 'Push off your back leg to load each punch before you throw it.' },
+          { name: 'weight', value: avgWeightTransfer, flaw: 'Weight transfer was flat across the round.', advice: 'Shift your weight forward and across into each strike.' },
+          { name: 'pivot', value: avgFootPivot, flaw: 'Rear foot pivot was minimal.', advice: 'Let your back heel rotate so your hips can fully turn into the punch.' },
+          { name: 'power', value: powerScore, flaw: 'Strike speed stayed on the slower side throughout.', advice: 'Snap through the extension instead of pushing the arm out.' },
+        ];
+        const weakestTech = techScores.sort((a, b) => a.value - b.value)[0];
+        flaw = weakestTech.flaw;
+        advice = weakestTech.advice;
       }
     }
-
-    if (isFreestyle) {
-      // No accuracy/reflex signal in freestyle — overall score is a pure
-      // technique composite instead.
-      overallScore = Math.round(
-        (powerScore + stanceScore + avgRotation + avgKneeDrive + avgWeightTransfer + avgFootPivot) / 6
-      );
-      const techScores = [
-        { name: 'rotation', value: avgRotation, flaw: 'Torso rotation was the weak link across your combos.', advice: 'Drive power from your hips and shoulders on every strike, not just your arm.' },
-        { name: 'knee', value: avgKneeDrive, flaw: 'Knee drive was minimal through most of the round.', advice: 'Push off your back leg to load each punch before you throw it.' },
-        { name: 'weight', value: avgWeightTransfer, flaw: 'Weight transfer was flat across the round.', advice: 'Shift your weight forward and across into each strike.' },
-        { name: 'pivot', value: avgFootPivot, flaw: 'Rear foot pivot was minimal.', advice: 'Let your back heel rotate so your hips can fully turn into the punch.' },
-        { name: 'power', value: powerScore, flaw: 'Strike speed stayed on the slower side throughout.', advice: 'Snap through the extension instead of pushing the arm out.' },
-      ];
-      const weakestTech = techScores.sort((a, b) => a.value - b.value)[0];
-      flaw = weakestTech.flaw;
-      advice = weakestTech.advice;
-      // Pace/fatigue findings are the most actionable freestyle-specific
-      // signal when they're bad enough to matter — surface them over the
-      // generic weakest-technique pick when they're the dominant issue.
-      if (fatiguePowerPct !== null && fatiguePowerPct <= -20) {
-        flaw = `Power faded ${Math.abs(fatiguePowerPct)}% from the first half of the round to the second.`;
-        advice = 'Throw with a bit less than max effort early so you can hold your power output through the full round.';
-      } else if (paceConsistencyPct !== null && paceConsistencyPct > 80) {
-        flaw = 'Your punch rhythm was the least consistent part of this round.';
-        advice = 'Focus on a steady, continuous output rather than alternating bursts and long pauses.';
-      }
-    }
-
     if (mistakes.length === 0) {
       mistakes.push('No specific recurring mistake detected — commands were answered cleanly and on time.');
     }
@@ -1782,8 +1562,6 @@ export default function VisionPage() {
       reflexScore,
       accuracy,
       avgReflex: avgReaction,
-      reflexConsistencyMs,
-      reflexFatigueMs,
       hits: hitCountRef.current,
       misses: missCountRef.current,
       posture: Math.round(stanceScore / 10),
@@ -1797,16 +1575,6 @@ export default function VisionPage() {
       footPivotScore: Math.round(avgFootPivot),
       trajectoryAccuracy,
       isFreestyle,
-      isDefenseMode,
-      punchTypeBreakdown,
-      defenseBreakdown,
-      punchAccuracy,
-      punchAvgReflex,
-      defenseAccuracy,
-      defenseAvgReflex,
-      punchesPerMinute,
-      paceConsistencyPct,
-      fatiguePowerPct,
     });
     setInsufficientData(false);
     setStage('results');
@@ -2052,6 +1820,32 @@ export default function VisionPage() {
 
             <div className="flex flex-col gap-3">
               <span className="text-[8px] font-black text-white/40 tracking-wider uppercase block">
+                CAMERA SETUP GUIDE
+              </span>
+              <div className="bg-black/40 border border-primary/20 rounded-3xl overflow-hidden">
+                <video
+                  src="/vision/setup-guide.mp4"
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="w-full aspect-video object-cover bg-black"
+                />
+                <div className="p-4">
+                  <p className="text-[11px] font-bold text-white/80 leading-relaxed">
+                    Stand at a <span className="text-primary">45&deg; angle</span> to your camera — not straight-on —
+                    with your <span className="text-primary">whole body in frame</span>, head to feet.
+                  </p>
+                  <p className="text-[9px] text-white/40 font-semibold leading-relaxed mt-2">
+                    This gives the AI a clear side-on view of your rotation, footwork, and guard, so
+                    tracking is more accurate for every drill — Punches, Defense, and Freestyle.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <span className="text-[8px] font-black text-white/40 tracking-wider uppercase block">
                 CAMERA SOURCE
               </span>
               {cameraDevices.length === 0 ? (
@@ -2132,75 +1926,8 @@ export default function VisionPage() {
               </div>
             )}
 
-            <NeonButton
-              onClick={() => (hasSeenAnalysisGuide ? startCalibration() : setStage('guide'))}
-              disabled={subscriptionChecking}
-              className="w-full h-14 mt-2"
-            >
-              {subscriptionChecking ? 'CHECKING SUBSCRIPTION…' : 'CONTINUE'}
-            </NeonButton>
-          </motion.div>
-        )}
-
-        {stage === 'guide' && (
-          <motion.div
-            key="stage-guide"
-            className="flex flex-col gap-6 anim-fade-in select-none"
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -15 }}
-          >
-            <header className="flex justify-between items-center">
-              <div>
-                <span className="text-[9px] font-black text-primary tracking-[3px] uppercase block mb-1">
-                  BEFORE YOU START
-                </span>
-                <h1 className="text-xl font-black italic uppercase text-white leading-none">
-                  CAMERA SETUP GUIDE
-                </h1>
-              </div>
-              <button
-                onClick={() => setStage('config')}
-                className="w-10 h-10 rounded-full border border-white/10 bg-white/5 flex items-center justify-center text-white/60 hover:text-white"
-              >
-                <ArrowLeft className="w-4 h-4" />
-              </button>
-            </header>
-
-            <p className="text-[11px] text-white/50 font-semibold leading-relaxed">
-              The AI reads your joints frame by frame — a few seconds getting this right
-              makes every punch it detects far more accurate.
-            </p>
-
-            <div className="flex flex-col gap-2.5">
-              {[
-                { icon: '↗️', title: 'Stand at a 45° angle', body: 'Angle your body to the camera rather than facing it head-on — a natural boxing stance, not square to the lens.' },
-                { icon: '🦶', title: 'Keep your whole body in frame', body: 'Feet included. If your ankles are cut off, the AI can\'t read your footwork or weight transfer.' },
-                { icon: '📷', title: 'Camera at chest height', body: 'Too high or too low distorts how your stance and rotation get measured.' },
-                { icon: '📏', title: 'Stand back far enough', body: 'Leave enough distance that your full body — head to feet — comfortably fits inside the frame.' },
-                { icon: '💡', title: 'Good, even lighting', body: 'A plain background and even light help the model track your joints reliably. Avoid strong backlight.' },
-                { icon: '🎥', title: 'Keep the camera still', body: 'Excess camera shake during the round makes tracking noisier and can cost you detected punches.' },
-                { icon: '🥊', title: 'Start from your stance', body: 'Get into a proper boxing guard before you begin — that\'s the baseline everything else is measured against.' },
-              ].map((tip) => (
-                <div key={tip.title} className="flex items-start gap-3 bg-black/40 border border-white/5 rounded-2xl p-3.5">
-                  <span className="text-xl leading-none mt-0.5">{tip.icon}</span>
-                  <div>
-                    <div className="text-[11px] font-black text-white uppercase tracking-wide">{tip.title}</div>
-                    <div className="text-[10px] text-white/45 font-semibold leading-snug mt-0.5">{tip.body}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <NeonButton
-              onClick={() => {
-                setHasSeenAnalysisGuide(true);
-                startCalibration();
-              }}
-              disabled={subscriptionChecking}
-              className="w-full h-14 mt-2"
-            >
-              {subscriptionChecking ? 'CHECKING SUBSCRIPTION…' : "GOT IT — LET'S GO"}
+            <NeonButton onClick={startCalibration} disabled={subscriptionChecking} className="w-full h-14 mt-2">
+              {subscriptionChecking ? 'CHECKING SUBSCRIPTION…' : 'START CALIBRATION'}
             </NeonButton>
           </motion.div>
         )}
@@ -2309,80 +2036,40 @@ export default function VisionPage() {
                 </div>
               )}
 
-              {awaitingUserStart && (() => {
-                // fullBody + distance are objectively measurable from
-                // visibility/position and are required to start — angle and
-                // lighting are heuristic estimates from a single camera, so
-                // they're shown as strong guidance rather than a hard block
-                // (treating them as absolute could strand someone in a
-                // perfectly usable setup that just reads as slightly off).
-                const setupReady = setupChecks.fullBody && setupChecks.distance;
-                const checkItems: { key: keyof typeof setupChecks; label: string }[] = [
-                  { key: 'fullBody', label: 'Full Body Detected' },
-                  { key: 'distance', label: 'Correct Distance' },
-                  { key: 'angle', label: 'Correct Angle' },
-                  { key: 'lighting', label: 'Good Lighting' },
-                ];
-                return (
-                  <div className="absolute inset-0 bg-black/40 z-40 flex flex-col items-center justify-end p-6 pb-8 text-center select-none">
-                    <div className="bg-black/70 border border-primary/40 text-primary px-3 py-1 rounded-full text-[9px] font-black tracking-widest uppercase mb-3">
-                      CAMERA FEED LIVE — CHECK YOUR FRAMING
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 mb-4 w-full max-w-[280px]">
-                      {checkItems.map((item) => {
-                        const ok = setupChecks[item.key];
-                        return (
-                          <div
-                            key={item.key}
-                            className={`flex items-center gap-1.5 px-2.5 py-2 rounded-xl border text-[9px] font-black uppercase tracking-wide transition-colors ${ok
-                                ? 'bg-primary/10 border-primary/40 text-primary'
-                                : 'bg-white/5 border-white/10 text-white/40'
-                              }`}
-                          >
-                            <span>{ok ? '✅' : '⏳'}</span>
-                            <span className="text-left leading-tight">{item.label}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    <div className="text-[8px] text-white/40 font-bold uppercase tracking-wider mb-3">
-                      SOURCE: {cameraDevices.find((d) => d.deviceId === selectedDeviceId)?.label || 'Default Camera'}
-                    </div>
-                    <div className="flex gap-2 mb-4">
-                      <span className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-white/60 text-[8px] font-black uppercase tracking-widest">
-                        {mode === 'punches' ? 'Punches Only' : mode === 'defense' ? 'Punches & Defense' : 'Freestyle'}
-                      </span>
-                      {mode !== 'freestyle' && (
-                        <span className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-white/60 text-[8px] font-black uppercase tracking-widest">
-                          {difficulty} Speed
-                        </span>
-                      )}
-                      <span className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-white/60 text-[8px] font-black uppercase tracking-widest">
-                        {mode === 'freestyle' ? `${freestyleDuration}s Round` : `${punchTarget} Commands`}
-                      </span>
-                    </div>
-                    <button
-                      onClick={beginCalibration}
-                      disabled={!setupReady}
-                      className={`w-20 h-20 rounded-full flex items-center justify-center transition-all ${setupReady
-                          ? 'bg-primary text-black shadow-[0_0_25px_rgba(226,255,59,0.45)] active:scale-95'
-                          : 'bg-white/10 text-white/30 cursor-not-allowed'
-                        }`}
-                    >
-                      <span className="text-[10px] font-black uppercase tracking-widest leading-tight">
-                        START<br />ANALYSIS
-                      </span>
-                    </button>
-                    <p className="text-[10px] text-white/50 font-bold uppercase tracking-wider mt-4 max-w-[260px]">
-                      {setupReady
-                        ? "You're framed up — tap start when you're ready."
-                        : 'Step back so your full body is visible, then tap start.'}
-                    </p>
+              {awaitingUserStart && (
+                <div className="absolute inset-0 bg-black/40 z-40 flex flex-col items-center justify-end p-6 pb-8 text-center select-none">
+                  <div className="bg-black/70 border border-primary/40 text-primary px-3 py-1 rounded-full text-[9px] font-black tracking-widest uppercase mb-2">
+                    CAMERA FEED LIVE — CHECK YOUR FRAMING
                   </div>
-                );
-              })()}
+                  <div className="text-[8px] text-white/40 font-bold uppercase tracking-wider mb-4">
+                    SOURCE: {cameraDevices.find((d) => d.deviceId === selectedDeviceId)?.label || 'Default Camera'}
+                  </div>
+                  <div className="flex gap-2 mb-4">
+                    <span className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-white/60 text-[8px] font-black uppercase tracking-widest">
+                      {mode === 'punches' ? 'Punches Only' : mode === 'defense' ? 'Punches & Defense' : 'Freestyle'}
+                    </span>
+                    {mode !== 'freestyle' && (
+                      <span className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-white/60 text-[8px] font-black uppercase tracking-widest">
+                        {difficulty} Speed
+                      </span>
+                    )}
+                    <span className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-white/60 text-[8px] font-black uppercase tracking-widest">
+                      {mode === 'freestyle' ? `${freestyleDuration}s Round` : `${punchTarget} Commands`}
+                    </span>
+                  </div>
+                  <button
+                    onClick={beginCalibration}
+                    className="w-20 h-20 rounded-full bg-primary text-black flex items-center justify-center shadow-[0_0_25px_rgba(226,255,59,0.45)] active:scale-95 transition-transform"
+                  >
+                    <span className="text-[10px] font-black uppercase tracking-widest leading-tight">
+                      START<br />ANALYSIS
+                    </span>
+                  </button>
+                  <p className="text-[10px] text-white/50 font-bold uppercase tracking-wider mt-4 max-w-[260px]">
+                    Step back 6-8 feet, get in frame, then tap start when you&apos;re ready.
+                  </p>
+                </div>
+              )}
 
               {!awaitingUserStart && !calibSuccess && (
                 <div className="absolute inset-0 bg-black/75 backdrop-blur-sm z-40 flex flex-col items-center justify-center p-6 text-center select-none">
@@ -2652,115 +2339,6 @@ export default function VisionPage() {
                     Punch Trajectory Accuracy
                   </span>
                   <span className="text-[10px] font-black text-primary">{resultsData.trajectoryAccuracy}%</span>
-                </div>
-              </GlassCard>
-            )}
-
-            {resultsData.isDefenseMode && (resultsData.punchAccuracy !== null || resultsData.defenseAccuracy !== null) && (
-              <GlassCard className="p-5 border-white/5 bg-black/40">
-                <span className="text-[9px] font-black text-primary tracking-widest uppercase block mb-1">
-                  Offense vs Defense
-                </span>
-                <p className="text-[8px] text-white/30 uppercase tracking-wider mb-3">
-                  Punching and defensive reads are genuinely different skills — scored separately
-                </p>
-                <div className="grid grid-cols-2 gap-2.5">
-                  <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-3">
-                    <span className="text-[7px] font-black text-white/40 uppercase tracking-wider block mb-1">Punch Accuracy</span>
-                    <div className="text-lg font-black text-white">{resultsData.punchAccuracy ?? '—'}{resultsData.punchAccuracy !== null ? '%' : ''}</div>
-                    {resultsData.punchAvgReflex !== null && (
-                      <span className="text-[8px] text-white/30 font-bold">{resultsData.punchAvgReflex}ms avg reflex</span>
-                    )}
-                  </div>
-                  <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-3">
-                    <span className="text-[7px] font-black text-white/40 uppercase tracking-wider block mb-1">Defense Accuracy</span>
-                    <div className="text-lg font-black text-white">{resultsData.defenseAccuracy ?? '—'}{resultsData.defenseAccuracy !== null ? '%' : ''}</div>
-                    {resultsData.defenseAvgReflex !== null && (
-                      <span className="text-[8px] text-white/30 font-bold">{resultsData.defenseAvgReflex}ms avg reflex</span>
-                    )}
-                  </div>
-                </div>
-                {resultsData.defenseBreakdown && resultsData.defenseBreakdown.length > 0 && (
-                  <div className="flex flex-col gap-1.5 mt-3">
-                    {resultsData.defenseBreakdown.map((b: any) => (
-                      <div key={b.command} className="flex items-center justify-between px-3 py-2 rounded-xl bg-white/[0.01] border border-white/5">
-                        <span className="text-[9px] font-black text-white/70 uppercase tracking-wide">{b.command}</span>
-                        <span className="text-[9px] font-mono text-white/40">{b.hits}/{b.attempts} · <span className="text-primary font-black">{b.accuracy}%</span></span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </GlassCard>
-            )}
-
-            {!resultsData.isFreestyle && !resultsData.isDefenseMode && resultsData.punchTypeBreakdown && resultsData.punchTypeBreakdown.length > 0 && (
-              <GlassCard className="p-5 border-white/5 bg-black/40">
-                <span className="text-[9px] font-black text-primary tracking-widest uppercase block mb-3">
-                  Punch Type Breakdown
-                </span>
-                <div className="flex flex-col gap-1.5">
-                  {resultsData.punchTypeBreakdown.map((b: any) => (
-                    <div key={b.command} className="flex items-center justify-between px-3 py-2 rounded-xl bg-white/[0.01] border border-white/5">
-                      <span className="text-[9px] font-black text-white/70 uppercase tracking-wide">{b.command}</span>
-                      <span className="text-[9px] font-mono text-white/40">
-                        {b.hits}/{b.attempts} · <span className="text-primary font-black">{b.accuracy}%</span>
-                        {b.avgReflex !== null && <> · {b.avgReflex}ms</>}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </GlassCard>
-            )}
-
-            {resultsData.isFreestyle && (resultsData.punchesPerMinute !== null || resultsData.paceConsistencyPct !== null) && (
-              <GlassCard className="p-5 border-white/5 bg-black/40">
-                <span className="text-[9px] font-black text-primary tracking-widest uppercase block mb-1">
-                  Output & Pace
-                </span>
-                <p className="text-[8px] text-white/30 uppercase tracking-wider mb-3">
-                  Freestyle has no called commands, so volume and rhythm are the signal instead of accuracy
-                </p>
-                <div className="grid grid-cols-3 gap-2.5">
-                  <div className="bg-white/[0.02] border border-white/5 rounded-2xl py-3 text-center">
-                    <div className="text-sm font-black text-white leading-none mb-1">
-                      {resultsData.punchesPerMinute ?? '—'}
-                    </div>
-                    <span className="text-[7px] font-black text-white/30 uppercase tracking-wider block">Punches / Min</span>
-                  </div>
-                  <div className="bg-white/[0.02] border border-white/5 rounded-2xl py-3 text-center">
-                    <div className="text-sm font-black text-white leading-none mb-1">
-                      {resultsData.paceConsistencyPct !== null ? `${resultsData.paceConsistencyPct}%` : '—'}
-                    </div>
-                    <span className="text-[7px] font-black text-white/30 uppercase tracking-wider block">Pace Variance</span>
-                  </div>
-                  <div className="bg-white/[0.02] border border-white/5 rounded-2xl py-3 text-center">
-                    <div className={`text-sm font-black leading-none mb-1 ${resultsData.fatiguePowerPct !== null && resultsData.fatiguePowerPct < 0 ? 'text-red-400' : 'text-white'}`}>
-                      {resultsData.fatiguePowerPct !== null ? `${resultsData.fatiguePowerPct > 0 ? '+' : ''}${resultsData.fatiguePowerPct}%` : '—'}
-                    </div>
-                    <span className="text-[7px] font-black text-white/30 uppercase tracking-wider block">Power, 2nd Half</span>
-                  </div>
-                </div>
-              </GlassCard>
-            )}
-
-            {!resultsData.isFreestyle && (resultsData.reflexConsistencyMs !== null || resultsData.reflexFatigueMs !== null) && (
-              <GlassCard className="p-5 border-white/5 bg-black/40">
-                <span className="text-[9px] font-black text-primary tracking-widest uppercase block mb-3">
-                  Reflex Consistency
-                </span>
-                <div className="grid grid-cols-2 gap-2.5">
-                  <div className="bg-white/[0.02] border border-white/5 rounded-2xl py-3 text-center">
-                    <div className="text-sm font-black text-white leading-none mb-1">
-                      {resultsData.reflexConsistencyMs !== null ? `±${resultsData.reflexConsistencyMs}ms` : '—'}
-                    </div>
-                    <span className="text-[7px] font-black text-white/30 uppercase tracking-wider block">Variance</span>
-                  </div>
-                  <div className="bg-white/[0.02] border border-white/5 rounded-2xl py-3 text-center">
-                    <div className={`text-sm font-black leading-none mb-1 ${resultsData.reflexFatigueMs !== null && resultsData.reflexFatigueMs > 0 ? 'text-red-400' : 'text-white'}`}>
-                      {resultsData.reflexFatigueMs !== null ? `${resultsData.reflexFatigueMs > 0 ? '+' : ''}${resultsData.reflexFatigueMs}ms` : '—'}
-                    </div>
-                    <span className="text-[7px] font-black text-white/30 uppercase tracking-wider block">2nd-Half Drift</span>
-                  </div>
                 </div>
               </GlassCard>
             )}
