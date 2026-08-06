@@ -23,28 +23,28 @@ const PLAN_CARDS: PlanCard[] = [
   {
     id: 'monthly',
     name: 'Monthly',
-    price: '₹629',
+    price: '₹399',
     period: '/ month',
     features: ['1 AI Video Analysis / day', '1 Planner Generation / week'],
   },
   {
     id: 'monthly_pro',
     name: 'Monthly Pro',
-    price: '₹699',
+    price: '₹499',
     period: '/ month',
     features: ['2 AI Video Analyses / day', '2 Planner Generations / week'],
   },
   {
     id: 'three_month',
     name: '3 Months',
-    price: '₹1,629',
+    price: '₹999',
     period: '/ 3 months',
     features: ['3 AI Video Analyses / day', '3 Planner Generations / week'],
   },
   {
     id: 'yearly',
     name: 'Yearly',
-    price: '₹6,629',
+    price: '₹2,999',
     period: '/ year',
     features: [
       'Unlimited AI Video Analyses',

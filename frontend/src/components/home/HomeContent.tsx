@@ -187,11 +187,11 @@ const FEATURE_SHOWCASE = [
 // Real plan data — mirrors app/(app)/subscription/page.tsx exactly, so the
 // public homepage never shows numbers that don't match the actual app.
 const PRICING_PLANS = [
-  { name: 'Monthly', price: '₹629', period: '/ month', features: ['1 AI Video Analysis / day', '1 Planner Generation / week'] },
-  { name: 'Monthly Pro', price: '₹699', period: '/ month', features: ['2 AI Video Analyses / day', '2 Planner Generations / week'] },
-  { name: '3 Months', price: '₹1,629', period: '/ 3 months', features: ['3 AI Video Analyses / day', '3 Planner Generations / week'] },
+  { name: 'Monthly', price: '₹399', period: '/ month', features: ['1 AI Video Analysis / day', '1 Planner Generation / week'] },
+  { name: 'Monthly Pro', price: '₹499', period: '/ month', features: ['2 AI Video Analyses / day', '2 Planner Generations / week'] },
+  { name: '3 Months', price: '₹999', period: '/ 3 months', features: ['3 AI Video Analyses / day', '3 Planner Generations / week'] },
   {
-    name: 'Yearly', price: '₹6,629', period: '/ year', highlight: true,
+    name: 'Yearly', price: '₹2,999', period: '/ year', highlight: true,
     features: ['Unlimited AI Video Analyses', 'Unlimited Planner Generations', 'Premium Guru skills unlocked', 'Elite Member badge'],
   },
 ];

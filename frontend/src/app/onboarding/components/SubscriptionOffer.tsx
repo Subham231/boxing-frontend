@@ -20,7 +20,7 @@ const PLANS = [
   {
     id: 'monthly_pro',
     name: 'Monthly Pro',
-    price: '₹699',
+    price: '₹499',
     period: '/mo',
     features: ['2 AI Video Analyses / day', '2 Planner Generations / week'],
     highlight: true,
@@ -28,7 +28,7 @@ const PLANS = [
   {
     id: 'yearly',
     name: 'Yearly',
-    price: '₹6,629',
+    price: '₹2,999',
     period: '/yr',
     features: ['Unlimited AI Video Analyses', 'Unlimited Planner Generations', 'Premium Guru unlocked', 'Elite Member badge'],
   },

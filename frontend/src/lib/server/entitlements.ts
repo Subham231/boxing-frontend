@@ -22,7 +22,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
   monthly: {
     id: 'monthly',
     name: 'Monthly',
-    priceInPaise: 62900, // ₹629
+    priceInPaise: 39900, // ₹399
     durationDays: 30,
     dailyAnalysisLimit: 1,
     weeklyPlannerLimit: 1,
@@ -32,7 +32,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
   monthly_pro: {
     id: 'monthly_pro',
     name: 'Monthly Pro',
-    priceInPaise: 69900, // ₹699
+    priceInPaise: 49900, // ₹499
     durationDays: 30,
     dailyAnalysisLimit: 2,
     weeklyPlannerLimit: 2,
@@ -42,7 +42,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
   three_month: {
     id: 'three_month',
     name: '3 Months',
-    priceInPaise: 162900, // ₹1,629
+    priceInPaise: 99900, // ₹999
     durationDays: 90,
     dailyAnalysisLimit: 3,
     weeklyPlannerLimit: 3,
@@ -52,7 +52,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
   yearly: {
     id: 'yearly',
     name: 'Yearly',
-    priceInPaise: 662900, // ₹6,629
+    priceInPaise: 299900, // ₹2,999
     durationDays: 365,
     dailyAnalysisLimit: -1,
     weeklyPlannerLimit: -1,
