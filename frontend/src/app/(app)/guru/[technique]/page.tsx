@@ -6,7 +6,7 @@ import { useRouter, useParams } from 'next/navigation';
 import {
   ArrowLeft, Target, Lightbulb, AlertTriangle, ChevronRight, ChevronDown,
   Shield, Zap, PersonStanding, Star, Check, PlayCircle, Film, Image as ImageIcon,
-  ThumbsUp, ThumbsDown, Sparkles, HelpCircle, Plus,
+  ThumbsUp, ThumbsDown, Sparkles, HelpCircle, Plus, Maximize2, X, Pause, Play,
 } from 'lucide-react';
 import { getTechniqueById, getCategoryOf, techniquesData, overallRating, TechniqueDetail } from '@/lib/techniques-data';
 import {
@@ -159,6 +159,42 @@ export default function TechniqueDetailPage() {
   const rating = overallRating(technique.metrics);
   const totals = progress ? practiceTotals(progress) : { todayReps: 0, todayMinutes: 0, weekReps: 0, weekMinutes: 0, totalReps: 0, totalMinutes: 0 };
 
+  // Fullscreen "gif-style" video viewer — loops silently, user can only
+  // pause/resume it. No seek bar, no rewind, no native controls at all.
+  const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
+  const [isFullscreenPlaying, setIsFullscreenPlaying] = useState(true);
+  const fullscreenVideoRef = React.useRef<HTMLVideoElement | null>(null);
+
+  const openFullscreenVideo = () => {
+    setIsFullscreenPlaying(true);
+    setIsFullscreenOpen(true);
+  };
+
+  const closeFullscreenVideo = () => {
+    setIsFullscreenOpen(false);
+  };
+
+  const toggleFullscreenPlayback = () => {
+    const el = fullscreenVideoRef.current;
+    if (!el) return;
+    if (el.paused) {
+      el.play();
+      setIsFullscreenPlaying(true);
+    } else {
+      el.pause();
+      setIsFullscreenPlaying(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isFullscreenOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeFullscreenVideo();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isFullscreenOpen]);
+
   return (
     <div className="flex flex-col gap-6 anim-fade-in pb-16">
       <div className="absolute -top-16 left-0 right-0 flex justify-between items-center text-[10px] font-mono text-primary font-bold z-10 pointer-events-none select-none">
@@ -209,6 +245,15 @@ export default function TechniqueDetailPage() {
           />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-transparent" />
+        {technique.videoUrl && (
+          <button
+            onClick={openFullscreenVideo}
+            aria-label="View technique video fullscreen"
+            className="absolute top-4 right-4 z-10 w-9 h-9 rounded-full border border-white/15 bg-black/50 backdrop-blur-sm flex items-center justify-center text-white/70 hover:text-primary hover:border-primary/40 transition-all"
+          >
+            <Maximize2 className="w-4 h-4" />
+          </button>
+        )}
         <div className="absolute bottom-5 left-5 right-5 z-10 flex flex-col gap-3">
           {technique.isAiPick && (
             <div className="bg-primary text-black font-black text-[7px] tracking-widest px-3.5 py-0.5 rounded-full uppercase self-start shadow-[0_0_8px_rgba(226,255,59,0.3)]">
@@ -586,6 +631,57 @@ export default function TechniqueDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Fullscreen "gif-style" video viewer. Loops silently; the only
+          control exposed is play/pause — no seek bar, no rewind/skip. */}
+      {isFullscreenOpen && technique.videoUrl && (
+        <div
+          className="fixed inset-0 z-[100] bg-black flex items-center justify-center anim-fade-in"
+          onClick={closeFullscreenVideo}
+        >
+          <button
+            onClick={(e) => { e.stopPropagation(); closeFullscreenVideo(); }}
+            aria-label="Close fullscreen video"
+            className="absolute top-5 right-5 z-10 w-10 h-10 rounded-full border border-white/15 bg-white/5 flex items-center justify-center text-white/70 hover:text-white transition-all"
+          >
+            <X className="w-5 h-5" />
+          </button>
+
+          <div
+            className="relative w-full h-full flex items-center justify-center"
+            onClick={(e) => { e.stopPropagation(); toggleFullscreenPlayback(); }}
+          >
+            <video
+              ref={fullscreenVideoRef}
+              src={technique.videoUrl}
+              className="max-w-full max-h-full object-contain"
+              autoPlay
+              loop
+              muted
+              playsInline
+              controls={false}
+              disablePictureInPicture
+              controlsList="nodownload noremoteplayback nofullscreen"
+              onContextMenu={(e) => e.preventDefault()}
+            />
+
+            {/* Play/Pause overlay — this is the only playback control available */}
+            <div
+              className={`absolute inset-0 flex items-center justify-center transition-opacity duration-200 ${
+                isFullscreenPlaying ? 'opacity-0 hover:opacity-100' : 'opacity-100'
+              }`}
+            >
+              <div className="w-16 h-16 rounded-full bg-black/50 border border-white/15 backdrop-blur-sm flex items-center justify-center text-white">
+                {isFullscreenPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 ml-0.5" />}
+              </div>
+            </div>
+          </div>
+
+          <div className="absolute bottom-6 left-0 right-0 text-center text-[9px] font-black text-white/30 uppercase tracking-widest pointer-events-none">
+            {technique.name} · Tap to {isFullscreenPlaying ? 'pause' : 'play'}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
