@@ -271,7 +271,7 @@ export default function GuruPage() {
           {favorites.length > 0 && (
             <div className="flex flex-col gap-2">
               <span className="text-[9px] font-black tracking-[3px] text-white/30 uppercase">Favorites</span>
-              <div className="flex gap-2 overflow-x-auto pb-1">
+              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
                 {favorites.map((f) => (
                   <button
                     key={f.id}
@@ -290,7 +290,7 @@ export default function GuruPage() {
           {recentTechniques.length > 0 && (
             <div className="flex flex-col gap-2">
               <span className="text-[9px] font-black tracking-[3px] text-white/30 uppercase">Recently Viewed</span>
-              <div className="flex gap-2 overflow-x-auto pb-1">
+              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
                 {recentTechniques.map((r) => (
                   <button
                     key={r.id}
