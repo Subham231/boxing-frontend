@@ -245,15 +245,14 @@ export default function TechniqueDetailPage() {
           />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-transparent" />
-        {technique.videoUrl && (
-          <button
-            onClick={openFullscreenVideo}
-            aria-label="View technique video fullscreen"
-            className="absolute top-4 right-4 z-10 w-9 h-9 rounded-full border border-white/15 bg-black/50 backdrop-blur-sm flex items-center justify-center text-white/70 hover:text-primary hover:border-primary/40 transition-all"
-          >
-            <Maximize2 className="w-4 h-4" />
-          </button>
-        )}
+        <button
+          onClick={openFullscreenVideo}
+          aria-label={technique.videoUrl ? 'View technique video fullscreen' : 'View technique image fullscreen'}
+          className="absolute top-4 right-4 z-20 flex items-center gap-1.5 pl-3 pr-3.5 h-9 rounded-full border border-white/20 bg-black/60 backdrop-blur-sm text-white/80 hover:text-primary hover:border-primary/40 transition-all shadow-lg"
+        >
+          <Maximize2 className="w-3.5 h-3.5" />
+          <span className="text-[8px] font-black uppercase tracking-widest">Full Screen</span>
+        </button>
         <div className="absolute bottom-5 left-5 right-5 z-10 flex flex-col gap-3">
           {technique.isAiPick && (
             <div className="bg-primary text-black font-black text-[7px] tracking-widest px-3.5 py-0.5 rounded-full uppercase self-start shadow-[0_0_8px_rgba(226,255,59,0.3)]">
@@ -633,52 +632,66 @@ export default function TechniqueDetailPage() {
       </div>
 
       {/* Fullscreen "gif-style" video viewer. Loops silently; the only
-          control exposed is play/pause — no seek bar, no rewind/skip. */}
-      {isFullscreenOpen && technique.videoUrl && (
+          control exposed is play/pause — no seek bar, no rewind/skip.
+          Falls back to a plain fullscreen image for skills that don't
+          have reference footage yet. */}
+      {isFullscreenOpen && (
         <div
           className="fixed inset-0 z-[100] bg-black flex items-center justify-center anim-fade-in"
           onClick={closeFullscreenVideo}
         >
           <button
             onClick={(e) => { e.stopPropagation(); closeFullscreenVideo(); }}
-            aria-label="Close fullscreen video"
+            aria-label="Close fullscreen view"
             className="absolute top-5 right-5 z-10 w-10 h-10 rounded-full border border-white/15 bg-white/5 flex items-center justify-center text-white/70 hover:text-white transition-all"
           >
             <X className="w-5 h-5" />
           </button>
 
-          <div
-            className="relative w-full h-full flex items-center justify-center"
-            onClick={(e) => { e.stopPropagation(); toggleFullscreenPlayback(); }}
-          >
-            <video
-              ref={fullscreenVideoRef}
-              src={technique.videoUrl}
-              className="max-w-full max-h-full object-contain"
-              autoPlay
-              loop
-              muted
-              playsInline
-              controls={false}
-              disablePictureInPicture
-              controlsList="nodownload noremoteplayback nofullscreen"
-              onContextMenu={(e) => e.preventDefault()}
-            />
-
-            {/* Play/Pause overlay — this is the only playback control available */}
+          {technique.videoUrl ? (
             <div
-              className={`absolute inset-0 flex items-center justify-center transition-opacity duration-200 ${
-                isFullscreenPlaying ? 'opacity-0 hover:opacity-100' : 'opacity-100'
-              }`}
+              className="relative w-full h-full flex items-center justify-center"
+              onClick={(e) => { e.stopPropagation(); toggleFullscreenPlayback(); }}
             >
-              <div className="w-16 h-16 rounded-full bg-black/50 border border-white/15 backdrop-blur-sm flex items-center justify-center text-white">
-                {isFullscreenPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 ml-0.5" />}
+              <video
+                ref={fullscreenVideoRef}
+                src={technique.videoUrl}
+                poster={technique.image}
+                className="max-w-full max-h-full object-contain"
+                autoPlay
+                loop
+                muted
+                playsInline
+                controls={false}
+                disablePictureInPicture
+                controlsList="nodownload noremoteplayback nofullscreen"
+                onContextMenu={(e) => e.preventDefault()}
+              />
+
+              {/* Play/Pause overlay — this is the only playback control available */}
+              <div
+                className={`absolute inset-0 flex items-center justify-center transition-opacity duration-200 ${
+                  isFullscreenPlaying ? 'opacity-0 hover:opacity-100' : 'opacity-100'
+                }`}
+              >
+                <div className="w-16 h-16 rounded-full bg-black/50 border border-white/15 backdrop-blur-sm flex items-center justify-center text-white">
+                  {isFullscreenPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 ml-0.5" />}
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <img
+              src={technique.image}
+              onError={(e) => { (e.target as HTMLImageElement).src = `https://placehold.co/600x400/111115/333339/png?text=${encodeURIComponent(technique.name)}`; }}
+              alt={technique.name}
+              className="max-w-full max-h-full object-contain"
+              onClick={(e) => e.stopPropagation()}
+            />
+          )}
 
           <div className="absolute bottom-6 left-0 right-0 text-center text-[9px] font-black text-white/30 uppercase tracking-widest pointer-events-none">
-            {technique.name} · Tap to {isFullscreenPlaying ? 'pause' : 'play'}
+            {technique.name}
+            {technique.videoUrl ? ` · Tap to ${isFullscreenPlaying ? 'pause' : 'play'}` : ''}
           </div>
         </div>
       )}
