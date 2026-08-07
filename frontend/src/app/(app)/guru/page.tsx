@@ -32,7 +32,7 @@ function dayIndex(len: number): number {
 }
 
 function techImage(item: TechniqueDetail) {
-  return `/assets/${item.id}.jpg`;
+  return item.image;
 }
 
 function StageBadge({ stage }: { stage: LearningStage }) {

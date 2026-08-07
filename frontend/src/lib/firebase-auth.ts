@@ -35,18 +35,19 @@ export interface UserProfile {
 
 const recaptchaVerifiers = new Map<string, RecaptchaVerifier>();
 
-// Must be called with the id of a visible (or invisible) container element
-// already mounted in the DOM before sending an OTP.
+// Phone OTP architecture:
+//   1. Firebase Auth sends + verifies the SMS code (RecaptchaVerifier +
+//      signInWithPhoneNumber + confirmation.confirm).
+//   2. Supabase NEVER sends SMS. It only rate-limits send attempts
+//      (/api/reflex/otp-rate-limit) and stores the user profile after a
+//      successful Firebase verify (/api/reflex/ensure-profile).
 //
-// A verifier is recreated FRESH every call, even for the same container id.
-// Reusing a RecaptchaVerifier across multiple send attempts (or letting one
-// container's clear() reach across into a different, already-unmounted
-// container from another part of the app) is exactly what causes
-// "reCAPTCHA client element has been removed" and other corrupted-widget
-// errors that can go on to break every subsequent send. Keying by
-// container id (rather than one shared module-level slot) also means
-// separate features — e.g. the onboarding OTP step vs. the Reflex page's
-// login gate — can never tear down each other's verifier.
+// Must be called with the id of a container element already mounted in the
+// DOM before sending an OTP (empty <div id="…" /> on the login/signup OTP
+// screens). A verifier is recreated FRESH every call — reusing one across
+// sends causes "reCAPTCHA client element has been removed". Keying by
+// container id keeps onboarding OTP and Reflex login from tearing each
+// other down.
 export function ensureRecaptcha(containerId: string): RecaptchaVerifier {
   const existing = recaptchaVerifiers.get(containerId);
   if (existing) {
@@ -58,8 +59,17 @@ export function ensureRecaptcha(containerId: string): RecaptchaVerifier {
     }
     recaptchaVerifiers.delete(containerId);
   }
+
+  // Invisible reCAPTCHA — same pattern as Firebase phone-auth docs
+  // (getAuth + RecaptchaVerifier with size: 'invisible').
   const verifier = new RecaptchaVerifier(firebaseAuth, containerId, {
     size: 'invisible',
+    callback: () => {
+      // reCAPTCHA solved — signInWithPhoneNumber can proceed.
+    },
+    'expired-callback': () => {
+      // Token expired; next sendOtp() recreates a fresh verifier.
+    },
   });
   recaptchaVerifiers.set(containerId, verifier);
   return verifier;
@@ -88,11 +98,69 @@ export async function checkOtpRateLimit(phoneNumberE164: string): Promise<{ allo
   return res.json();
 }
 
-export async function sendOtp(phoneNumberE164: string, recaptchaContainerId: string): Promise<ConfirmationResult> {
-  const verifier = ensureRecaptcha(recaptchaContainerId);
-  return signInWithPhoneNumber(firebaseAuth, phoneNumberE164, verifier);
+/** Map Firebase Auth / reCAPTCHA errors to something a fighter can act on. */
+export function formatPhoneAuthError(error: unknown): string {
+  const code =
+    error && typeof error === 'object' && 'code' in error
+      ? String((error as { code?: string }).code)
+      : '';
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : 'Could not send verification code.';
+
+  if (
+    code === 'auth/captcha-check-failed' ||
+    /Hostname match not found/i.test(message)
+  ) {
+    const host =
+      typeof window !== 'undefined' ? window.location.hostname : 'this domain';
+    return `This site (${host}) is not authorized for phone login in Firebase. Add "${host}" under Authentication → Settings → Authorized domains, then try again.`;
+  }
+  if (code === 'auth/too-many-requests') {
+    return 'Too many attempts. Wait a bit, then try again.';
+  }
+  if (code === 'auth/invalid-phone-number') {
+    return 'That phone number looks invalid. Use international format, e.g. +919876543210.';
+  }
+  if (code === 'auth/quota-exceeded') {
+    return 'SMS quota for this project is exhausted. Try again later.';
+  }
+  if (code === 'auth/operation-not-allowed') {
+    return 'Phone sign-in is disabled in Firebase. Enable Phone under Authentication → Sign-in method.';
+  }
+  if (/reCAPTCHA Timeout/i.test(message)) {
+    return 'Verification timed out. Refresh the page and try again (check your connection / ad blockers).';
+  }
+
+  // Strip the "Firebase: … (auth/…)" wrapper when present for cleaner UI.
+  const cleaned = message.replace(/^Firebase:\s*/i, '').replace(/\s*\(auth\/[^)]+\)\s*$/i, '');
+  return cleaned || 'Could not send verification code.';
 }
 
+/** Step 2 — Firebase sends the SMS OTP (E.164 phone required). */
+export async function sendOtp(phoneNumberE164: string, recaptchaContainerId: string): Promise<ConfirmationResult> {
+  const verifier = ensureRecaptcha(recaptchaContainerId);
+  try {
+    return await signInWithPhoneNumber(firebaseAuth, phoneNumberE164, verifier);
+  } catch (error: unknown) {
+    // Clear the broken widget so the next attempt gets a clean verifier.
+    try {
+      verifier.clear();
+    } catch {
+      // ignore
+    }
+    recaptchaVerifiers.delete(recaptchaContainerId);
+    throw new Error(formatPhoneAuthError(error));
+  }
+}
+
+/**
+ * Step 3 — confirm the 6-digit SMS code with Firebase, then sync the user
+ * into Supabase (profile row). Supabase is the data store, not the SMS pipe.
+ */
 export async function confirmOtp(
   confirmation: ConfirmationResult,
   code: string,

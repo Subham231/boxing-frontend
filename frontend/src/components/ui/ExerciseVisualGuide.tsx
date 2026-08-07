@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { getExerciseVideoUrl } from '@/lib/exercise-media';
 
 /**
  * Exercise reference visual.
@@ -142,11 +143,12 @@ interface ExerciseVisualGuideProps {
 
 export function ExerciseVisualGuide({ name, instruction, videoUrl, expanded = false }: ExerciseVisualGuideProps) {
     const category = detectMotionCategory(name, instruction);
+    const resolvedVideoUrl = videoUrl || getExerciseVideoUrl(name);
 
-    if (videoUrl) {
+    if (resolvedVideoUrl) {
         return (
             <video
-                src={videoUrl}
+                src={resolvedVideoUrl}
                 className="w-full h-full object-cover"
                 autoPlay
                 loop
@@ -159,7 +161,7 @@ export function ExerciseVisualGuide({ name, instruction, videoUrl, expanded = fa
     return (
         <div className={`flex flex-col items-center justify-center w-full h-full bg-gradient-to-b from-black/40 to-black/80 ${expanded ? 'py-12' : ''}`}>
             <MotionFigure category={category} />
-            {!videoUrl && (
+            {!resolvedVideoUrl && (
                 <span className="text-[8px] font-black text-white/25 uppercase tracking-widest mt-2">
                     Animated Form Guide
                 </span>

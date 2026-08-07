@@ -190,12 +190,24 @@ export default function TechniqueDetailPage() {
 
       {/* Hero Visual Card */}
       <div className="relative rounded-3xl h-64 border border-white/10 bg-black/45 overflow-hidden shadow-2xl">
-        <img
-          src={`/assets/${technique.id}.jpg`}
-          onError={(e) => { (e.target as HTMLImageElement).src = `https://placehold.co/600x400/111115/333339/png?text=${encodeURIComponent(technique.name)}`; }}
-          alt={technique.name}
-          className="absolute inset-0 w-full h-full object-cover opacity-35 scale-105"
-        />
+        {technique.videoUrl ? (
+          <video
+            src={technique.videoUrl}
+            poster={technique.image}
+            className="absolute inset-0 w-full h-full object-cover opacity-40 scale-105"
+            autoPlay
+            loop
+            muted
+            playsInline
+          />
+        ) : (
+          <img
+            src={technique.image}
+            onError={(e) => { (e.target as HTMLImageElement).src = `https://placehold.co/600x400/111115/333339/png?text=${encodeURIComponent(technique.name)}`; }}
+            alt={technique.name}
+            className="absolute inset-0 w-full h-full object-cover opacity-35 scale-105"
+          />
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-transparent" />
         <div className="absolute bottom-5 left-5 right-5 z-10 flex flex-col gap-3">
           {technique.isAiPick && (

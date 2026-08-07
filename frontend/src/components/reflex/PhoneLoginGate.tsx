@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { Phone, ShieldCheck, ArrowRight } from 'lucide-react';
 import type { ConfirmationResult } from 'firebase/auth';
-import { sendOtp, confirmOtp, checkOtpRateLimit } from '@/lib/firebase-auth';
+import { sendOtp, confirmOtp, checkOtpRateLimit, formatPhoneAuthError } from '@/lib/firebase-auth';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
 
@@ -42,7 +42,7 @@ export default function PhoneLoginGate({ onLoggedIn }: PhoneLoginGateProps) {
       setConfirmation(result);
       setStep('otp');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not send verification code.');
+      setError(formatPhoneAuthError(e));
     } finally {
       setLoading(false);
     }

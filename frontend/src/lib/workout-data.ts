@@ -17,7 +17,8 @@ export const bodyweightExercises: Record<string, any[]> = {
         { name: "Wide Pushups", baseReps: 12, instruction: "Target outer chest and shoulders." },
         { name: "Pike Pushups", baseReps: 8, instruction: "Hips high, head towards floor to target shoulders." },
         { name: "Incline Pushups", baseReps: 15, instruction: "Hands on a raised surface (optional, but can use floor)." },
-        { name: "Plank Shoulder Taps", baseReps: 20, instruction: "Minimize hip movement while tapping opposite shoulder." }
+        { name: "Plank Shoulder Taps", baseReps: 20, instruction: "Minimize hip movement while tapping opposite shoulder." },
+        { name: "Explosive Pushups", baseReps: 8, instruction: "Push hard enough for hands to leave the floor, land softly." }
     ],
     "Core": [
         { name: "Situps", baseReps: 15, instruction: "Full range of motion, touch floor behind head." },
