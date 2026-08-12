@@ -136,8 +136,8 @@ export default function RanksPage() {
                   }`}
                 >
                   <div className="flex items-center gap-4 z-10">
-                    <div className="w-12 h-12 flex items-center justify-center shrink-0">
-                      <img src={tier.iconImg} alt={tier.name} className="w-full h-full object-contain" />
+                    <div className="w-14 h-14 flex items-center justify-center shrink-0 p-1 bg-black/40 rounded-2xl border border-white/10 shadow-inner">
+                      <img src={tier.iconImg} alt={tier.name} className="w-full h-full object-contain filter drop-shadow-[0_0_8px_rgba(255,255,255,0.2)]" />
                     </div>
                     <div>
                       <span className="text-base font-black italic uppercase tracking-wider block leading-none" style={{ color: tier.color }}>
