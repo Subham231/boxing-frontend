@@ -59,17 +59,17 @@ export default function RanksPage() {
       ) : (
         <>
           {/* Current rank hero */}
-          <GlassCard className="p-6 border-white/5 bg-black/40 flex flex-col items-center gap-3 text-center">
+          <GlassCard className="p-6 border-white/5 bg-black/40 flex flex-col items-center gap-3 text-center relative overflow-hidden">
             <motion.div
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              className="w-20 h-20 rounded-full flex items-center justify-center border-2"
-              style={{ borderColor: currentTier.color, boxShadow: `0 0 30px ${currentTier.color}33` }}
+              className="w-24 h-24 flex items-center justify-center relative"
             >
-              {(() => {
-                const Icon = RANK_ICONS[rankLevel];
-                return <Icon className="w-9 h-9" style={{ color: currentTier.color }} />;
-              })()}
+              <img
+                src={currentTier.iconImg}
+                alt={currentTier.name}
+                className="w-full h-full object-contain filter drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]"
+              />
             </motion.div>
             <div>
               <span className="text-2xl font-black italic uppercase tracking-wide" style={{ color: currentTier.color }}>
@@ -84,20 +84,20 @@ export default function RanksPage() {
               <div className="w-full flex flex-col gap-2 mt-2">
                 <div className="flex justify-between text-[9px] font-black uppercase text-white/40">
                   <span>Progress to {RANKS[rankLevel + 1].name}</span>
-                  <span>{progress} / {required} Days</span>
+                  <span>{state?.current_streak || 0} / {required} Days</span>
                 </div>
-                <div className="h-2 rounded-full bg-white/5 overflow-hidden">
+                <div className="h-2.5 rounded-full bg-white/10 overflow-hidden p-0.5 border border-white/10">
                   <motion.div
                     className="h-full rounded-full"
                     style={{ backgroundColor: RANKS[rankLevel + 1].color }}
                     initial={{ width: 0 }}
-                    animate={{ width: `${progressPct}%` }}
+                    animate={{ width: `${Math.min(100, Math.round(((state?.current_streak || 0) / required) * 100))}%` }}
                     transition={{ duration: 0.8 }}
                   />
                 </div>
               </div>
             ) : (
-              <p className="text-[10px] font-black text-primary uppercase tracking-widest mt-1">Max Rank Reached</p>
+              <p className="text-[10px] font-black text-primary uppercase tracking-widest mt-1">Max Rank Reached 👑</p>
             )}
           </GlassCard>
 
@@ -107,49 +107,52 @@ export default function RanksPage() {
             <div className="flex items-start gap-3">
               <TrendingUp className="w-4 h-4 text-primary shrink-0 mt-0.5" />
               <p className="text-[11px] text-white/70 font-semibold leading-relaxed">
-                Complete a workout every day to build your streak. Each rank requires a longer streak than the last —
-                the climb gets harder as you go.
+                Complete an AI video analysis session every day to build your streak. Reach 3, 5, 7, 9, 11, and 13-day streaks to unlock higher combat badges.
               </p>
             </div>
             <div className="flex items-start gap-3">
               <TrendingDown className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
               <p className="text-[11px] text-white/70 font-semibold leading-relaxed">
-                Miss 2 full days in a row and you drop one rank. A single missed day won't hurt you — but don't let
-                it stretch to two.
+                Miss 2 full days in a row (48h inactivity) and you drop one rank. Train daily to keep your badge glowing.
               </p>
             </div>
           </GlassCard>
 
-          {/* Rank ladder */}
-          <div className="flex flex-col gap-2.5">
+          {/* Rank ladder matching exact user image */}
+          <div className="flex flex-col gap-3">
             <span className="text-[9px] font-black text-white/40 uppercase tracking-widest px-1">Rank Ladder</span>
-            {RANKS.slice().reverse().map((tier) => {
-              const Icon = RANK_ICONS[tier.level];
+            {RANKS.slice(1).reverse().map((tier) => {
               const isCurrent = tier.level === rankLevel;
               const isPast = tier.level < rankLevel;
               return (
                 <div
                   key={tier.level}
-                  className={`flex items-center gap-3 p-3.5 rounded-2xl border ${
-                    isCurrent ? 'bg-white/[0.04] border-white/20' : 'bg-black/30 border-white/5'
+                  className={`relative flex items-center justify-between p-4 rounded-2xl border overflow-hidden transition-all duration-300 ${
+                    isCurrent
+                      ? 'bg-gradient-to-r from-white/10 to-black/60 border-primary shadow-[0_0_20px_rgba(226,255,59,0.15)] scale-[1.02]'
+                      : isPast
+                        ? 'bg-black/40 border-white/10 opacity-90'
+                        : 'bg-black/20 border-white/5 opacity-50'
                   }`}
                 >
-                  <div
-                    className="w-9 h-9 rounded-full flex items-center justify-center border shrink-0"
-                    style={{ borderColor: tier.color, opacity: isPast || isCurrent ? 1 : 0.35 }}
-                  >
-                    <Icon className="w-4 h-4" style={{ color: tier.color }} />
+                  <div className="flex items-center gap-4 z-10">
+                    <div className="w-12 h-12 flex items-center justify-center shrink-0">
+                      <img src={tier.iconImg} alt={tier.name} className="w-full h-full object-contain" />
+                    </div>
+                    <div>
+                      <span className="text-base font-black italic uppercase tracking-wider block leading-none" style={{ color: tier.color }}>
+                        {tier.name}
+                      </span>
+                      <span className="text-[10px] font-extrabold text-white/50 uppercase tracking-wide block mt-1">
+                        Requires {tier.requiredStreak}-Day Streak
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <span className="text-xs font-black uppercase" style={{ color: isPast || isCurrent ? tier.color : '#666' }}>
-                      {tier.name}
-                    </span>
-                    <p className="text-[9px] text-white/30 font-bold uppercase">
-                      {tier.level === 0 ? 'Starting Rank' : `Requires ${requiredStreakForNextRank(tier.level - 1)}-Day Streak`}
-                    </p>
-                  </div>
+
                   {isCurrent && (
-                    <span className="text-[8px] font-black text-white bg-white/10 px-2 py-1 rounded-full uppercase">You</span>
+                    <span className="px-3 py-1 text-[9px] font-black rounded-full uppercase bg-primary text-black tracking-widest shadow-[0_0_10px_rgba(226,255,59,0.4)] z-10">
+                      Active
+                    </span>
                   )}
                 </div>
               );

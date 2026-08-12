@@ -2,24 +2,39 @@ export interface RankTier {
   level: number;
   name: string;
   color: string; // tailwind-safe hex, used for badges/progress bars
+  badgeImg: string;
+  iconImg: string;
+  requiredStreak: number;
 }
 
 export const RANKS: RankTier[] = [
-  { level: 0, name: 'ROOKIE', color: '#888888' },
-  { level: 1, name: 'BRONZE', color: '#CD7F32' },
-  { level: 2, name: 'SILVER', color: '#C0C0C0' },
-  { level: 3, name: 'GOLD', color: '#FFD700' },
-  { level: 4, name: 'PLATINUM', color: '#E5E4E2' },
-  { level: 5, name: 'DIAMOND', color: '#B9F2FF' },
-  { level: 6, name: 'MASTER', color: '#E2FF3B' },
+  { level: 0, name: 'ROOKIE', color: '#888888', badgeImg: '/ranks/bronze.png', iconImg: '/ranks/bronze_icon.png', requiredStreak: 0 },
+  { level: 1, name: 'BRONZE', color: '#CD7F32', badgeImg: '/ranks/bronze.png', iconImg: '/ranks/bronze_icon.png', requiredStreak: 3 },
+  { level: 2, name: 'SILVER', color: '#C0C0C0', badgeImg: '/ranks/silver.png', iconImg: '/ranks/silver_icon.png', requiredStreak: 5 },
+  { level: 3, name: 'GOLD', color: '#FFD700', badgeImg: '/ranks/gold.png', iconImg: '/ranks/gold_icon.png', requiredStreak: 7 },
+  { level: 4, name: 'PLATINUM', color: '#00E5FF', badgeImg: '/ranks/platinum.png', iconImg: '/ranks/platinum_icon.png', requiredStreak: 9 },
+  { level: 5, name: 'DIAMOND', color: '#0099FF', badgeImg: '/ranks/diamond.png', iconImg: '/ranks/diamond_icon.png', requiredStreak: 11 },
+  { level: 6, name: 'MASTER', color: '#D040FF', badgeImg: '/ranks/master.png', iconImg: '/ranks/master_icon.png', requiredStreak: 13 },
 ];
 
 export const MAX_RANK_LEVEL = RANKS.length - 1;
 
-// Consecutive credited sessions needed to climb from `level` to `level + 1`.
-// Grows by 2 every rank: 3, 5, 7, 9, 11, 13.
+// Streak thresholds matching exact user design image:
+// BRONZE: 3-Day, SILVER: 5-Day, GOLD: 7-Day, PLATINUM: 9-Day, DIAMOND: 11-Day, MASTER: 13-Day
 export function requiredStreakForNextRank(level: number): number {
-  return 3 + level * 2;
+  if (level >= MAX_RANK_LEVEL) return 13;
+  return RANKS[level + 1].requiredStreak;
+}
+
+// Computes rank level from streak value
+export function getRankLevelForStreak(streak: number): number {
+  if (streak >= 13) return 6; // MASTER
+  if (streak >= 11) return 5; // DIAMOND
+  if (streak >= 9) return 4;  // PLATINUM
+  if (streak >= 7) return 3;  // GOLD
+  if (streak >= 5) return 2;  // SILVER
+  if (streak >= 3) return 1;  // BRONZE
+  return 0; // ROOKIE
 }
 
 // Every 2 full missed 24h windows (48h of inactivity since the last credited
@@ -94,13 +109,9 @@ export function applySessionProgress(state: RankState, nowIso: string, didComple
     ? next.current_streak + 1
     : 1;
   next.longest_streak = Math.max(next.longest_streak, next.current_streak);
-  next.streak_progress_days += 1;
 
-  const required = requiredStreakForNextRank(next.rank_level);
-  if (next.rank_level < MAX_RANK_LEVEL && next.streak_progress_days >= required) {
-    next.rank_level += 1;
-    next.streak_progress_days = 0;
-  }
+  // Recalculate rank level based on exact streak thresholds (3, 5, 7, 9, 11, 13)
+  next.rank_level = getRankLevelForStreak(next.current_streak);
 
   next.last_active_at = nowIso;
   return next;
