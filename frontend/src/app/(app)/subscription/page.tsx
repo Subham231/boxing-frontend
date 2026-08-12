@@ -11,7 +11,7 @@ import { NeonButton } from '@/components/ui/NeonButton';
 const DEV_SKIP_ENABLED = process.env.NEXT_PUBLIC_ENABLE_DEV_SKIP === 'true';
 
 interface PlanCard {
-  id: 'monthly' | 'monthly_pro' | 'three_month' | 'yearly';
+  id: 'test_plan' | 'monthly' | 'monthly_pro' | 'three_month' | 'yearly';
   name: string;
   price: string;
   period: string;
@@ -20,6 +20,14 @@ interface PlanCard {
 }
 
 const PLAN_CARDS: PlanCard[] = [
+  {
+    id: 'test_plan',
+    name: '⚡ ₹1 Live Test Plan',
+    price: '₹1',
+    period: '/ 1 day (Testing)',
+    features: ['Real Live Payment verification test', '5 AI Video Analyses / day', '5 Planner Generations / week'],
+    highlight: true,
+  },
   {
     id: 'monthly',
     name: 'SparAI Monthly',
@@ -33,7 +41,6 @@ const PLAN_CARDS: PlanCard[] = [
     price: '₹729',
     period: '/ month',
     features: ['2 AI Video Analyses / day', '2 Planner Generations / week'],
-    highlight: true,
   },
   {
     id: 'three_month',
@@ -244,14 +251,17 @@ export default function SubscriptionPage() {
             </div>
           </div>
           {status.plan !== 'referral_reward' && (
-            <button
-              onClick={handleCancelSubscription}
-              disabled={cancelling}
-              className="text-[10px] font-bold text-red-400/80 hover:text-red-400 uppercase tracking-wider self-end mt-1 flex items-center gap-1"
-            >
-              {cancelling ? <Loader2 className="w-3 h-3 animate-spin" /> : <XCircle className="w-3 h-3" />}
-              Cancel Auto-Renewal
-            </button>
+            <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/10">
+              <span className="text-[10px] font-black text-white/60 uppercase">Want to change your plan tier?</span>
+              <button
+                onClick={handleCancelSubscription}
+                disabled={cancelling}
+                className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-[9px] font-black uppercase tracking-wider flex items-center gap-1 border border-white/10"
+              >
+                {cancelling ? <Loader2 className="w-3 h-3 animate-spin" /> : <XCircle className="w-3 h-3" />}
+                Change / Cancel Plan
+              </button>
+            </div>
           )}
         </GlassCard>
       )}

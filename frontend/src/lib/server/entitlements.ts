@@ -5,7 +5,7 @@
 // ever reads reflex_profiles rows via the service-role Supabase client.
 import { supabaseAdmin } from './supabase-admin';
 
-export type PlanId = 'monthly' | 'monthly_pro' | 'three_month' | 'yearly';
+export type PlanId = 'test_plan' | 'monthly' | 'monthly_pro' | 'three_month' | 'yearly';
 
 export interface PlanConfig {
   id: PlanId;
@@ -20,6 +20,17 @@ export interface PlanConfig {
 }
 
 export const PLANS: Record<PlanId, PlanConfig> = {
+  test_plan: {
+    id: 'test_plan',
+    name: 'SparAI Test Plan',
+    priceInPaise: 100, // ₹1 (100 paise)
+    durationDays: 1,
+    dailyAnalysisLimit: 5,
+    weeklyPlannerLimit: 5,
+    isElite: true,
+    premiumGuru: true,
+    razorpayPlanId: process.env.RAZORPAY_PLAN_TEST || 'plan_test_default',
+  },
   monthly: {
     id: 'monthly',
     name: 'SparAI Monthly',
