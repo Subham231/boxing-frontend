@@ -117,9 +117,9 @@ export default function SubscriptionPage() {
       const orderData = await orderRes.json();
       if (!orderRes.ok) throw new Error(orderData.error || 'Failed to create subscription');
 
-      const { subscription, keyId } = orderData;
+      const { subscription, order, isDirectOrder, keyId } = orderData;
 
-      if (subscription.isMock) {
+      if ((subscription && subscription.isMock) || (order && order.isMock)) {
         const verifyRes = await fetch('/api/subscription/verify-payment', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -136,9 +136,8 @@ export default function SubscriptionPage() {
         throw new Error('Razorpay SDK failed to load. Please refresh the page.');
       }
 
-      const options = {
+      const options: any = {
         key: keyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
-        subscription_id: subscription.id,
         name: 'SparAI',
         description: `Subscription: ${PLAN_CARDS.find((p) => p.id === planId)?.name}`,
         handler: async (response: any) => {
@@ -148,7 +147,8 @@ export default function SubscriptionPage() {
               headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
               body: JSON.stringify({
                 razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_subscription_id: response.razorpay_subscription_id,
+                razorpay_subscription_id: response.razorpay_subscription_id || null,
+                razorpay_order_id: response.razorpay_order_id || null,
                 razorpay_signature: response.razorpay_signature,
                 planId,
               }),
@@ -166,6 +166,14 @@ export default function SubscriptionPage() {
         modal: { ondismiss: () => setProcessingPlan(null) },
         theme: { color: '#E2FF3B' },
       };
+
+      if (isDirectOrder && order) {
+        options.order_id = order.id;
+        options.amount = order.amount;
+        options.currency = order.currency || 'INR';
+      } else if (subscription) {
+        options.subscription_id = subscription.id;
+      }
 
       const rzp = new (window as any).Razorpay(options);
       rzp.open();

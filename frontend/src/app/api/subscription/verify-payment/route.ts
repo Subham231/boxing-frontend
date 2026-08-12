@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   const uid = decoded.uid;
 
   const body = await req.json().catch(() => ({}));
-  const { razorpay_payment_id, razorpay_subscription_id, razorpay_signature, planId, isMock } = body;
+  const { razorpay_payment_id, razorpay_subscription_id, razorpay_order_id, razorpay_signature, planId, isMock } = body;
 
   const plan = PLANS[planId as PlanId];
   if (!plan) {
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
   if (isMock) {
     paymentIdForLedger = `mock_${uid}_${Date.now()}`;
   } else {
-    if (!razorpay_payment_id || !razorpay_subscription_id || !razorpay_signature) {
+    if (!razorpay_payment_id || !razorpay_signature || (!razorpay_subscription_id && !razorpay_order_id)) {
       return NextResponse.json({ error: 'Missing payment signature components' }, { status: 400 });
     }
     if (!RAZORPAY_KEY_SECRET) {
@@ -53,10 +53,19 @@ export async function POST(req: NextRequest) {
     }
 
     // Subscription signature format: razorpay_payment_id + '|' + razorpay_subscription_id
-    const generatedSignature = crypto
-      .createHmac('sha256', RAZORPAY_KEY_SECRET)
-      .update(`${razorpay_payment_id}|${razorpay_subscription_id}`)
-      .digest('hex');
+    // Order signature format: razorpay_order_id + '|' + razorpay_payment_id
+    let generatedSignature = '';
+    if (razorpay_subscription_id) {
+      generatedSignature = crypto
+        .createHmac('sha256', RAZORPAY_KEY_SECRET)
+        .update(`${razorpay_payment_id}|${razorpay_subscription_id}`)
+        .digest('hex');
+    } else if (razorpay_order_id) {
+      generatedSignature = crypto
+        .createHmac('sha256', RAZORPAY_KEY_SECRET)
+        .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+        .digest('hex');
+    }
 
     if (generatedSignature !== razorpay_signature) {
       return NextResponse.json({ error: 'Invalid payment signature — verification failed' }, { status: 400 });

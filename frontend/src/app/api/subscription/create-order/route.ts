@@ -74,11 +74,33 @@ export async function POST(req: NextRequest) {
 
     if (!response.ok) {
       const errBody = await response.json().catch(() => ({}));
-      console.error('Razorpay subscription creation failed:', errBody);
-      return NextResponse.json(
-        { error: errBody.error?.description || errBody.error?.code || 'Razorpay subscription creation failed' },
-        { status: 500 },
-      );
+      console.warn('Razorpay subscription API rejected plan_id, falling back to direct order creation:', errBody);
+
+      // Fallback: Create direct Razorpay Order so checkout NEVER breaks even if Subscriptions API rejects plan ID
+      const orderRes = await fetch('https://api.razorpay.com/v1/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Basic ${Buffer.from(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`).toString('base64')}`,
+        },
+        body: JSON.stringify({
+          amount: plan.priceInPaise,
+          currency: 'INR',
+          receipt: `rcpt_${uid.substring(0, 8)}_${Date.now()}`,
+          notes: { uid, planId },
+        }),
+      });
+
+      if (!orderRes.ok) {
+        const orderErr = await orderRes.json().catch(() => ({}));
+        return NextResponse.json(
+          { error: orderErr.error?.description || errBody.error?.description || 'Razorpay payment creation failed' },
+          { status: 500 },
+        );
+      }
+
+      const order = await orderRes.json();
+      return NextResponse.json({ order, planId, keyId: RAZORPAY_KEY_ID, isDirectOrder: true });
     }
 
     const subscription = await response.json();
