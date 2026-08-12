@@ -51,27 +51,39 @@ export function BottomNav() {
         );
       })}
 
-      {/* Hex Video Button */}
-      <Link href="/vision" aria-label="Video analysis" className="relative -top-5 flex flex-col items-center cursor-pointer z-[1000] no-underline group select-none">
+      {/* Hex Video / AI Analysis Button */}
+      <Link href="/vision" aria-label="AI Video Analysis" className="relative -top-6 flex flex-col items-center cursor-pointer z-[1000] no-underline group select-none">
         {/* Streak badge */}
-        <div className="absolute -top-3.5 flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-gradient-to-r from-orange-500 to-yellow-400 text-black font-black text-[8px] tracking-wider shadow-[0_0_8px_rgba(249,115,22,0.4)] stealth-sensitive">
+        <div className="absolute -top-4 flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-gradient-to-r from-orange-500 via-amber-400 to-yellow-300 text-black font-black text-[8px] tracking-wider shadow-[0_0_12px_rgba(249,115,22,0.6)] animate-pulse stealth-sensitive z-20">
           <Flame className="w-2.5 h-2.5 fill-black stroke-none" />
           <span>{streak}</span>
         </div>
 
-        <div className="w-[58px] relative bg-black transition-all duration-300 group-hover:scale-105 group-active:scale-95 group-hover:rotate-6 flex items-center justify-center shadow-[0_0_15px_rgba(226,255,59,0.25)] border border-primary/20"
-             style={{
-               clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-               height: '64px'
-             }}>
-          <div className="absolute inset-[2px] bg-black z-10 flex items-center justify-center"
-               style={{
-                 clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-               }}>
-            <Play className="w-5 h-5 text-primary fill-primary/20 drop-shadow-[0_0_5px_rgba(226,255,59,0.8)]" />
+        {/* Outer Pulsing Neon Glow */}
+        <div className="absolute top-0 w-[64px] h-[70px] bg-primary/40 rounded-full blur-md group-hover:bg-primary/70 transition-all duration-500 animate-pulse" />
+
+        <div
+          className="w-[62px] relative bg-gradient-to-b from-primary via-primary/80 to-amber-400 transition-all duration-300 group-hover:scale-110 group-active:scale-95 flex items-center justify-center shadow-[0_0_25px_rgba(226,255,59,0.6)]"
+          style={{
+            clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+            height: '68px',
+          }}
+        >
+          <div
+            className="absolute inset-[2.5px] bg-[#0A0D08] z-10 flex flex-col items-center justify-center gap-0.5 group-hover:bg-[#12160d] transition-colors"
+            style={{
+              clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+            }}
+          >
+            <div className="relative">
+              <Play className="w-5 h-5 text-primary fill-primary/30 drop-shadow-[0_0_10px_rgba(226,255,59,1)] group-hover:scale-110 transition-transform" />
+              <Zap className="w-2.5 h-2.5 text-amber-300 absolute -top-1 -right-1 animate-bounce" />
+            </div>
           </div>
         </div>
-        <span className="mt-2.5 text-[9px] font-black tracking-wider text-primary uppercase">VIDEO</span>
+        <span className="mt-1 text-[9px] font-black tracking-widest text-primary uppercase drop-shadow-[0_0_8px_rgba(226,255,59,0.7)] group-hover:text-white transition-colors">
+          AI VISION
+        </span>
       </Link>
 
       {rightNavItems.map((item) => {

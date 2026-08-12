@@ -52,7 +52,7 @@ export default function ProtectedLayout({
       if (!isExemptFromSubscriptionGate(pathname) && supabase) {
         const { data: profile } = await supabase
           .from('reflex_profiles')
-          .select('subscription_until, plan_expires_at')
+          .select('subscription_until, plan_expires_at, current_period_end, subscription_status, plan')
           .eq('uid', user.uid)
           .maybeSingle();
 

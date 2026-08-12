@@ -528,8 +528,11 @@ export default function VisionPage() {
         utterance.voice = voice;
         utterance.lang = voice.lang;
       }
-      utterance.rate = difficultyRef.current === 'hard' ? 1.05 : difficultyRef.current === 'easy' ? 0.82 : 0.92;
-      utterance.pitch = profile === 'steel' ? 0.82 : profile === 'athena' ? 1.08 : 0.95;
+      
+      // Maximum projection settings for long distance (10-15ft away)
+      utterance.volume = 1.0; // 100% max hardware volume output
+      utterance.rate = difficultyRef.current === 'hard' ? 1.05 : difficultyRef.current === 'easy' ? 0.85 : 0.95; // Crisp, clear pacing
+      utterance.pitch = profile === 'steel' ? 1.05 : profile === 'athena' ? 1.15 : 1.0; // Slightly higher pitch cuts through ambient gym noise
 
       let fired = false;
       const fireStart = () => {
@@ -544,8 +547,7 @@ export default function VisionPage() {
         onEnd?.();
       };
       synthRef.current.speak(utterance);
-      // Safety net: some browsers/voices never fire onstart reliably. Cap
-      // the wait so a broken event never permanently desyncs the session.
+      // Safety net: cap wait to prevent desync
       setTimeout(fireStart, 150);
     } catch (e) {
       console.warn('Speech failed:', e);

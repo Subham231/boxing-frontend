@@ -99,11 +99,16 @@ function isoWeek(d: Date): string {
 }
 
 export function todayDateStr(): string {
-  return new Date().toISOString().slice(0, 10);
+  // Returns current calendar date in India Standard Time (IST, Asia/Kolkata), resetting at 12:00 AM midnight IST
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 }
 
 export function currentIsoWeek(): string {
-  return isoWeek(new Date());
+  // Compute ISO week string based on IST date
+  const istDateStr = todayDateStr(); // YYYY-MM-DD
+  const [year, month, day] = istDateStr.split('-').map(Number);
+  const d = new Date(Date.UTC(year, month - 1, day));
+  return isoWeek(d);
 }
 
 // Computes the account's current entitlement fresh from Supabase every
