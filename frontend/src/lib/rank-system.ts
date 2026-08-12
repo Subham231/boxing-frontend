@@ -8,7 +8,7 @@ export interface RankTier {
 }
 
 export const RANKS: RankTier[] = [
-  { level: 0, name: 'ROOKIE', color: '#888888', badgeImg: '/ranks/bronze.png', iconImg: '/ranks/bronze_icon.png', requiredStreak: 0 },
+  { level: 0, name: 'ROOKIE', color: '#888888', badgeImg: '/ranks/bronze.png', iconImg: '/ranks/rookie_icon.png', requiredStreak: 0 },
   { level: 1, name: 'BRONZE', color: '#CD7F32', badgeImg: '/ranks/bronze.png', iconImg: '/ranks/bronze_icon.png', requiredStreak: 3 },
   { level: 2, name: 'SILVER', color: '#C0C0C0', badgeImg: '/ranks/silver.png', iconImg: '/ranks/silver_icon.png', requiredStreak: 5 },
   { level: 3, name: 'GOLD', color: '#FFD700', badgeImg: '/ranks/gold.png', iconImg: '/ranks/gold_icon.png', requiredStreak: 7 },

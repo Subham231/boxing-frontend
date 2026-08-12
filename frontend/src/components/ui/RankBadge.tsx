@@ -40,12 +40,20 @@ export function RankBadge({ score, level, className }: RankBadgeProps) {
   return (
     <div
       className={twMerge(
-        "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-black tracking-widest bg-black/40 shadow-md backdrop-blur-md",
-        rank.name === 'MASTER' ? 'border-purple-500/50 text-purple-400 shadow-[0_0_10px_rgba(208,64,255,0.3)]' : 'border-white/10 text-white',
+        "inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border text-[11px] font-black tracking-widest bg-gradient-to-r from-black/80 via-black/50 to-black/80 shadow-[0_4px_15px_rgba(0,0,0,0.6)] backdrop-blur-md transition-all duration-300 hover:brightness-125 select-none",
+        rank.name === 'MASTER' ? 'border-purple-500/60 shadow-[0_0_15px_rgba(208,64,255,0.4)]' :
+        rank.name === 'DIAMOND' ? 'border-cyan-500/60 shadow-[0_0_15px_rgba(0,153,255,0.4)]' :
+        rank.name === 'PLATINUM' ? 'border-teal-400/60 shadow-[0_0_15px_rgba(0,229,255,0.3)]' :
+        rank.name === 'GOLD' ? 'border-yellow-500/60 shadow-[0_0_15px_rgba(255,215,0,0.35)]' :
+        rank.name === 'SILVER' ? 'border-zinc-300/50 shadow-[0_0_12px_rgba(192,192,192,0.25)]' :
+        rank.name === 'BRONZE' ? 'border-amber-700/60 shadow-[0_0_12px_rgba(205,127,50,0.3)]' :
+        'border-white/10 text-white/70',
         className
       )}
     >
-      <img src={rank.iconImg} alt={rank.name} className="w-5 h-5 object-contain shrink-0" />
+      <div className="w-5 h-5 flex items-center justify-center shrink-0 filter drop-shadow-[0_0_6px_rgba(255,255,255,0.4)]">
+        <img src={rank.iconImg} alt={rank.name} className="w-full h-full object-contain" />
+      </div>
       <span className={rank.textClass} style={{ color: rank.color }}>{rank.name}</span>
     </div>
   );

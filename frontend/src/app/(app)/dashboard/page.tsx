@@ -245,16 +245,21 @@ export default function DashboardPage() {
               <h1 className="text-xl font-black italic uppercase leading-none text-white tracking-wide">
                 TODAY&apos;S MISSION
               </h1>
-              <div className="flex gap-2 mt-2">
+              <div className="flex items-center gap-2.5 mt-2.5">
                 <div 
                   onClick={() => router.push('/ranks')}
-                  className="cursor-pointer"
+                  className="cursor-pointer transition-transform hover:scale-105 active:scale-95"
                 >
                   <RankBadge score={streak} level={rankLevel} />
                 </div>
-                <div className="px-2 py-0.5 rounded bg-white/5 border border-white/10 text-[9px] font-black tracking-widest text-white/60 flex items-center gap-1">
-                  <span>XP LEVEL</span>
-                  <span className="text-primary font-black">{level.toUpperCase()}</span>
+
+                {/* Cyberpunk Glassmorphic XP Badge */}
+                <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-primary/40 bg-gradient-to-r from-primary/10 via-black/40 to-primary/5 shadow-[0_0_12px_rgba(226,255,59,0.15)] backdrop-blur-md">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" />
+                  <span className="text-[9px] font-black tracking-widest text-white/50 uppercase">XP LEVEL</span>
+                  <span className="text-[11px] font-black tracking-wider text-primary uppercase drop-shadow-[0_0_8px_rgba(226,255,59,0.5)]">
+                    {level.toUpperCase()}
+                  </span>
                 </div>
               </div>
             </div>
