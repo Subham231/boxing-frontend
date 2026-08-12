@@ -11,7 +11,7 @@ import { NeonButton } from '@/components/ui/NeonButton';
 const DEV_SKIP_ENABLED = process.env.NEXT_PUBLIC_ENABLE_DEV_SKIP === 'true';
 
 interface PlanCard {
-  id: 'test_plan' | 'monthly' | 'monthly_pro' | 'three_month' | 'yearly';
+  id: 'monthly' | 'monthly_pro' | 'three_month' | 'yearly';
   name: string;
   price: string;
   period: string;
@@ -20,14 +20,6 @@ interface PlanCard {
 }
 
 const PLAN_CARDS: PlanCard[] = [
-  {
-    id: 'test_plan',
-    name: '⚡ ₹1 Live Test Plan',
-    price: '₹1',
-    period: '/ 1 day (Testing)',
-    features: ['Real Live Payment verification test', '5 AI Video Analyses / day', '5 Planner Generations / week'],
-    highlight: true,
-  },
   {
     id: 'monthly',
     name: 'SparAI Monthly',
@@ -41,6 +33,7 @@ const PLAN_CARDS: PlanCard[] = [
     price: '₹729',
     period: '/ month',
     features: ['2 AI Video Analyses / day', '2 Planner Generations / week'],
+    highlight: true,
   },
   {
     id: 'three_month',
