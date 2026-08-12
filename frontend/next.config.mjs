@@ -5,7 +5,6 @@ const nextConfig = {
     // once those are cleaned up separately.
     ignoreDuringBuilds: true,
   },
-  output: 'standalone',
 };
 
 export default nextConfig;

@@ -5,29 +5,15 @@ import { PLANS } from '@/lib/server/entitlements';
 
 export const runtime = 'nodejs';
 
-// ---------------------------------------------------------------------------
-// Razorpay payment webhook
-//
-// Receives asynchronous payment events from Razorpay after the user closes
-// the checkout modal. The client-side handler also calls verify-payment, but
-// this webhook is the authoritative source of truth — it catches payments
-// that completed even if the user closed the browser before the handler ran.
-//
-// Set RAZORPAY_WEBHOOK_SECRET in your env vars, and configure the webhook
-// URL in the Razorpay dashboard to point to /api/razorpay/webhook.
-// ---------------------------------------------------------------------------
-
-function verifySignature(
-  body: string,
-  signature: string | null,
-): boolean {
+function verifySignature(body: string, signature: string | null): boolean {
   const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
   if (!secret || !signature) return false;
-  const expected = crypto
-    .createHmac('sha256', secret)
-    .update(body)
-    .digest('hex');
-  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+  const expected = crypto.createHmac('sha256', secret).update(body).digest('hex');
+  try {
+    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+  } catch {
+    return false;
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -51,65 +37,103 @@ export async function POST(req: NextRequest) {
 
   const eventType = event.event;
   const payload = event.payload || {};
-  const payment = payload.payment?.entity;
-  const order = payload.order?.entity;
 
-  if (eventType === 'payment.captured') {
-    const paymentId = payment?.id;
-    const orderId = payment?.order_id;
-    const notes = payment?.notes || order?.notes || {};
-    const planId = notes.planId || '';
-    const uid = notes.uid || '';
+  // Handle Subscription events
+  const subscriptionEntity = payload.subscription?.entity;
+  const paymentEntity = payload.payment?.entity;
 
-    if (!paymentId || !orderId || !planId || !uid) {
-      // Missing metadata — the order may have been created outside our flow.
-      // Log and acknowledge so Razorpay doesn't retry.
-      console.warn('[webhook] incomplete payment.captured payload', { paymentId, orderId, planId, uid });
+  const notes = subscriptionEntity?.notes || paymentEntity?.notes || {};
+  const subId = subscriptionEntity?.id || paymentEntity?.subscription_id;
+  const uidFromNotes = notes.uid || '';
+  const planIdFromNotes = notes.planId || '';
+
+  // Helper to find profile by subscription ID or fallback to UID
+  async function findUid(): Promise<string | null> {
+    if (uidFromNotes) return uidFromNotes;
+    if (subId) {
+      const { data } = await supabaseAdmin!
+        .from('reflex_profiles')
+        .select('uid')
+        .eq('razorpay_subscription_id', subId)
+        .maybeSingle();
+      if (data) return data.uid;
+    }
+    return null;
+  }
+
+  // 1. Subscription Authenticated / Activated / Charged
+  if (
+    eventType === 'subscription.authenticated' ||
+    eventType === 'subscription.activated' ||
+    eventType === 'subscription.charged' ||
+    eventType === 'payment.captured'
+  ) {
+    const uid = await findUid();
+    if (!uid) {
+      console.warn('[webhook] User not found for subscription event', { eventType, subId });
       return NextResponse.json({ status: 'ignored' });
     }
 
-    const plan = PLANS[planId as keyof typeof PLANS];
-    if (!plan) {
-      console.warn('[webhook] unknown plan', { planId });
-      return NextResponse.json({ status: 'ignored' });
+    // Determine period dates from Razorpay
+    let startIso: string;
+    let endIso: string;
+
+    if (subscriptionEntity?.current_start && subscriptionEntity?.current_end) {
+      startIso = new Date(subscriptionEntity.current_start * 1000).toISOString();
+      endIso = new Date(subscriptionEntity.current_end * 1000).toISOString();
+    } else {
+      const now = new Date();
+      startIso = now.toISOString();
+      const planConfig = PLANS[planIdFromNotes as keyof typeof PLANS] || PLANS.monthly;
+      const exp = new Date();
+      exp.setDate(exp.getDate() + planConfig.durationDays);
+      endIso = exp.toISOString();
     }
 
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + plan.durationDays);
+    let planIdToSet = planIdFromNotes;
+    if (!planIdToSet && subscriptionEntity?.plan_id) {
+      for (const [key, config] of Object.entries(PLANS)) {
+        if (config.razorpayPlanId === subscriptionEntity.plan_id) {
+          planIdToSet = key;
+          break;
+        }
+      }
+    }
+    if (!planIdToSet) planIdToSet = 'monthly';
+    const planConfig = PLANS[planIdToSet as keyof typeof PLANS] || PLANS.monthly;
 
-    // Insert payment ledger entry (idempotent on razorpay_payment_id).
-    const { error: ledgerError } = await supabaseAdmin
-      .from('subscription_payments')
-      .upsert(
-        {
-          razorpay_payment_id: paymentId,
-          razorpay_order_id: orderId,
-          uid,
-          plan: planId,
-          amount: payment.amount || 0,
-          currency: payment.currency || 'INR',
-          status: 'captured',
-          created_at: new Date().toISOString(),
-        },
-        { ignoreDuplicates: false, onConflict: 'razorpay_payment_id' },
-      )
-      .eq('razorpay_payment_id', paymentId);
-
-    if (ledgerError) {
-      console.error('[webhook] ledger insert failed', ledgerError);
-      // Don't return 5xx — Razorpay would retry and we'd have duplicate
-      // rows. Acknowledge the event.
-      return NextResponse.json({ status: 'accepted' });
+    // Record ledger idempotently if payment is present
+    if (paymentEntity?.id) {
+      await supabaseAdmin
+        .from('subscription_payments')
+        .upsert(
+          {
+            razorpay_payment_id: paymentEntity.id,
+            razorpay_subscription_id: subId || null,
+            uid,
+            plan: planIdToSet,
+            amount_paise: paymentEntity.amount || planConfig.priceInPaise,
+            status: 'captured',
+            event_type: eventType,
+            created_at: new Date().toISOString(),
+          },
+          { ignoreDuplicates: true, onConflict: 'razorpay_payment_id' },
+        );
     }
 
-    // Activate / extend the profile's subscription plan.
+    // Update profile subscription state
     const { error: updateError } = await supabaseAdmin
       .from('reflex_profiles')
       .update({
-        plan: planId,
-        plan_started_at: new Date().toISOString(),
-        plan_expires_at: expiresAt.toISOString(),
-        is_elite: plan.isElite,
+        plan: planIdToSet,
+        plan_started_at: startIso,
+        plan_expires_at: endIso,
+        razorpay_subscription_id: subId || undefined,
+        razorpay_plan_id: subscriptionEntity?.plan_id || planConfig.razorpayPlanId,
+        subscription_status: subscriptionEntity?.status || 'active',
+        current_period_start: startIso,
+        current_period_end: endIso,
+        is_elite: planConfig.isElite,
         daily_analysis_count: 0,
         daily_analysis_date: null,
         weekly_planner_count: 0,
@@ -119,21 +143,32 @@ export async function POST(req: NextRequest) {
 
     if (updateError) {
       console.error('[webhook] profile update failed', updateError);
-      return NextResponse.json({ status: 'accepted' });
     }
-
     return NextResponse.json({ status: 'ok' });
   }
 
-  if (eventType === 'payment.failed') {
-    console.warn('[webhook] payment failed', {
-      paymentId: payment?.id,
-      errorCode: payment?.error_code,
-      errorDescription: payment?.error_description,
-    });
-    return NextResponse.json({ status: 'logged' });
+  // 2. Subscription Halted / Cancelled / Expired / Payment Failed
+  if (
+    eventType === 'subscription.halted' ||
+    eventType === 'subscription.cancelled' ||
+    eventType === 'subscription.completed' ||
+    eventType === 'payment.failed'
+  ) {
+    const uid = await findUid();
+    if (uid) {
+      const newStatus = eventType === 'subscription.halted' ? 'halted' : eventType === 'subscription.cancelled' ? 'cancelled' : 'expired';
+      
+      // Update subscription status. Crucially: DO NOT extend current_period_end/plan_expires_at.
+      // If halted/expired and current period is past, getEntitlement will block access.
+      await supabaseAdmin
+        .from('reflex_profiles')
+        .update({
+          subscription_status: newStatus,
+        })
+        .eq('uid', uid);
+    }
+    return NextResponse.json({ status: 'ok' });
   }
 
-  // Acknowledge all other event types without action.
   return NextResponse.json({ status: 'ignored' });
 }

@@ -16,48 +16,53 @@ export interface PlanConfig {
   weeklyPlannerLimit: number; // -1 = unlimited
   isElite: boolean;
   premiumGuru: boolean;
+  razorpayPlanId: string;
 }
 
 export const PLANS: Record<PlanId, PlanConfig> = {
   monthly: {
     id: 'monthly',
-    name: 'Monthly',
-    priceInPaise: 39900, // ₹399
+    name: 'SparAI Monthly',
+    priceInPaise: 62900, // ₹629
     durationDays: 30,
     dailyAnalysisLimit: 1,
     weeklyPlannerLimit: 1,
     isElite: false,
     premiumGuru: false,
+    razorpayPlanId: process.env.RAZORPAY_PLAN_MONTHLY || 'plan_monthly_default',
   },
   monthly_pro: {
     id: 'monthly_pro',
-    name: 'Monthly Pro',
-    priceInPaise: 49900, // ₹499
+    name: 'SparAI Pro',
+    priceInPaise: 72900, // ₹729
     durationDays: 30,
     dailyAnalysisLimit: 2,
     weeklyPlannerLimit: 2,
     isElite: false,
     premiumGuru: false,
+    razorpayPlanId: process.env.RAZORPAY_PLAN_MONTHLY_PRO || 'plan_monthly_pro_default',
   },
   three_month: {
     id: 'three_month',
-    name: '3 Months',
-    priceInPaise: 99900, // ₹999
+    name: 'SparAI Performance — 3 Months',
+    priceInPaise: 162900, // ₹1,629
     durationDays: 90,
     dailyAnalysisLimit: 3,
     weeklyPlannerLimit: 3,
     isElite: false,
     premiumGuru: false,
+    razorpayPlanId: process.env.RAZORPAY_PLAN_THREE_MONTH || 'plan_three_month_default',
   },
   yearly: {
     id: 'yearly',
-    name: 'Yearly',
-    priceInPaise: 299900, // ₹2,999
+    name: 'SparAI Elite — Yearly',
+    priceInPaise: 629000, // ₹6,290
     durationDays: 365,
     dailyAnalysisLimit: -1,
     weeklyPlannerLimit: -1,
     isElite: true,
     premiumGuru: true,
+    razorpayPlanId: process.env.RAZORPAY_PLAN_YEARLY || 'plan_yearly_default',
   },
 };
 
@@ -124,15 +129,17 @@ export async function getEntitlement(uid: string): Promise<Entitlement> {
 
   const { data: row, error } = await supabaseAdmin
     .from('reflex_profiles')
-    .select('plan, plan_expires_at, is_elite, daily_analysis_count, daily_analysis_date, weekly_planner_count, weekly_planner_week')
+    .select('plan, plan_expires_at, current_period_end, subscription_status, is_elite, daily_analysis_count, daily_analysis_date, weekly_planner_count, weekly_planner_week')
     .eq('uid', uid)
     .maybeSingle();
 
   if (error || !row) return empty;
 
   const now = Date.now();
-  const expiresAt = row.plan_expires_at ? new Date(row.plan_expires_at).getTime() : 0;
-  const isActive = !!row.plan && expiresAt > now;
+  const effectiveExpiryStr = row.plan_expires_at || row.current_period_end;
+  const expiresAt = effectiveExpiryStr ? new Date(effectiveExpiryStr).getTime() : 0;
+  const isActiveStatus = row.subscription_status ? row.subscription_status === 'active' || row.subscription_status === 'authenticated' : true;
+  const isActive = !!row.plan && expiresAt > now && isActiveStatus;
 
   if (!isActive) {
     return { ...empty, plan: null, planName: 'Free', expiresAt: row.plan_expires_at || null };

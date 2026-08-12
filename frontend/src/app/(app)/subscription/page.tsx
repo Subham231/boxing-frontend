@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Script from 'next/script';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Check, Crown, Loader2, ShieldCheck, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Check, Crown, Loader2, ShieldCheck, AlertCircle, XCircle } from 'lucide-react';
 import { firebaseAuth } from '@/lib/firebase';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
@@ -22,29 +22,30 @@ interface PlanCard {
 const PLAN_CARDS: PlanCard[] = [
   {
     id: 'monthly',
-    name: 'Monthly',
-    price: '₹399',
+    name: 'SparAI Monthly',
+    price: '₹629',
     period: '/ month',
     features: ['1 AI Video Analysis / day', '1 Planner Generation / week'],
   },
   {
     id: 'monthly_pro',
-    name: 'Monthly Pro',
-    price: '₹499',
+    name: 'SparAI Pro',
+    price: '₹729',
     period: '/ month',
     features: ['2 AI Video Analyses / day', '2 Planner Generations / week'],
+    highlight: true,
   },
   {
     id: 'three_month',
-    name: '3 Months',
-    price: '₹999',
+    name: 'SparAI Performance',
+    price: '₹1,629',
     period: '/ 3 months',
     features: ['3 AI Video Analyses / day', '3 Planner Generations / week'],
   },
   {
     id: 'yearly',
-    name: 'Yearly',
-    price: '₹2,999',
+    name: 'SparAI Elite 👑',
+    price: '₹6,290',
     period: '/ year',
     features: [
       'Unlimited AI Video Analyses',
@@ -52,7 +53,6 @@ const PLAN_CARDS: PlanCard[] = [
       'Premium Guru skills unlocked',
       'Elite Member badge',
     ],
-    highlight: true,
   },
 ];
 
@@ -61,8 +61,10 @@ export default function SubscriptionPage() {
   const [status, setStatus] = useState<any>(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
   const [processingPlan, setProcessingPlan] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState(false);
   const [scriptLoaded, setScriptLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   const fetchStatus = async () => {
     const user = firebaseAuth.currentUser;
@@ -91,6 +93,7 @@ export default function SubscriptionPage() {
 
   const handleSubscribe = async (planId: string) => {
     setError(null);
+    setMessage(null);
     const user = firebaseAuth.currentUser;
     if (!user) {
       setError('Please log in to subscribe.');
@@ -105,11 +108,11 @@ export default function SubscriptionPage() {
         body: JSON.stringify({ planId }),
       });
       const orderData = await orderRes.json();
-      if (!orderRes.ok) throw new Error(orderData.error || 'Failed to create order');
+      if (!orderRes.ok) throw new Error(orderData.error || 'Failed to create subscription');
 
-      const { order } = orderData;
+      const { subscription, keyId } = orderData;
 
-      if (order.isMock) {
+      if (subscription.isMock) {
         const verifyRes = await fetch('/api/subscription/verify-payment', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -127,12 +130,10 @@ export default function SubscriptionPage() {
       }
 
       const options = {
-        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
-        amount: order.amount,
-        currency: order.currency,
+        key: keyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+        subscription_id: subscription.id,
         name: 'SparAI',
         description: `Subscription: ${PLAN_CARDS.find((p) => p.id === planId)?.name}`,
-        order_id: order.id,
         handler: async (response: any) => {
           try {
             const verifyRes = await fetch('/api/subscription/verify-payment', {
@@ -140,7 +141,7 @@ export default function SubscriptionPage() {
               headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
               body: JSON.stringify({
                 razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_order_id: response.razorpay_order_id,
+                razorpay_subscription_id: response.razorpay_subscription_id,
                 razorpay_signature: response.razorpay_signature,
                 planId,
               }),
@@ -148,6 +149,7 @@ export default function SubscriptionPage() {
             const verifyData = await verifyRes.json();
             if (!verifyRes.ok) throw new Error(verifyData.error || 'Verification failed');
             await fetchStatus();
+            setMessage('Subscription activated successfully!');
           } catch (err: any) {
             setError(err.message || 'Payment verification failed. Please contact support.');
           } finally {
@@ -163,6 +165,29 @@ export default function SubscriptionPage() {
     } catch (err: any) {
       setError(err.message || 'Payment system error. Try again.');
       setProcessingPlan(null);
+    }
+  };
+
+  const handleCancelSubscription = async () => {
+    setError(null);
+    setMessage(null);
+    const user = firebaseAuth.currentUser;
+    if (!user) return;
+    setCancelling(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/subscription/cancel', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to cancel subscription');
+      setMessage('Subscription auto-renewal cancelled. Your access remains active until the end of your current period.');
+      await fetchStatus();
+    } catch (err: any) {
+      setError(err.message || 'Could not cancel subscription.');
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -204,14 +229,42 @@ export default function SubscriptionPage() {
       </header>
 
       {!loadingStatus && status?.active && (
-        <GlassCard className="p-5 mb-6 border-primary/30 bg-primary/5 flex items-center gap-3">
-          <Crown className="w-6 h-6 text-primary shrink-0" />
+        <GlassCard className="p-5 mb-6 border-primary/30 bg-primary/5 flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Crown className="w-6 h-6 text-primary shrink-0" />
+              <div>
+                <div className="text-sm font-black text-white uppercase">{status.planName} — Active</div>
+                <div className="text-[10px] text-white/50 font-bold uppercase tracking-wide">
+                  Expires {status.expiresAt ? new Date(status.expiresAt).toLocaleDateString() : '—'} · Analysis{' '}
+                  {status.dailyAnalysisLimit < 0 ? 'Unlimited' : `${status.dailyAnalysisUsed}/${status.dailyAnalysisLimit} today`} · Planner{' '}
+                  {status.weeklyPlannerLimit < 0 ? 'Unlimited' : `${status.weeklyPlannerUsed}/${status.weeklyPlannerLimit} this week`}
+                </div>
+              </div>
+            </div>
+          </div>
+          {status.plan !== 'referral_reward' && (
+            <button
+              onClick={handleCancelSubscription}
+              disabled={cancelling}
+              className="text-[10px] font-bold text-red-400/80 hover:text-red-400 uppercase tracking-wider self-end mt-1 flex items-center gap-1"
+            >
+              {cancelling ? <Loader2 className="w-3 h-3 animate-spin" /> : <XCircle className="w-3 h-3" />}
+              Cancel Auto-Renewal
+            </button>
+          )}
+        </GlassCard>
+      )}
+
+      {!loadingStatus && !status?.active && (
+        <GlassCard className="p-5 mb-6 border-red-500/30 bg-red-500/5 flex items-center gap-3">
+          <AlertCircle className="w-6 h-6 text-red-400 shrink-0" />
           <div>
-            <div className="text-sm font-black text-white uppercase">{status.planName} — Active</div>
-            <div className="text-[10px] text-white/50 font-bold uppercase tracking-wide">
-              Expires {status.expiresAt ? new Date(status.expiresAt).toLocaleDateString() : '—'} · Analysis{' '}
-              {status.dailyAnalysisLimit < 0 ? 'Unlimited' : `${status.dailyAnalysisUsed}/${status.dailyAnalysisLimit} today`} · Planner{' '}
-              {status.weeklyPlannerLimit < 0 ? 'Unlimited' : `${status.weeklyPlannerUsed}/${status.weeklyPlannerLimit} this week`}
+            <div className="text-sm font-black text-white uppercase">Subscription Expired or Inactive</div>
+            <div className="text-[10px] text-white/60 font-bold uppercase tracking-wide">
+              {status?.expiresAt
+                ? `Your access expired on ${new Date(status.expiresAt).toLocaleDateString()}. Select a plan below to renew or upgrade your access.`
+                : 'No active plan. Select a subscription below to unlock full access.'}
             </div>
           </div>
         </GlassCard>
@@ -221,6 +274,13 @@ export default function SubscriptionPage() {
         <div className="flex items-start gap-2 p-4 mb-6 bg-red-500/10 border border-red-500/20 rounded-2xl">
           <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
           <p className="text-[11px] font-semibold text-red-400 leading-tight">{error}</p>
+        </div>
+      )}
+
+      {message && (
+        <div className="flex items-start gap-2 p-4 mb-6 bg-primary/10 border border-primary/20 rounded-2xl">
+          <Check className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+          <p className="text-[11px] font-semibold text-primary leading-tight">{message}</p>
         </div>
       )}
 
