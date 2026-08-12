@@ -46,21 +46,32 @@ export default function ProtectedLayout({
         return;
       }
 
-      // Subscription gate — checked on every protected page load, not just
-      // once after signup, so an expiry that happens mid-session (or on a
-      // totally different day) is caught the next time the app is opened.
-      if (!isExemptFromSubscriptionGate(pathname) && supabase) {
+      // Subscription & Single-Device Session gate — checked on every protected page load.
+      if (supabase) {
         const { data: profile } = await supabase
           .from('reflex_profiles')
-          .select('subscription_until, plan_expires_at, current_period_end, subscription_status, plan')
+          .select('subscription_until, plan_expires_at, current_period_end, subscription_status, plan, current_session_token')
           .eq('uid', user.uid)
           .maybeSingle();
 
         if (cancelled) return;
 
-        if (!isSubscriptionActive(profile)) {
-          window.location.replace('/subscription');
+        // 1. Single-Device Session Check: If another device logged in with this phone/account,
+        // profile.current_session_token will have been updated to a new token value.
+        const localSessionToken = localStorage.getItem('sparai_session_token');
+        if (profile?.current_session_token && localSessionToken && profile.current_session_token !== localSessionToken) {
+          // Logged in on another device! Clear session and force signout
+          localStorage.removeItem('sparai_session_token');
+          window.location.replace('/onboarding');
           return;
+        }
+
+        // 2. Subscription Check
+        if (!isExemptFromSubscriptionGate(pathname)) {
+          if (!isSubscriptionActive(profile)) {
+            window.location.replace('/subscription');
+            return;
+          }
         }
       }
 

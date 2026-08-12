@@ -168,7 +168,10 @@ export async function confirmOtp(
 ): Promise<{ user: User; isNew: boolean; profile: UserProfile }> {
   const cred = await confirmation.confirm(code);
   const user = cred.user;
-  const { profile, isNew } = await ensureUserProfile(user, referralCodeEntered);
+  const { profile, isNew, sessionToken } = await ensureUserProfile(user, referralCodeEntered);
+  if (sessionToken && typeof window !== 'undefined') {
+    localStorage.setItem('sparai_session_token', sessionToken);
+  }
   await claimReferralIfNeeded(user);
   return { user, isNew, profile };
 }
@@ -176,7 +179,7 @@ export async function confirmOtp(
 export async function ensureUserProfile(
   user: User,
   referralCodeEntered?: string,
-): Promise<{ profile: UserProfile; isNew: boolean }> {
+): Promise<{ profile: UserProfile; isNew: boolean; sessionToken?: string }> {
   const idToken = await user.getIdToken();
   const res = await fetch('/api/reflex/ensure-profile', {
     method: 'POST',
@@ -184,8 +187,8 @@ export async function ensureUserProfile(
     body: JSON.stringify({ referredBy: referralCodeEntered || null }),
   });
   if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || 'Could not create profile.');
-  const { profile, isNew } = await res.json();
-  return { profile: profile as UserProfile, isNew: !!isNew };
+  const { profile, isNew, sessionToken } = await res.json();
+  return { profile: profile as UserProfile, isNew: !!isNew, sessionToken };
 }
 
 export async function claimReferralIfNeeded(user: User): Promise<void> {

@@ -28,9 +28,13 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const referredBy = typeof body.referredBy === 'string' ? body.referredBy.trim().toUpperCase() : null;
 
+  const sessionToken = `sess_${crypto.randomUUID()}_${Date.now()}`;
+
   const { data: existing } = await supabaseAdmin.from('reflex_profiles').select('*').eq('uid', uid).maybeSingle();
   if (existing) {
-    return NextResponse.json({ profile: existing, isNew: false });
+    // Invalidate any old device session by setting the new session_token
+    await supabaseAdmin.from('reflex_profiles').update({ current_session_token: sessionToken }).eq('uid', uid);
+    return NextResponse.json({ profile: { ...existing, current_session_token: sessionToken }, sessionToken, isNew: false });
   }
 
   // Guard against creating a second row for a phone number that's already
@@ -44,7 +48,8 @@ export async function POST(req: NextRequest) {
       .eq('phone', phone)
       .maybeSingle();
     if (byPhone) {
-      return NextResponse.json({ profile: byPhone, isNew: false });
+      await supabaseAdmin.from('reflex_profiles').update({ current_session_token: sessionToken }).eq('uid', byPhone.uid);
+      return NextResponse.json({ profile: { ...byPhone, current_session_token: sessionToken }, sessionToken, isNew: false });
     }
   }
 
@@ -58,12 +63,13 @@ export async function POST(req: NextRequest) {
         phone,
         referral_code: code,
         referred_by: referredBy,
+        current_session_token: sessionToken,
       })
       .select('*')
       .single();
 
     if (!error) {
-      return NextResponse.json({ profile: data, isNew: true });
+      return NextResponse.json({ profile: data, sessionToken, isNew: true });
     }
     // 23505 = unique_violation (Postgres) — collision on referral_code, retry.
     if (error.code !== '23505') {
