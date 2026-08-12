@@ -250,19 +250,6 @@ export default function SubscriptionPage() {
               </div>
             </div>
           </div>
-          {status.plan !== 'referral_reward' && (
-            <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/10">
-              <span className="text-[10px] font-black text-white/60 uppercase">Want to change your plan tier?</span>
-              <button
-                onClick={handleCancelSubscription}
-                disabled={cancelling}
-                className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-[9px] font-black uppercase tracking-wider flex items-center gap-1 border border-white/10"
-              >
-                {cancelling ? <Loader2 className="w-3 h-3 animate-spin" /> : <XCircle className="w-3 h-3" />}
-                Change / Cancel Plan
-              </button>
-            </div>
-          )}
         </GlassCard>
       )}
 

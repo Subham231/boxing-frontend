@@ -46,6 +46,13 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    if (!plan.razorpayPlanId || plan.razorpayPlanId.endsWith('_default')) {
+      return NextResponse.json(
+        { error: `Razorpay Plan ID for '${plan.name}' is not configured on the server. Please set ${planId.toUpperCase()} env var.` },
+        { status: 500 },
+      );
+    }
+
     const totalCount = planId === 'yearly' ? 10 : planId === 'three_month' ? 20 : 60;
     const response = await fetch('https://api.razorpay.com/v1/subscriptions', {
       method: 'POST',
@@ -69,7 +76,7 @@ export async function POST(req: NextRequest) {
       const errBody = await response.json().catch(() => ({}));
       console.error('Razorpay subscription creation failed:', errBody);
       return NextResponse.json(
-        { error: errBody.error?.description || 'Razorpay subscription creation failed' },
+        { error: errBody.error?.description || errBody.error?.code || 'Razorpay subscription creation failed' },
         { status: 500 },
       );
     }

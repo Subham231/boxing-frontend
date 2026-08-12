@@ -29,7 +29,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     weeklyPlannerLimit: 5,
     isElite: true,
     premiumGuru: true,
-    razorpayPlanId: process.env.RAZORPAY_PLAN_TEST || 'plan_test_default',
+    razorpayPlanId: process.env.RAZORPAY_PLAN_TEST || 'plan_TOtZc0AvkwCOF5',
   },
   monthly: {
     id: 'monthly',
@@ -40,7 +40,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     weeklyPlannerLimit: 1,
     isElite: false,
     premiumGuru: false,
-    razorpayPlanId: process.env.RAZORPAY_PLAN_MONTHLY || 'plan_monthly_default',
+    razorpayPlanId: process.env.RAZORPAY_PLAN_MONTHLY || 'plan_TOsvYdmDfSjY6J',
   },
   monthly_pro: {
     id: 'monthly_pro',
@@ -51,7 +51,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     weeklyPlannerLimit: 2,
     isElite: false,
     premiumGuru: false,
-    razorpayPlanId: process.env.RAZORPAY_PLAN_MONTHLY_PRO || 'plan_monthly_pro_default',
+    razorpayPlanId: process.env.RAZORPAY_PLAN_MONTHLY_PRO || 'plan_TOsxtFg2g3y72B',
   },
   three_month: {
     id: 'three_month',
@@ -62,7 +62,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     weeklyPlannerLimit: 3,
     isElite: false,
     premiumGuru: false,
-    razorpayPlanId: process.env.RAZORPAY_PLAN_THREE_MONTH || 'plan_three_month_default',
+    razorpayPlanId: process.env.RAZORPAY_PLAN_THREE_MONTH || 'plan_TOsyUPX0CJPHaN',
   },
   yearly: {
     id: 'yearly',
@@ -73,7 +73,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     weeklyPlannerLimit: -1,
     isElite: true,
     premiumGuru: true,
-    razorpayPlanId: process.env.RAZORPAY_PLAN_YEARLY || 'plan_yearly_default',
+    razorpayPlanId: process.env.RAZORPAY_PLAN_YEARLY || 'plan_TOszduZM7Q3GMC',
   },
 };
 
