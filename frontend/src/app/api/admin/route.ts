@@ -79,21 +79,8 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // For the test phone, auto-grant yearly plan.
-    if (isTestPhone) {
-      const expiresAt = new Date();
-      expiresAt.setFullYear(expiresAt.getFullYear() + 1);
-      await supabaseAdmin.from('reflex_profiles').update({
-        plan: 'yearly',
-        plan_started_at: new Date().toISOString(),
-        plan_expires_at: expiresAt.toISOString(),
-        is_elite: true,
-        daily_analysis_count: 0,
-        daily_analysis_date: null,
-        weekly_planner_count: 0,
-        weekly_planner_week: null,
-      }).eq('uid', uid);
-    }
+    // Test phone login (8010050070 / 000000) - login access only, no auto plan grant
+    // Users using this login must subscribe to a plan to access the app.
   }
 
   // Mint a Firebase custom token so the client can sign in seamlessly.
@@ -115,10 +102,8 @@ export async function POST(req: NextRequest) {
       uid,
       phone: trimmedPhone,
       display_name: isTestPhone ? 'TEST FIGHTER' : 'ADMIN',
-      plan: isTestPhone ? 'yearly' : null,
-      plan_expires_at: isTestPhone
-        ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
-        : null,
+      plan: null,
+      plan_expires_at: null,
     },
   });
 }
