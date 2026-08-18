@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
 
   const uid = decoded.uid;
 
-  if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
+  if (!razorpayConfigured()) {
     console.warn('Razorpay keys not configured. Falling back to Mock Subscription Creation.');
     const mockSub = {
       id: `sub_mock_${Math.random().toString(36).substring(2, 11)}`,
