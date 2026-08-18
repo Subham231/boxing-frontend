@@ -25,13 +25,8 @@ export async function POST(req: NextRequest) {
   }
   const uid = decoded.uid;
 
-  const { data: profile } = await supabaseAdmin
-    .from('reflex_profiles')
-    .select('subscription_until')
-    .eq('uid', uid)
-    .maybeSingle();
-
-  if (!isSubscriptionActive(profile?.subscription_until)) {
+  const entitlement = await getEntitlement(uid);
+  if (!entitlement.active) {
     return NextResponse.json(
       { error: 'Your subscription has ended. Upgrade to keep using the AI Analyser.' },
       { status: 402 }
