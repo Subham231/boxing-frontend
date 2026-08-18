@@ -34,7 +34,7 @@ export function subscribeWeeklyLeaderboard(
   const fetchRows = async () => {
     const { data } = await client
       .from('reflex_scores')
-      .select('*, reflex_profiles(phone, display_name, avatar_url)')
+      .select('*, reflex_public_profiles(display_name, avatar_url)')
       .eq('game_id', gameId)
       .eq('week_id', weekId)
       .order('weekly_score', { ascending })
