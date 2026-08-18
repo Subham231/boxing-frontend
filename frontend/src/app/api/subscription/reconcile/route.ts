@@ -23,8 +23,7 @@ async function reconcile() {
   const { data: rows, error } = await supabaseAdmin
     .from('reflex_profiles')
     .select('uid, razorpay_subscription_id, plan, subscription_status, current_period_end')
-    .not('razorpay_subscription_id', 'is', null)
-    .in('subscription_status', ['created', 'authenticated', 'active', 'pending', 'halted', 'cancelled']);
+    .not('razorpay_subscription_id', 'is', null);
 
   if (error) {
     console.error('[reconcile] query failed', error);

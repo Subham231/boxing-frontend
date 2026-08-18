@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyFirebaseIdToken } from '@/lib/server/firebase-admin';
 import { supabaseAdmin } from '@/lib/server/supabase-admin';
-import { razorpayAuthHeader, razorpayConfigured } from '@/lib/server/razorpay';
-import { fetchRazorpaySubscription } from '@/lib/server/razorpay';
+import { fetchRazorpaySubscription, razorpayAuthHeader, razorpayConfigured } from '@/lib/server/razorpay';
 import { syncSubscriptionFromRazorpay } from '@/lib/server/sync-subscription';
 
 export const runtime = 'nodejs';
@@ -55,7 +54,7 @@ export async function POST(req: NextRequest) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Basic ${Buffer.from(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`).toString('base64')}`,
+        Authorization: razorpayAuthHeader(),
       },
       body: JSON.stringify({
         cancel_at_cycle_end: 1,
@@ -69,14 +68,8 @@ export async function POST(req: NextRequest) {
     }
 
     const cancelData = await response.json();
-
-    // Update status in Supabase
-    await supabaseAdmin
-      .from('reflex_profiles')
-      .update({
-        subscription_status: 'cancelled',
-      })
-      .eq('uid', uid);
+    const live = (await fetchRazorpaySubscription(subscriptionId)) || cancelData;
+    await syncSubscriptionFromRazorpay({ uid, razorpaySub: live, eventType: 'subscription.cancelled' });
 
     return NextResponse.json({ success: true, subscription: cancelData });
   } catch (err) {

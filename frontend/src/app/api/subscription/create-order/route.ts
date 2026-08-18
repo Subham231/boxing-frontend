@@ -109,7 +109,6 @@ export async function POST(req: NextRequest) {
         .update({
           razorpay_subscription_id: subscription.id,
           razorpay_plan_id: plan.razorpayPlanId,
-          subscription_status: 'created',
         })
         .eq('uid', uid);
     }
