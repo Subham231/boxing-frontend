@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Basic ${Buffer.from(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`).toString('base64')}`,
+        Authorization: razorpayAuthHeader(),
       },
       body: JSON.stringify({
         plan_id: plan.razorpayPlanId,
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Basic ${Buffer.from(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`).toString('base64')}`,
+          Authorization: razorpayAuthHeader(),
         },
         body: JSON.stringify({
           amount: plan.priceInPaise,
