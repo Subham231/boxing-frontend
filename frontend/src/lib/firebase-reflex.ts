@@ -32,14 +32,29 @@ export function subscribeWeeklyLeaderboard(
   const ascending = isLowerBetter(gameId);
 
   const fetchRows = async () => {
-    const { data } = await client
+    const { data: scores } = await client
       .from('reflex_scores')
-      .select('*, reflex_public_profiles(display_name, avatar_url)')
+      .select('*')
       .eq('game_id', gameId)
       .eq('week_id', weekId)
       .order('weekly_score', { ascending })
       .limit(topN);
-    callback((data as ReflexScoreRow[]) || []);
+    const rows = (scores as ReflexScoreRow[]) || [];
+    const uids = rows.map((r) => r.uid);
+    if (uids.length) {
+      const { data: names } = await client
+        .from('reflex_public_profiles')
+        .select('uid, display_name, avatar_url')
+        .in('uid', uids);
+      const byUid = new Map((names || []).map((p: any) => [p.uid, p]));
+      for (const row of rows) {
+        const p = byUid.get(row.uid);
+        row.reflex_profiles = p
+          ? { display_name: p.display_name, avatar_url: p.avatar_url }
+          : null;
+      }
+    }
+    callback(rows);
   };
 
   fetchRows();
