@@ -1,9 +1,22 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   eslint: {
-    // Pre-existing lint issues across many files — strict mode re-enabled
-    // once those are cleaned up separately.
     ignoreDuringBuilds: true,
+  },
+  poweredByHeader: false,
+  productionBrowserSourceMaps: false,
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'Permissions-Policy', value: 'camera=(self), microphone=(), geolocation=()' },
+        ],
+      },
+    ];
   },
 };
 
