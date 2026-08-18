@@ -763,13 +763,5 @@ export async function fetchPlan(userData: PlannerUserData): Promise<WeeklyPlan> 
         console.warn('[Planner] Backend Gemini proxy failed:', message);
     }
 
-    // Direct client-side API fallback is opt-in because NEXT_PUBLIC_* values ship to browsers.
-    const key = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-    if (key) {
-        console.log('[Planner] Calling Gemini API directly from client');
-        const raw = await generatePlanViaGeminiDirect(key, userData);
-        return normalizePlan(raw, userData);
-    }
-
     return buildWeeklyPlan(userData);
 }
