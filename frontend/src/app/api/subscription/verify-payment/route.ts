@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const { razorpay_payment_id, razorpay_subscription_id, razorpay_order_id, razorpay_signature, planId, isMock } = body;
 
-  if (isMock && !DEV_MOCK_ALLOWED) {
+  if (isMock && !isDevSkipAllowed()) {
     return NextResponse.json({ error: 'Mock payments are disabled on this deployment.' }, { status: 403 });
   }
 
