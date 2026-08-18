@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ status: 'ignored' });
   }
 
-  await syncSubscriptionFromRazorpay({
+  const result = await syncSubscriptionFromRazorpay({
     uid,
     razorpaySub: live,
     payment: paymentEntity?.id
@@ -100,6 +100,11 @@ export async function POST(req: NextRequest) {
       : null,
     eventType,
   });
+
+  if (!result.ok) {
+    await supabaseAdmin.from('processed_webhook_events').delete().eq('event_id', eventId);
+    return NextResponse.json({ error: 'Sync failed' }, { status: 500 });
+  }
 
   return NextResponse.json({ status: 'ok' });
 }

@@ -141,24 +141,13 @@ export async function getEntitlement(uid: string): Promise<Entitlement> {
   if (error || !row) return empty;
 
   const now = Date.now();
-  const effectiveExpiryStr = row.current_period_end || row.plan_expires_at;
-  const expiresAt = effectiveExpiryStr ? new Date(effectiveExpiryStr).getTime() : 0;
-  // Cancelled / halted keep access until Razorpay's paid period ends. Failed renewals
-  // never extend current_period_end, so access drops naturally when that timestamp passes.
-  const blockingStatus = new Set(['expired', 'completed', 'created', 'inactive']);
-  const isActiveStatus = !row.subscription_status || !blockingStatus.has(row.subscription_status);
-  const isActive = !!row.plan && expiresAt > now && isActiveStatus;
-
-  if (!isActive) {
-    return { ...empty, plan: null, planName: 'No subscription', expiresAt: effectiveExpiryStr || null };
-  }
-
   const today = todayDateStr();
   const week = currentIsoWeek();
   const dailyUsed = row.daily_analysis_date === today ? row.daily_analysis_count : 0;
   const weeklyUsed = row.weekly_planner_week === week ? row.weekly_planner_count : 0;
 
-  if (row.plan === 'referral_reward') {
+  const referralExpiry = row.plan_expires_at ? new Date(row.plan_expires_at).getTime() : 0;
+  if (row.plan === 'referral_reward' && referralExpiry > now) {
     return {
       active: true,
       plan: 'referral_reward',
@@ -173,14 +162,26 @@ export async function getEntitlement(uid: string): Promise<Entitlement> {
     };
   }
 
+  const effectiveExpiryStr = row.current_period_end || row.plan_expires_at;
+  const expiresAt = effectiveExpiryStr ? new Date(effectiveExpiryStr).getTime() : 0;
+  // Cancelled / halted keep access until Razorpay's paid period ends. Failed renewals
+  // never extend current_period_end, so access drops naturally when that timestamp passes.
+  const blockingStatus = new Set(['expired', 'completed', 'created', 'inactive']);
+  const isActiveStatus = !row.subscription_status || !blockingStatus.has(row.subscription_status);
+  const isActive = !!row.plan && expiresAt > now && isActiveStatus;
+
+  if (!isActive) {
+    return { ...empty, plan: null, planName: 'No subscription', expiresAt: effectiveExpiryStr || null };
+  }
+
   const cfg = PLANS[row.plan as PlanId];
-  if (!cfg) return { ...empty, expiresAt: row.plan_expires_at };
+  if (!cfg) return { ...empty, expiresAt: effectiveExpiryStr };
 
   return {
     active: true,
     plan: cfg.id,
     planName: cfg.name,
-    expiresAt: row.plan_expires_at,
+    expiresAt: effectiveExpiryStr,
     isElite: cfg.isElite && !!row.is_elite,
     premiumGuru: cfg.premiumGuru,
     dailyAnalysisLimit: cfg.dailyAnalysisLimit,

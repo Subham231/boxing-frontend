@@ -8,6 +8,10 @@ export function isSubscriptionActive(
 ): boolean {
   if (!profile || !profile.plan) return false;
 
+  if (profile.plan === 'referral_reward') {
+    return !!profile.plan_expires_at && new Date(profile.plan_expires_at).getTime() > Date.now();
+  }
+
   if (profile.subscription_status && ['expired', 'completed', 'created', 'inactive'].includes(profile.subscription_status)) {
     return false;
   }
