@@ -735,7 +735,7 @@ function SessionTimerContent() {
               <X className="w-5 h-5" />
             </button>
             <div
-              className="w-full max-w-md aspect-[3/4] max-h-[75vh] rounded-3xl border border-primary/20 overflow-hidden bg-black/60"
+              className="w-full max-w-lg h-[65vh] rounded-3xl border border-primary/20 overflow-hidden bg-black/60"
               onClick={(e) => e.stopPropagation()}
             >
               <ExerciseVisualGuide

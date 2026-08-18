@@ -2,7 +2,10 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
+import rateLimit from 'express-rate-limit';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { paymentsRouter, handleWebhook } from './routes/payments';
+import { requireAuth, AuthedRequest } from './middleware/auth';
 
 dotenv.config();
 
@@ -12,10 +15,57 @@ const PORT = process.env.PORT || 8080;
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
+// ---------------------------------------------------------------------------
+// CORS: restrict to known production/dev origins instead of allowing every
+// origin by default. Set ALLOWED_ORIGINS in .env as a comma-separated list
+// for production (e.g. "https://sparai.app,https://www.sparai.app").
+// ---------------------------------------------------------------------------
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+
 app.use(helmet());
-app.use(cors());
+app.use(
+    cors({
+        origin: (origin, callback) => {
+            // Allow no-origin requests (server-to-server, curl, mobile apps)
+            if (!origin || allowedOrigins.includes(origin)) {
+                callback(null, true);
+            } else {
+                callback(new Error('Not allowed by CORS'));
+            }
+        },
+        credentials: true,
+    })
+);
+
+const aiLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many AI requests. Please try again later.' },
+});
+
+// ---------------------------------------------------------------------------
+// CRITICAL ORDERING: the Razorpay webhook route needs the raw request body
+// (as a Buffer) to compute the HMAC signature correctly. It MUST be
+// registered with express.raw() BEFORE the global express.json() parser
+// below, and only for this exact path — every other route keeps using
+// normal JSON parsing.
+// ---------------------------------------------------------------------------
+app.post(
+    '/api/payments/webhook',
+    express.raw({ type: 'application/json' }),
+    handleWebhook
+);
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Payment routes (create-subscription, create-order, verify, subscription-status)
+app.use('/api/payments', paymentsRouter);
 
 // Proxy Route for Gemini AI
 app.post('/api/analyze-session', async (req: Request, res: Response) => {
@@ -185,10 +235,49 @@ Generate a JSON training roadmap optimized for these exact parameters. Ensure ev
     }
 });
 
+// ---------------------------------------------------------------------------
+// POST /api/weekly-debrief
+// Replaces a previous implementation that called the Gemini API directly
+// from the browser with a hardcoded API key embedded in client JS (a real,
+// exploitable secret exposure — anyone could read it from page source and
+// use it against this project's Gemini quota). Generation now happens here,
+// server-side, using the private GEMINI_API_KEY env var only.
+// ---------------------------------------------------------------------------
+app.post('/api/weekly-debrief', aiLimiter, requireAuth, async (req: AuthedRequest, res: Response) => {
+    try {
+        const { name, primaryGoal, promiseVal, daysActive, totalDrills, weeklySummary } = req.body || {};
+
+        if (typeof daysActive !== 'number' || typeof totalDrills !== 'number') {
+            return res.status(400).json({ error: 'Missing or invalid progress metrics' });
+        }
+
+        const safeName = String(name || 'FIGHTER').slice(0, 40);
+        const safeGoal = String(primaryGoal || 'unbeatable speed').slice(0, 120);
+        const safePromise = String(promiseVal || 'to never break the chain').slice(0, 120);
+        const safeSummary = Array.isArray(weeklySummary) ? weeklySummary.slice(0, 7).join(', ') : '';
+
+        const systemPrompt = `You are the Synthetic Combat Intelligence Narrator. Generate a cinematic, atmospheric session summary for a fighter named ${safeName} based on their current week's progression.
+The tone should be gritty, intense, and futuristic.
+Progress: ${daysActive} active days and ${totalDrills} drills completed this week.
+Keep it under 120 words. Focus on their discipline and the evolution of their power.`;
+
+        const userPrompt = `Weekly Progress: ${safeSummary}. Goal: ${safeGoal}. Promise: ${safePromise}.`;
+
+        const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
+        const result = await model.generateContent(`${systemPrompt}\n\n${userPrompt}`);
+        const text = result.response.text();
+
+        res.json({ text });
+    } catch (err) {
+        console.error('Weekly Debrief Error:', err);
+        res.status(500).json({ error: 'Failed to generate weekly debrief' });
+    }
+});
+
 app.get('/health', (req: Request, res: Response) => {
     res.json({ status: 'healthy' });
 });
 
 app.listen(PORT, () => {
-    console.log(`ZEPHYR Backend Proxy running on port ${PORT}`);
+    console.log(`SparAI Backend Proxy running on port ${PORT}`);
 });

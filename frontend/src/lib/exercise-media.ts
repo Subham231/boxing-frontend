@@ -15,17 +15,26 @@ const EXERCISE_VIDEO_RULES: Array<[RegExp, string]> = [
   [/jump squat/i, '/exercises/jump-squats.mp4'],
   [/wall sit/i, '/exercises/wall-sit.mp4'],
   [/\bsquat/i, '/exercises/squats.mp4'],
+  [/lunge/i, '/exercises/lunges.mp4'],
+  [/calf raise/i, '/exercises/calf-raises.mp4'],
+  [/glute bridge/i, '/exercises/glute-bridges.mp4'],
 
   // Bodyweight — push/chest
   [/diamond push/i, '/exercises/diamond-pushups.mp4'],
   [/pike push/i, '/exercises/pike-pushups.mp4'],
   [/explosive push/i, '/exercises/explosive-pushups.mp4'],
+  [/incline push/i, '/exercises/incline-pushups.mp4'],
+  [/wide push/i, '/exercises/wide-pushups.mp4'],
+  [/plank shoulder tap/i, '/exercises/shoulder-taps.mp4'],
 
   // Bodyweight — core
   [/bicycle crunch/i, '/exercises/bicycle-crunch.mp4'],
   [/mountain climber/i, '/exercises/mountain-climbers.mp4'],
   [/hollow hold/i, '/exercises/hollow-hold.mp4'],
-  [/\bplank/i, '/exercises/plank.mp4'],
+  [/plank(?!\s*shoulder)/i, '/exercises/plank.mp4'],
+  [/sit[\s-]?up/i, '/exercises/situps.mp4'],
+  [/\bcrunch/i, '/exercises/crunches.mp4'],
+  [/leg raise/i, '/exercises/leg-raises.mp4'],
 
   // Bodyweight — back
   [/superman/i, '/exercises/superman-hold.mp4'],
@@ -34,6 +43,7 @@ const EXERCISE_VIDEO_RULES: Array<[RegExp, string]> = [
   [/back extension/i, '/exercises/back-extension.mp4'],
 
   // Boxing routine drills — reuse the Guru technique reference clips
+  [/sprawl/i, '/exercises/sprawl-to-box.mp4'],
   [/slip\s*&?\s*roll/i, '/guru/moves/slip.mp4'],
   [/bob\s*&?\s*weave/i, '/guru/moves/slip.mp4'],
   [/roundhouse/i, '/guru/moves/roundhouse-kick.mp4'],

@@ -3,10 +3,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useRankState } from '@/lib/rank-client';
-import { useMyProfile } from '@/lib/profile-client';
-import { signOutFirebase } from '@/lib/firebase-auth';
-import { getRankInfoByLevel } from '@/components/ui/RankBadge';
 import { 
   User, 
   Settings, 
@@ -27,8 +23,8 @@ import {
 } from 'lucide-react';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
-import ReferralCard from '@/components/reflex/ReferralCard';
-import { useFirebaseUser } from '@/lib/useFirebaseUser';
+import { API_BASE_URL } from '@/lib/api';
+import { supabase } from '@/lib/supabase';
 
 interface OnboardingData {
   ringName?: string;
@@ -51,43 +47,7 @@ interface OnboardingData {
 export default function SettingsPage() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
-  const [profileData, setProfileData] = useState<OnboardingData>(() => {
-    if (typeof window === 'undefined') return {};
-    try {
-      return JSON.parse(localStorage.getItem('boxing_onboarding_data') || '{}');
-    } catch {
-      return {};
-    }
-  });
-  const { profile: myProfile, error: myProfileError, updateProfile: updateMyProfile } = useMyProfile();
-  const { user: fbUser } = useFirebaseUser();
-
-  // The authoritative source for these fields is Supabase, full stop.
-  // Local cache (the lazy initializer above) only exists so something
-  // reasonable renders for the instant before the Supabase fetch resolves.
-  // Once it resolves, every field is set from it UNCONDITIONALLY — even to
-  // an empty/default value if Supabase has null — otherwise a null field
-  // silently lets old cached data (e.g. left over from testing a different
-  // account in the same browser) keep showing forever, which is exactly
-  // the "Supabase says X but the app shows Y" bug this fixes.
-  useEffect(() => {
-    if (!myProfile) return;
-    setProfileData((prev) => ({
-      ...prev,
-      ringName: myProfile.display_name || 'FIGHTER',
-      ring_name: myProfile.display_name || 'FIGHTER',
-      age: myProfile.age ?? undefined,
-      profession: myProfile.profession || '',
-      avatar_url: myProfile.avatar_url || '',
-      promise: myProfile.promise_word || '',
-      promise_trigger: myProfile.promise_word || '',
-      phone_number: myProfile.phone || prev.phone_number,
-    }));
-  }, [myProfile]);
-
-  const { rankState } = useRankState();
-  const streakVal = rankState?.current_streak ?? 0;
-  const rank = getRankInfoByLevel(rankState?.rank_level ?? 0);
+  const [profileData, setProfileData] = useState<OnboardingData>({});
 
   // App Settings
   const [notifications, setNotifications] = useState(true);
@@ -95,19 +55,6 @@ export default function SettingsPage() {
 
   // Edit fields modal
   const [editField, setEditField] = useState<'ringName' | 'promise' | 'avatar_url' | null>(null);
-  const [entitlement, setEntitlement] = useState<any>(null);
-  const isElite = !!entitlement?.isElite;
-
-  useEffect(() => {
-    if (!fbUser) return;
-    fbUser.getIdToken()
-      .then((token) => fetch('/api/subscription/status', { headers: { Authorization: `Bearer ${token}` } }))
-      .then((res) => res.json())
-      .then((data) => setEntitlement(data))
-      .catch(() => {
-        // Non-fatal — badge/status card just won't show if the check fails.
-      });
-  }, [fbUser]);
   const [editValue, setEditValue] = useState('');
 
   // Debrief Overlay State
@@ -125,6 +72,12 @@ export default function SettingsPage() {
     if (typeof window !== 'undefined') {
       synthRef.current = window.speechSynthesis;
     }
+
+    // Load onboarding data
+    try {
+      const data = JSON.parse(localStorage.getItem('boxing_onboarding_data') || '{}');
+      setProfileData(data);
+    } catch (e) {}
 
     // Load app settings
     try {
@@ -159,18 +112,13 @@ export default function SettingsPage() {
     if (editField === 'ringName') {
       updated.ringName = editValue;
       updated.ring_name = editValue;
-      updateMyProfile({ displayName: editValue }).catch(console.error);
     } else if (editField === 'promise') {
       updated.promise = editValue;
       updated.promise_trigger = editValue;
-      updateMyProfile({ promiseWord: editValue }).catch(console.error);
     } else if (editField === 'avatar_url') {
       updated.avatar_url = editValue;
-      updateMyProfile({ avatarUrl: editValue }).catch(console.error);
     }
 
-    // Local cache stays in sync for pages that still read
-    // 'boxing_onboarding_data' directly (kept for compatibility).
     localStorage.setItem('boxing_onboarding_data', JSON.stringify(updated));
     setProfileData(updated);
     setEditField(null);
@@ -220,36 +168,33 @@ export default function SettingsPage() {
     setDebriefDays(daysActive);
     setDebriefDrills(totalDrills);
 
-    const API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-    if (!API_KEY) {
-      setDebriefGenerating(false);
-      const noKeyText = "AI COMLINK OFFLINE. NO API KEY CONFIGURED.";
-      setDebriefText(noKeyText);
-      return;
-    }
     const name = profileData.ringName || profileData.ring_name || 'FIGHTER';
     const primaryGoal = profileData.primary_goal || 'unbeatable speed';
     const promiseVal = profileData.promise || profileData.promise_trigger || 'to never break the chain';
 
-    const systemPrompt = `You are the Synthetic Combat Intelligence Narrator. Generate a cinematic, atmospheric session summary for a fighter named ${name} based on their current week's progression. 
-The tone should be gritty, intense, and futuristic. 
-Progress: ${daysActive} active days and ${totalDrills} drills completed this week. 
-Keep it under 120 words. Focus on their discipline and the evolution of their power.`;
-
-    const userPrompt = `Weekly Progress: ${weeklySummary.join(', ')}. Goal: ${primaryGoal}. Promise: ${promiseVal}.`;
-
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${API_KEY}`, {
+      const { data: sessionData } = supabase ? await supabase.auth.getSession() : { data: { session: null } };
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error('Not signed in');
+
+      const response = await fetch(`${API_BASE_URL}/api/weekly-debrief`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: systemPrompt + "\n\n" + userPrompt }] }]
-        })
+          name,
+          primaryGoal,
+          promiseVal,
+          daysActive,
+          totalDrills,
+          weeklySummary,
+        }),
       });
 
-      if (!response.ok) throw new Error("Link Failed");
-      const resJson = await response.json();
-      const text = resJson.candidates[0].content.parts[0].text;
+      if (!response.ok) throw new Error('Link Failed');
+      const { text } = await response.json();
 
       setDebriefGenerating(false);
       typeText(text);
@@ -310,21 +255,15 @@ Keep it under 120 words. Focus on their discipline and the evolution of their po
     }
   };
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
     if (confirm("Log out of session? Identity data will remain on device.")) {
-      try {
-        await signOutFirebase();
-      } catch (e) {
-        console.error('Firebase sign-out failed:', e);
-      }
-      // Local onboarding/profile cache intentionally stays — it's what lets
-      // a returning login restore instantly instead of re-running
-      // onboarding. Firebase sign-out is what actually ends the session.
+      // Clear login state and return to login gate
+      localStorage.removeItem('boxing_guest_mode');
       router.push('/');
     }
   };
 
-  const avatarUrl = profileData.avatar_url || null;
+  const avatarUrl = profileData.avatar_url || 'https://i.pravatar.cc/150?u=viktor';
   const name = profileData.ringName || profileData.ring_name || 'FIGHTER';
   const promise = profileData.promise || profileData.promise_trigger || 'TO BE UNSTOPPABLE';
 
@@ -350,17 +289,13 @@ Keep it under 120 words. Focus on their discipline and the evolution of their po
         <div className="flex items-center gap-4">
           <div 
             onClick={() => openEdit('avatar_url', 'Avatar Image URL')}
-            className="w-14 h-14 rounded-full border-2 border-primary/80 shadow-[0_0_15px_rgba(226,255,59,0.3)] overflow-hidden bg-black/40 relative group cursor-pointer stealth-sensitive flex items-center justify-center"
+            className="w-14 h-14 rounded-full border-2 border-primary/80 shadow-[0_0_15px_rgba(226,255,59,0.3)] overflow-hidden bg-black/40 relative group cursor-pointer"
           >
-            {avatarUrl ? (
-              <img 
-                src={avatarUrl} 
-                alt="Avatar" 
-                className="w-full h-full object-cover group-hover:opacity-40 transition-opacity"
-              />
-            ) : (
-              <span className="text-lg font-black text-primary">{name.charAt(0)}</span>
-            )}
+            <img 
+              src={avatarUrl} 
+              alt="Avatar" 
+              className="w-full h-full object-cover group-hover:opacity-40 transition-opacity"
+            />
             <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
               <Camera className="w-4 h-4 text-white" />
             </div>
@@ -369,13 +304,8 @@ Keep it under 120 words. Focus on their discipline and the evolution of their po
             <div className="text-[10px] font-black text-white/50 tracking-wider uppercase mb-0.5">
               ATHLETE PROFILE
             </div>
-            <h1 className="text-xl font-black italic uppercase leading-none text-white tracking-wide stealth-sensitive flex items-center gap-2">
+            <h1 className="text-xl font-black italic uppercase leading-none text-white tracking-wide">
               {name}&apos;s Vault
-              {isElite && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/15 border border-primary/40 text-primary text-[8px] font-black tracking-widest normal-case not-italic">
-                  <Crown className="w-3 h-3" /> ELITE
-                </span>
-              )}
             </h1>
           </div>
         </div>
@@ -387,13 +317,6 @@ Keep it under 120 words. Focus on their discipline and the evolution of their po
           LOGOUT
         </button>
       </header>
-
-      {myProfileError && (
-        <div className="flex items-center gap-2 px-4 py-3 rounded-xl border border-red-500/30 bg-red-500/10 text-red-300 text-xs font-semibold">
-          <AlertTriangle className="w-4 h-4 shrink-0" />
-          Couldn&apos;t load your profile from the server ({myProfileError}). Showing locally cached data — pull to refresh or check your connection.
-        </div>
-      )}
 
       {/* Profile Details Block */}
       <GlassCard className="p-6 border-white/5 bg-black/40 flex flex-col gap-4">
@@ -407,7 +330,7 @@ Keep it under 120 words. Focus on their discipline and the evolution of their po
                 onClick={() => openEdit('ringName', 'Fighter Name')}
               />
             </div>
-            <h2 className="text-xl font-black italic text-white uppercase leading-none stealth-sensitive">
+            <h2 className="text-xl font-black italic text-white uppercase leading-none">
               &ldquo;{name}&rdquo;
             </h2>
           </div>
@@ -458,7 +381,7 @@ Keep it under 120 words. Focus on their discipline and the evolution of their po
               <span className="text-[7px] font-black text-white/30 tracking-wider block uppercase">
                 PHONE
               </span>
-              <span className="text-xs font-black text-white uppercase mt-0.5 block stealth-sensitive">
+              <span className="text-xs font-black text-white uppercase mt-0.5 block">
                 {profileData.phone_number || 'Guest Mode'}
               </span>
             </div>
@@ -468,22 +391,6 @@ Keep it under 120 words. Focus on their discipline and the evolution of their po
               </span>
               <span className="text-xs font-black text-white uppercase mt-0.5 block">
                 {profileData.height ? `${profileData.height}cm / ${profileData.weight}kg` : '--'}
-              </span>
-            </div>
-            <div>
-              <span className="text-[7px] font-black text-white/30 tracking-wider block uppercase">
-                STREAK
-              </span>
-              <span className="text-xs font-black text-white uppercase mt-0.5 block stealth-sensitive">
-                🔥 {streakVal} DAYS
-              </span>
-            </div>
-            <div>
-              <span className="text-[7px] font-black text-white/30 tracking-wider block uppercase">
-                RANK
-              </span>
-              <span className="text-xs font-black uppercase mt-0.5 block" style={{ color: rank.color }}>
-                {rank.name}
               </span>
             </div>
           </div>
@@ -522,32 +429,15 @@ Keep it under 120 words. Focus on their discipline and the evolution of their po
             </div>
             <div>
               <h4 className="text-xs font-black uppercase text-white leading-none">
-                {entitlement?.planName || 'SUBSCRIPTION'}
+                PRO SUBSCRIPTION
               </h4>
-              {entitlement?.active ? (
-                <span className="text-[8px] font-black text-primary uppercase block mt-1">
-                  ACTIVE • RENEWS {entitlement.expiresAt ? new Date(entitlement.expiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : ''}
-                </span>
-              ) : entitlement?.expiresAt ? (
-                <span className="text-[8px] font-black text-red-400 uppercase block mt-1">
-                  EXPIRED • {new Date(entitlement.expiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                </span>
-              ) : (
-                <span className="text-[8px] font-black text-white/40 uppercase block mt-1">
-                  NOT SUBSCRIBED
-                </span>
-              )}
+              <span className="text-[8px] font-black text-primary uppercase block mt-1">
+                ACTIVE • RENEWS OCT 20
+              </span>
             </div>
           </div>
-          {!entitlement?.active && (
-            <button
-              onClick={() => router.push('/subscription')}
-              className="px-3 py-1.5 rounded-xl bg-primary text-black text-[9px] font-black uppercase tracking-wider"
-            >
-              Upgrade
-            </button>
-          )}
         </GlassCard>
+
         {/* Weekly AI Recap Button */}
         <div 
           onClick={triggerWeeklyDebrief}
@@ -569,18 +459,6 @@ Keep it under 120 words. Focus on their discipline and the evolution of their po
           <Sparkles className="w-4 h-4 text-primary animate-pulse" />
         </div>
       </div>
-
-      {/* REFERRALS — view/share your own code only. Referral codes can only
-          ever be redeemed once, at first signup (never on a later login,
-          never from here) — see /api/reflex/apply-referral. */}
-      {fbUser && (
-        <div className="flex flex-col gap-3.5">
-          <span className="text-[9px] font-black tracking-[3px] text-white/30 uppercase pl-2.5">
-            REFERRALS
-          </span>
-          <ReferralCard uid={fbUser.uid} />
-        </div>
-      )}
 
       {/* APP SETTINGS */}
       <div className="flex flex-col gap-3.5">
@@ -632,89 +510,15 @@ Keep it under 120 words. Focus on their discipline and the evolution of their po
           </button>
         </div>
 
-        {/* Subscription */}
-        <div
-          onClick={() => router.push('/subscription')}
-          className="glass-card p-4 rounded-3xl border border-white/5 bg-black/40 flex justify-between items-center cursor-pointer select-none hover:border-white/10"
-        >
-          <div className="flex items-center gap-4">
-            <Crown className="w-4 h-4 text-primary" />
-            <span className="text-xs font-black uppercase text-white">
-              SUBSCRIPTION{isElite ? ' — ELITE' : ''}
-            </span>
-          </div>
-          <ChevronRight className="w-4 h-4 text-white/20" />
-        </div>
-
-        {/* Replay Tutorial */}
-        <div
-          onClick={() => {
-            localStorage.removeItem('boxing_welcome_intro_done');
-            localStorage.removeItem('boxing_tutorial_done');
-            router.push('/dashboard');
-          }}
-          className="glass-card p-4 rounded-3xl border border-white/5 bg-black/40 flex justify-between items-center cursor-pointer select-none hover:border-white/10"
-        >
-          <div className="flex items-center gap-4">
-            <Sparkles className="w-4 h-4 text-primary" />
-            <span className="text-xs font-black uppercase text-white">
-              REPLAY TUTORIAL
-            </span>
-          </div>
-          <ChevronRight className="w-4 h-4 text-white/20" />
-        </div>
-
         {/* Privacy Link */}
         <div 
-          onClick={() => router.push('/legal/privacy')}
+          onClick={() => router.push('/privacy')}
           className="glass-card p-4 rounded-3xl border border-white/5 bg-black/40 flex justify-between items-center cursor-pointer select-none hover:border-white/10"
         >
           <div className="flex items-center gap-4">
             <ShieldCheck className="w-4 h-4 text-white/40" />
             <span className="text-xs font-black uppercase text-white">
-              PRIVACY POLICY
-            </span>
-          </div>
-          <ChevronRight className="w-4 h-4 text-white/20" />
-        </div>
-
-        {/* Terms Link */}
-        <div 
-          onClick={() => router.push('/legal/terms')}
-          className="glass-card p-4 rounded-3xl border border-white/5 bg-black/40 flex justify-between items-center cursor-pointer select-none hover:border-white/10"
-        >
-          <div className="flex items-center gap-4">
-            <ShieldCheck className="w-4 h-4 text-white/40" />
-            <span className="text-xs font-black uppercase text-white">
-              TERMS & CONDITIONS
-            </span>
-          </div>
-          <ChevronRight className="w-4 h-4 text-white/20" />
-        </div>
-
-        {/* Refund Link */}
-        <div 
-          onClick={() => router.push('/legal/refund')}
-          className="glass-card p-4 rounded-3xl border border-white/5 bg-black/40 flex justify-between items-center cursor-pointer select-none hover:border-white/10"
-        >
-          <div className="flex items-center gap-4">
-            <ShieldCheck className="w-4 h-4 text-white/40" />
-            <span className="text-xs font-black uppercase text-white">
-              REFUND & CANCELLATION
-            </span>
-          </div>
-          <ChevronRight className="w-4 h-4 text-white/20" />
-        </div>
-
-        {/* Contact Link */}
-        <div 
-          onClick={() => router.push('/legal/contact')}
-          className="glass-card p-4 rounded-3xl border border-white/5 bg-black/40 flex justify-between items-center cursor-pointer select-none hover:border-white/10"
-        >
-          <div className="flex items-center gap-4">
-            <ShieldCheck className="w-4 h-4 text-white/40" />
-            <span className="text-xs font-black uppercase text-white">
-              CONTACT US
+              PRIVACY & SECURITY
             </span>
           </div>
           <ChevronRight className="w-4 h-4 text-white/20" />
