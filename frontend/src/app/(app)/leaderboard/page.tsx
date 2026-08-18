@@ -100,7 +100,7 @@ export default function LeaderboardPage() {
       if (streakRows && streakRows.length > 0) {
         const uids = streakRows.map((r: any) => r.uid);
         const { data: profiles } = await supabase
-          .from('reflex_profiles')
+          .from('reflex_public_profiles')
           .select('uid, display_name, avatar_url')
           .in('uid', uids);
         const profileByUid = new Map<string, { display_name?: string; avatar_url?: string }>(
