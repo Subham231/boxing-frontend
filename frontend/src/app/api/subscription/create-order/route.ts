@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyFirebaseIdToken } from '@/lib/server/firebase-admin';
+import { supabaseAdmin } from '@/lib/server/supabase-admin';
 import { PLANS, PlanId } from '@/lib/server/entitlements';
+import { publicRazorpayKeyId, razorpayAuthHeader, razorpayConfigured } from '@/lib/server/razorpay';
 
 export const runtime = 'nodejs';
-
-const RAZORPAY_KEY_ID = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID || '';
-const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || '';
 
 export async function POST(req: NextRequest) {
   const authHeader = req.headers.get('authorization') || '';
