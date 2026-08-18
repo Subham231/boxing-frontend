@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
 import { Loader2 } from 'lucide-react';
 import { useFirebaseUser } from '@/lib/useFirebaseUser';
@@ -11,7 +12,7 @@ export default function ProtectedLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+  const pathname = usePathname();
   const { user, loading: authLoading } = useFirebaseUser();
   const [checked, setChecked] = useState(false);
   const [allowed, setAllowed] = useState(false);
@@ -55,8 +56,7 @@ export default function ProtectedLayout({
         return;
       }
 
-      const path = window.location.pathname;
-      if (!isExemptFromSubscriptionGate(path) && data.active !== true) {
+      if (!isExemptFromSubscriptionGate(pathname) && data.active !== true) {
         window.location.replace('/subscription');
         return;
       }
