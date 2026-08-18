@@ -3,6 +3,7 @@ import { verifyFirebaseIdToken } from '@/lib/server/firebase-admin';
 import { supabaseAdmin } from '@/lib/server/supabase-admin';
 import { PLANS, PlanId } from '@/lib/server/entitlements';
 import { publicRazorpayKeyId, razorpayAuthHeader, razorpayConfigured } from '@/lib/server/razorpay';
+import { isProduction } from '@/lib/server/env';
 
 export const runtime = 'nodejs';
 
@@ -30,24 +31,16 @@ export async function POST(req: NextRequest) {
   const uid = decoded.uid;
 
   if (!razorpayConfigured()) {
-    console.warn('Razorpay keys not configured. Falling back to Mock Subscription Creation.');
-    const mockSub = {
-      id: `sub_mock_${Math.random().toString(36).substring(2, 11)}`,
-      entity: 'subscription',
-      plan_id: plan.razorpayPlanId,
-      status: 'created',
-      current_start: Math.floor(Date.now() / 1000),
-      current_end: Math.floor(Date.now() / 1000) + plan.durationDays * 86400,
-      notes: { uid, planId },
-      isMock: true,
-    };
-    return NextResponse.json({ subscription: mockSub, planId, keyId: 'rzp_test_mock' });
+    return NextResponse.json(
+      { error: 'Payment system is not configured. Cannot create a subscription.' },
+      { status: 500 },
+    );
   }
 
   try {
     if (!plan.razorpayPlanId || plan.razorpayPlanId.endsWith('_default')) {
       return NextResponse.json(
-        { error: `Razorpay Plan ID for '${plan.name}' is not configured on the server. Please set ${planId.toUpperCase()} env var.` },
+        { error: `Razorpay Plan ID for '${plan.name}' is not configured on the server.` },
         { status: 500 },
       );
     }
@@ -73,33 +66,11 @@ export async function POST(req: NextRequest) {
 
     if (!response.ok) {
       const errBody = await response.json().catch(() => ({}));
-      console.warn('Razorpay subscription API rejected plan_id, falling back to direct order creation:', errBody);
-
-      // Fallback: Create direct Razorpay Order so checkout NEVER breaks even if Subscriptions API rejects plan ID
-      const orderRes = await fetch('https://api.razorpay.com/v1/orders', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: razorpayAuthHeader(),
-        },
-        body: JSON.stringify({
-          amount: plan.priceInPaise,
-          currency: 'INR',
-          receipt: `rcpt_${uid.substring(0, 8)}_${Date.now()}`,
-          notes: { uid, planId },
-        }),
-      });
-
-      if (!orderRes.ok) {
-        const orderErr = await orderRes.json().catch(() => ({}));
-        return NextResponse.json(
-          { error: orderErr.error?.description || errBody.error?.description || 'Razorpay payment creation failed' },
-          { status: 500 },
-        );
-      }
-
-      const order = await orderRes.json();
-      return NextResponse.json({ order, planId, keyId: publicRazorpayKeyId(), isDirectOrder: true });
+      console.error('Razorpay subscription API rejected plan_id:', errBody);
+      return NextResponse.json(
+        { error: errBody.error?.description || 'Could not create Razorpay subscription. Check live plan IDs.' },
+        { status: 500 },
+      );
     }
 
     const subscription = await response.json();

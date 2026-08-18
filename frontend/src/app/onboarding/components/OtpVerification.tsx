@@ -4,21 +4,12 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronRight, ShieldCheck, ArrowLeft } from 'lucide-react';
 import type { ConfirmationResult } from 'firebase/auth';
-import { signInWithCustomToken } from 'firebase/auth';
-import { firebaseAuth } from '@/lib/firebase';
 import { useOnboarding } from '@/context/OnboardingContext';
 import StepBadge from './StepBadge';
 import { sendOtp, confirmOtp, checkOtpRateLimit, saveProfileDetails } from '@/lib/firebase-auth';
-import { ensureUserProfile } from '@/lib/firebase-auth';
 import { cacheProfileLocally } from '@/lib/profile-client';
-import { AdminPanel } from './AdminPanel';
 
 const RECAPTCHA_CONTAINER_ID = 'onboarding-phone-recaptcha';
-
-const TEST_PHONE = '+918010050070';
-const TEST_OTP = '000000';
-const ADMIN_PHONE = '+918285937242';
-const ADMIN_OTP = '999999';
 
 const OtpVerification: React.FC = () => {
   const { data, updateData, nextStep, prevStep } = useOnboarding();
@@ -29,7 +20,6 @@ const OtpVerification: React.FC = () => {
   const [confirmation, setConfirmation] = useState<ConfirmationResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showAdmin, setShowAdmin] = useState(false);
 
   const handleSendOtp = async () => {
     setError(null);
@@ -39,18 +29,6 @@ const OtpVerification: React.FC = () => {
       return;
     }
 
-    // ── ADMIN / TEST PHONE — still require the code to be typed in ──
-    // These numbers don't go through Firebase SMS, but they must still
-    // land on the OTP-entry screen and have the correct code typed in.
-    // (Previously this branch logged the person straight in the instant
-    // they typed the phone number, without ever asking for a code — that
-    // was the bug.)
-    if (trimmed === ADMIN_PHONE || trimmed === TEST_PHONE) {
-      setStep('otp');
-      return;
-    }
-
-    // ── NORMAL FIREBASE OTP FLOW ──
     setLoading(true);
     try {
       const limitCheck = await checkOtpRateLimit(trimmed);
@@ -73,46 +51,6 @@ const OtpVerification: React.FC = () => {
     const trimmedPhone = phone.replace(/\s+/g, '').trim();
     const trimmedCode = code.trim();
 
-    // ── ADMIN / TEST PHONE — code is checked here, not on send ──
-    if (trimmedPhone === ADMIN_PHONE || trimmedPhone === TEST_PHONE) {
-      const expectedOtp = trimmedPhone === ADMIN_PHONE ? ADMIN_OTP : TEST_OTP;
-      if (trimmedCode !== expectedOtp) {
-        setError('Invalid code. Try again.');
-        return;
-      }
-      setLoading(true);
-      try {
-        const res = await fetch('/api/admin', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: trimmedPhone, otp: expectedOtp }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Login failed');
-        await signInWithCustomToken(firebaseAuth, data.customToken);
-        updateData({ phone: trimmedPhone });
-        const displayName = trimmedPhone === ADMIN_PHONE ? 'ADMIN' : 'TEST FIGHTER';
-        cacheProfileLocally({ uid: data.uid, phone: trimmedPhone, display_name: displayName } as any);
-        localStorage.setItem('boxing_onboarding_done', 'true');
-        localStorage.setItem('boxing_onboarding_data', JSON.stringify({
-          ring_name: displayName,
-          phone_number: trimmedPhone,
-          onboarding_completed: true,
-        }));
-        if (trimmedPhone === ADMIN_PHONE) {
-          setShowAdmin(true);
-        } else {
-          router.replace('/dashboard');
-        }
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Login failed');
-      } finally {
-        setLoading(false);
-      }
-      return;
-    }
-
-    // ── NORMAL FIREBASE OTP FLOW ──
     if (!confirmation) return;
     setLoading(true);
     try {
@@ -147,10 +85,6 @@ const OtpVerification: React.FC = () => {
       setLoading(false);
     }
   };
-
-  if (showAdmin) {
-    return <AdminPanel onClose={() => setShowAdmin(false)} />;
-  }
 
   return (
     <div className="flex flex-col min-h-[85vh] justify-between py-2">
