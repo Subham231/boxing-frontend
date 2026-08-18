@@ -79,9 +79,19 @@ export async function getUserWeeklyRank(gameId: 'reaction_tap' | 'combo_flash', 
 }
 
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {
-  if (!supabase) return null;
-  const { data } = await supabase.from('reflex_profiles').select('*').eq('uid', uid).maybeSingle();
-  return data as UserProfile | null;
+  const user = firebaseAuth.currentUser;
+  if (!user || user.uid !== uid) return null;
+  try {
+    const token = await user.getIdToken();
+    const res = await fetch('/api/reflex/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return (data.profile as UserProfile) || null;
+  } catch {
+    return null;
+  }
 }
 
 // The ONLY way a score gets written. Sends the raw, unprocessed evidence
