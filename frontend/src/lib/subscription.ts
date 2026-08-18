@@ -7,15 +7,15 @@ export function isSubscriptionActive(
   profile: { subscription_until?: string | null; plan_expires_at?: string | null; current_period_end?: string | null; subscription_status?: string | null; plan?: string | null } | null | undefined,
 ): boolean {
   if (!profile || !profile.plan) return false;
-  
-  if (profile.subscription_status && !['active', 'authenticated'].includes(profile.subscription_status)) {
+
+  if (profile.subscription_status && ['expired', 'completed', 'created', 'inactive'].includes(profile.subscription_status)) {
     return false;
   }
 
   const now = Date.now();
-  if (profile.subscription_until && new Date(profile.subscription_until).getTime() > now) return true;
-  if (profile.plan_expires_at && new Date(profile.plan_expires_at).getTime() > now) return true;
   if (profile.current_period_end && new Date(profile.current_period_end).getTime() > now) return true;
+  if (profile.plan_expires_at && new Date(profile.plan_expires_at).getTime() > now) return true;
+  if (profile.subscription_until && new Date(profile.subscription_until).getTime() > now) return true;
   return false;
 }
 
