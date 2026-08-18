@@ -120,7 +120,7 @@ export async function getEntitlement(uid: string): Promise<Entitlement> {
   const empty: Entitlement = {
     active: false,
     plan: null,
-    planName: 'Free',
+    planName: 'No subscription',
     expiresAt: null,
     isElite: false,
     premiumGuru: false,
@@ -141,13 +141,16 @@ export async function getEntitlement(uid: string): Promise<Entitlement> {
   if (error || !row) return empty;
 
   const now = Date.now();
-  const effectiveExpiryStr = row.plan_expires_at || row.current_period_end;
+  const effectiveExpiryStr = row.current_period_end || row.plan_expires_at;
   const expiresAt = effectiveExpiryStr ? new Date(effectiveExpiryStr).getTime() : 0;
-  const isActiveStatus = row.subscription_status ? row.subscription_status === 'active' || row.subscription_status === 'authenticated' : true;
+  // Cancelled / halted keep access until Razorpay's paid period ends. Failed renewals
+  // never extend current_period_end, so access drops naturally when that timestamp passes.
+  const blockingStatus = new Set(['expired', 'completed', 'created', 'inactive']);
+  const isActiveStatus = !row.subscription_status || !blockingStatus.has(row.subscription_status);
   const isActive = !!row.plan && expiresAt > now && isActiveStatus;
 
   if (!isActive) {
-    return { ...empty, plan: null, planName: 'Free', expiresAt: row.plan_expires_at || null };
+    return { ...empty, plan: null, planName: 'No subscription', expiresAt: effectiveExpiryStr || null };
   }
 
   const today = todayDateStr();
