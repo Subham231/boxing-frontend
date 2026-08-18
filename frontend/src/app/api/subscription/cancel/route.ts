@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
   const subscriptionId = profile.razorpay_subscription_id;
 
   // If mock mode / no keys
-  if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET || subscriptionId.startsWith('sub_mock_')) {
+  if (!razorpayConfigured() || subscriptionId.startsWith('sub_mock_')) {
     await supabaseAdmin
       .from('reflex_profiles')
       .update({ subscription_status: 'cancelled' })
