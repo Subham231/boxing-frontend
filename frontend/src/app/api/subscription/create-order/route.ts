@@ -3,7 +3,6 @@ import { verifyFirebaseIdToken } from '@/lib/server/firebase-admin';
 import { supabaseAdmin } from '@/lib/server/supabase-admin';
 import { PLANS, PlanId } from '@/lib/server/entitlements';
 import { publicRazorpayKeyId, razorpayAuthHeader, razorpayConfigured } from '@/lib/server/razorpay';
-import { isProduction } from '@/lib/server/env';
 
 export const runtime = 'nodejs';
 
