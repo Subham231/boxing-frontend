@@ -20,8 +20,8 @@ async function maybeLiveSync(uid: string): Promise<void> {
   const subId = row?.razorpay_subscription_id as string | undefined;
   if (!subId || subId.startsWith('sub_mock_')) return;
 
-  const status = (row.subscription_status || '').toLowerCase();
-  const endMs = row.current_period_end ? new Date(row.current_period_end).getTime() : 0;
+  const status = (row?.subscription_status || '').toLowerCase();
+  const endMs = row?.current_period_end ? new Date(row.current_period_end).getTime() : 0;
   const now = Date.now();
   const nearOrPastEnd = !endMs || Math.abs(endMs - now) <= LIVE_CHECK_WINDOW_MS || endMs <= now;
   const unsettled = ['created', 'authenticated', 'pending', 'halted'].includes(status);
