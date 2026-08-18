@@ -5,11 +5,11 @@ import { supabaseAdmin } from '@/lib/server/supabase-admin';
 import { PLANS, PlanId } from '@/lib/server/entitlements';
 import { fetchRazorpayPayment, fetchRazorpaySubscription, razorpayConfigured } from '@/lib/server/razorpay';
 import { syncSubscriptionFromRazorpay } from '@/lib/server/sync-subscription';
+import { isDevSkipAllowed } from '@/lib/server/env';
 
 export const runtime = 'nodejs';
 
 const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || '';
-const DEV_MOCK_ALLOWED = process.env.NEXT_PUBLIC_ENABLE_DEV_SKIP === 'true';
 
 export async function POST(req: NextRequest) {
   if (!supabaseAdmin) {
