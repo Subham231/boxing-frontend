@@ -14,7 +14,7 @@ export interface ReflexScoreRow {
   games_played: number;
   avg_reaction_time: number | null;
   last_played: string;
-  reflex_profiles?: { phone: string; display_name?: string | null; avatar_url?: string | null } | null;
+  reflex_profiles?: { display_name?: string | null; avatar_url?: string | null } | null;
 }
 
 // Reads the current top-N immediately, then refreshes on a simple interval.
