@@ -145,15 +145,8 @@ export default function SubscriptionPage() {
         },
         modal: { ondismiss: () => setProcessingPlan(null) },
         theme: { color: '#E2FF3B' },
+        subscription_id: subscription?.id,
       };
-
-      if (isDirectOrder && order) {
-        options.order_id = order.id;
-        options.amount = order.amount;
-        options.currency = order.currency || 'INR';
-      } else if (subscription) {
-        options.subscription_id = subscription.id;
-      }
 
       const rzp = new (window as any).Razorpay(options);
       rzp.open();
