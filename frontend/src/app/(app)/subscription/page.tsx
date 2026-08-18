@@ -8,7 +8,7 @@ import { firebaseAuth } from '@/lib/firebase';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
 
-const DEV_SKIP_ENABLED = process.env.NEXT_PUBLIC_ENABLE_DEV_SKIP === 'true';
+const DEV_SKIP_ENABLED = process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_ENABLE_DEV_SKIP === 'true';
 
 interface PlanCard {
   id: 'monthly' | 'monthly_pro' | 'three_month' | 'yearly';
