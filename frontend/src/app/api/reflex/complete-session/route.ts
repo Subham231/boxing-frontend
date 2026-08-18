@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyFirebaseIdToken } from '@/lib/server/firebase-admin';
 import { supabaseAdmin } from '@/lib/server/supabase-admin';
 import { applySessionProgress, type RankState } from '@/lib/rank-system';
-import { isSubscriptionActive } from '@/lib/subscription';
+import { getEntitlement } from '@/lib/server/entitlements';
 
 export const runtime = 'nodejs';
 
