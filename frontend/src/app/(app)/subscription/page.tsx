@@ -110,20 +110,7 @@ export default function SubscriptionPage() {
       const orderData = await orderRes.json();
       if (!orderRes.ok) throw new Error(orderData.error || 'Failed to create subscription');
 
-      const { subscription, order, isDirectOrder, keyId } = orderData;
-
-      if ((subscription && subscription.isMock) || (order && order.isMock)) {
-        const verifyRes = await fetch('/api/subscription/verify-payment', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ planId, isMock: true }),
-        });
-        const verifyData = await verifyRes.json();
-        if (!verifyRes.ok) throw new Error(verifyData.error || 'Verification failed');
-        await fetchStatus();
-        setProcessingPlan(null);
-        return;
-      }
+      const { subscription, keyId } = orderData;
 
       if (typeof window === 'undefined' || !(window as any).Razorpay) {
         throw new Error('Razorpay SDK failed to load. Please refresh the page.');
