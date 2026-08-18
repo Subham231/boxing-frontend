@@ -63,7 +63,7 @@ export default function LeaderboardPage() {
 
       const scoreUids = [...(rtScores || []), ...(cfScores || [])].map((r: any) => r.uid);
       const { data: scoreProfiles } = scoreUids.length
-        ? await supabase.from('reflex_profiles').select('uid, display_name').in('uid', scoreUids)
+        ? await supabase.from('reflex_public_profiles').select('uid, display_name').in('uid', scoreUids)
         : { data: [] as any[] };
       const nameByUid = new Map<string, string>(
         (scoreProfiles || []).map((p: any) => [p.uid, (p.display_name || 'FIGHTER').toUpperCase()])
