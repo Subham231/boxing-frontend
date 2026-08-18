@@ -99,11 +99,21 @@ export async function POST(req: NextRequest) {
       }
 
       const order = await orderRes.json();
-      return NextResponse.json({ order, planId, keyId: RAZORPAY_KEY_ID, isDirectOrder: true });
+      return NextResponse.json({ order, planId, keyId: publicRazorpayKeyId(), isDirectOrder: true });
     }
 
     const subscription = await response.json();
-    return NextResponse.json({ subscription, planId, keyId: RAZORPAY_KEY_ID });
+    if (supabaseAdmin && subscription?.id) {
+      await supabaseAdmin
+        .from('reflex_profiles')
+        .update({
+          razorpay_subscription_id: subscription.id,
+          razorpay_plan_id: plan.razorpayPlanId,
+          subscription_status: 'created',
+        })
+        .eq('uid', uid);
+    }
+    return NextResponse.json({ subscription, planId, keyId: publicRazorpayKeyId() });
   } catch (error) {
     console.error('Create Subscription Error:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
