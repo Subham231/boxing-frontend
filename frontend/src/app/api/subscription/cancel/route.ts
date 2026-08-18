@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyFirebaseIdToken } from '@/lib/server/firebase-admin';
 import { supabaseAdmin } from '@/lib/server/supabase-admin';
+import { razorpayAuthHeader, razorpayConfigured } from '@/lib/server/razorpay';
+import { fetchRazorpaySubscription } from '@/lib/server/razorpay';
+import { syncSubscriptionFromRazorpay } from '@/lib/server/sync-subscription';
 
 export const runtime = 'nodejs';
-
-const RAZORPAY_KEY_ID = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID || '';
-const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || '';
 
 export async function POST(req: NextRequest) {
   if (!supabaseAdmin) {
