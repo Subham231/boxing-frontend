@@ -2,18 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyFirebaseIdToken } from '@/lib/server/firebase-admin';
 import { supabaseAdmin } from '@/lib/server/supabase-admin';
 import { PLANS, PlanId } from '@/lib/server/entitlements';
+import { isDevSkipAllowed } from '@/lib/server/env';
 
 export const runtime = 'nodejs';
 
-// ============================================================================
-// DEVELOPMENT ONLY — gated by NEXT_PUBLIC_ENABLE_DEV_SKIP env var. Set it to
-// 'true' in dev/staging environments. Production deployments without this
-// env var (or set to anything else) return 403 automatically.
-// ============================================================================
-const DEV_MOCK_ALLOWED = process.env.NEXT_PUBLIC_ENABLE_DEV_SKIP === 'true';
-
 export async function POST(req: NextRequest) {
-  if (!DEV_MOCK_ALLOWED) {
+  if (!isDevSkipAllowed()) {
     return NextResponse.json({ error: 'Dev skip is disabled on this deployment.' }, { status: 403 });
   }
   if (!supabaseAdmin) {
