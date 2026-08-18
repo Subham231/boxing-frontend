@@ -230,6 +230,16 @@ export default function SubscriptionPage() {
                 </div>
               </div>
             </div>
+            {status.plan !== 'referral_reward' && (
+              <button
+                onClick={handleCancelSubscription}
+                disabled={cancelling}
+                className="text-[9px] font-black text-white/40 hover:text-red-400 uppercase tracking-widest flex items-center gap-1"
+              >
+                {cancelling ? <Loader2 className="w-3 h-3 animate-spin" /> : <XCircle className="w-3 h-3" />}
+                Stop renewal
+              </button>
+            )}
           </div>
         </GlassCard>
       )}

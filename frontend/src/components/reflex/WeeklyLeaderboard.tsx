@@ -52,7 +52,7 @@ export default function WeeklyLeaderboard({ gameId, topN = 5, currentUid, compac
             >
               <div className="flex items-center gap-3">
                 <span className={`text-xs font-black w-5 text-center ${i === 0 ? 'text-primary' : 'text-white/40'}`}>#{i + 1}</span>
-                <span className="text-xs font-bold text-white">{mine ? 'You' : (row.reflex_profiles?.display_name || maskPhone(row.reflex_profiles?.phone || ''))}</span>
+                <span className="text-xs font-bold text-white">{mine ? 'You' : (row.reflex_profiles?.display_name || 'FIGHTER')}</span>
               </div>
               <div className="text-right">
                 <span className="text-xs font-black text-primary block">{formatScore(gameId, row.weekly_score)}</span>
@@ -71,11 +71,6 @@ export default function WeeklyLeaderboard({ gameId, topN = 5, currentUid, compac
       </div>
     </GlassCard>
   );
-}
-
-function maskPhone(phone: string): string {
-  if (!phone) return 'Fighter';
-  return `••• ${phone.slice(-4)}`;
 }
 
 function formatScore(gameId: 'reaction_tap' | 'combo_flash', score: number | null): string {
