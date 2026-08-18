@@ -54,5 +54,19 @@ export async function GET(req: NextRequest) {
   }
 
   const entitlement = await getEntitlement(decoded.uid);
-  return NextResponse.json(entitlement);
+
+  let sessionValid = true;
+  const clientSession = req.headers.get('x-session-token');
+  if (supabaseAdmin && clientSession) {
+    const { data: row } = await supabaseAdmin
+      .from('reflex_profiles')
+      .select('current_session_token')
+      .eq('uid', decoded.uid)
+      .maybeSingle();
+    if (row?.current_session_token && row.current_session_token !== clientSession) {
+      sessionValid = false;
+    }
+  }
+
+  return NextResponse.json({ ...entitlement, sessionValid });
 }
