@@ -46,13 +46,19 @@ export default function TermsPage() {
           <h2 className="text-lg font-black uppercase text-primary tracking-wider mt-4">2. Subscriptions and Payments</h2>
           <div className="flex flex-col gap-3">
             <p>
-              <strong>Pricing & Billing:</strong> Certain features are paid subscription services ("Pro Plans"). You agree to pay the fees associated with the subscription plan you select.
+              <strong>Pricing & Billing:</strong> Certain features are paid subscription services ("Pro Plans"). You agree to pay the fees associated with the subscription plan you select. Recurring charges are collected by Razorpay according to the plan you choose until you cancel.
             </p>
             <p>
-              <strong>Razorpay Integration:</strong> Payment transactions are executed using the Razorpay gateway. Subscription services will be activated upon successful validation of the payment by Razorpay.
+              <strong>Razorpay Integration:</strong> Payment transactions are executed using the Razorpay gateway. Subscription access is activated only after Razorpay confirms a successful payment (webhook and/or verified checkout). Failed or incomplete payments do not extend your billed period.
             </p>
             <p>
-              <strong>Cancellation:</strong> You may cancel your subscription at any time. However, any cancellation will take effect at the end of the current billing cycle.
+              <strong>Cancellation:</strong> You may cancel auto-renewal at any time in the app. Cancellation stops future charges. Access continues until the end of the current paid period confirmed by Razorpay. No further access is granted after that date unless you subscribe again.
+            </p>
+            <p>
+              <strong>Refunds:</strong> Refund requests are handled in line with applicable Indian consumer protection rules and Razorpay&apos;s settlement process. Contact <span className="text-primary">sk.ish24@gmail.com</span> with your registered phone number and Razorpay payment ID. Approved refunds are processed to the original payment method. Usage already consumed in a billed period is not automatically extra-credited.
+            </p>
+            <p>
+              <strong>Invoices & GST:</strong> Payment receipts/invoices are issued through Razorpay. If you need a GST invoice, email the same address with your GSTIN and billing details. We will add our GSTIN to invoices once it is registered on this page.
             </p>
           </div>
 
