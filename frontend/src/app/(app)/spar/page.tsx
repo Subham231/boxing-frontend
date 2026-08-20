@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
   Loader2,
-  Swords,
   Play,
   AlertCircle,
   Shield,
@@ -15,6 +14,12 @@ import {
   Camera,
   Crown,
 } from 'lucide-react';
+import {
+  SwordsNeonIcon,
+  ShieldNeonIcon,
+  FlameNeonIcon,
+  TargetNeonIcon,
+} from '@/components/ui/NeonIcons';
 import { motion } from 'framer-motion';
 import { firebaseAuth } from '@/lib/firebase';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -44,7 +49,7 @@ const RULES = [
     body: 'Live 1v1 uses your front camera and mic. Stand where your upper body is clearly visible.',
   },
   {
-    icon: Shield,
+    icon: ShieldNeonIcon,
     title: 'Fair play',
     body: 'Winner is scored on the server from both result submissions. Quitting early counts as a forfeit.',
   },
@@ -57,7 +62,7 @@ const STANCE = [
     body: 'Lead foot forward, hands up, chin tucked. Stay light on your feet between calls.',
   },
   {
-    icon: Swords,
+    icon: SwordsNeonIcon,
     title: 'React, don’t spam',
     body: 'Wait for the coach call, then throw or defend. Speed + accuracy beat random tapping.',
   },
