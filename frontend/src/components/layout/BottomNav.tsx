@@ -5,15 +5,18 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
 import { twMerge } from 'tailwind-merge';
-import { Home, Calendar, User, Flame, ChevronUp } from 'lucide-react';
+import { Flame, ChevronUp } from 'lucide-react';
 import { useRankState } from '@/lib/rank-client';
 import {
   ExploreDiamond,
   AnalysisCamIcon,
   BoxingGlovesIcon,
+  HomeNeonIcon,
   BarChart3Icon,
-  ZapNeonIcon,
   BrainNeonIcon,
+  ZapNeonIcon,
+  CalendarNeonIcon,
+  UserNeonIcon,
 } from '@/components/ui/NeonIcons';
 
 export function BottomNav() {
@@ -26,15 +29,15 @@ export function BottomNav() {
   const exploreRef = useRef<HTMLDivElement>(null);
 
   const leftNavItems = [
-    { label: 'HOME', icon: Home, href: '/dashboard' },
+    { label: 'HOME', icon: HomeNeonIcon, href: '/dashboard' },
     { label: 'PROGRESS', icon: BarChart3Icon, href: '/analytics' },
     { label: 'GURU', icon: BrainNeonIcon, href: '/guru' },
   ];
 
   const rightNavItems = [
     { label: 'REFLEX', icon: ZapNeonIcon, href: '/reflex' },
-    { label: 'PLANNER', icon: Calendar, href: '/planner' },
-    { label: 'PROFILE', icon: User, href: '/settings' },
+    { label: 'PLANNER', icon: CalendarNeonIcon, href: '/planner' },
+    { label: 'PROFILE', icon: UserNeonIcon, href: '/settings' },
   ];
 
   const isActive = (href: string) => {
