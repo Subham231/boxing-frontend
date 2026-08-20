@@ -5,14 +5,15 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
 import { twMerge } from 'tailwind-merge';
-import { Flame, ChevronUp } from 'lucide-react';
+import { Home, Calendar, User, Flame, ChevronUp } from 'lucide-react';
 import { useRankState } from '@/lib/rank-client';
 import {
   ExploreDiamond,
   AnalysisCamIcon,
   BoxingGlovesIcon,
   BarChart3Icon,
-  DumbbellBarIcon,
+  ZapNeonIcon,
+  BrainNeonIcon,
 } from '@/components/ui/NeonIcons';
 
 export function BottomNav() {
@@ -24,8 +25,23 @@ export function BottomNav() {
   const [menuOpen, setMenuOpen] = useState(false);
   const exploreRef = useRef<HTMLDivElement>(null);
 
-  const isProgressActive = pathname.startsWith('/analytics') || pathname.startsWith('/ranks') || pathname.startsWith('/leaderboard');
-  const isWorkoutsActive = pathname.startsWith('/training') || pathname.startsWith('/reflex') || pathname.startsWith('/planner');
+  const leftNavItems = [
+    { label: 'HOME', icon: Home, href: '/dashboard' },
+    { label: 'PROGRESS', icon: BarChart3Icon, href: '/analytics' },
+    { label: 'GURU', icon: BrainNeonIcon, href: '/guru' },
+  ];
+
+  const rightNavItems = [
+    { label: 'REFLEX', icon: ZapNeonIcon, href: '/reflex' },
+    { label: 'PLANNER', icon: Calendar, href: '/planner' },
+    { label: 'PROFILE', icon: User, href: '/settings' },
+  ];
+
+  const isActive = (href: string) => {
+    if (href === '/dashboard' && pathname === '/dashboard') return true;
+    return pathname.startsWith(href) && href !== '/dashboard';
+  };
+
   const isExploreActive = pathname.startsWith('/vision') || pathname.startsWith('/spar');
 
   useEffect(() => {
@@ -88,8 +104,8 @@ export function BottomNav() {
                   <span>{streak} Streak</span>
                 </div>
 
-                <div className="flex items-center gap-2.5 mt-1">
-                  <AnalysisCamIcon className="w-9 h-9 text-[#E2FF3B] shrink-0 drop-shadow-[0_0_10px_rgba(226,255,59,0.9)]" />
+                <div className="flex items-center gap-2 mt-1">
+                  <AnalysisCamIcon className="w-8 h-8 text-[#E2FF3B] shrink-0 drop-shadow-[0_0_10px_rgba(226,255,59,0.9)]" />
                   <span className="text-xs font-black text-white leading-tight uppercase tracking-tight">
                     AI Video<br />Analysis
                   </span>
@@ -110,8 +126,8 @@ export function BottomNav() {
                   FREE
                 </div>
 
-                <div className="flex items-center gap-2.5 mt-1">
-                  <BoxingGlovesIcon className="w-9 h-9 text-amber-400 shrink-0 drop-shadow-[0_0_10px_rgba(245,158,11,0.9)]" />
+                <div className="flex items-center gap-2 mt-1">
+                  <BoxingGlovesIcon className="w-8 h-8 text-amber-400 shrink-0 drop-shadow-[0_0_10px_rgba(245,158,11,0.9)]" />
                   <span className="text-xs font-black text-white leading-tight uppercase tracking-tight">
                     Sparing
                   </span>
@@ -122,35 +138,42 @@ export function BottomNav() {
         )}
       </AnimatePresence>
 
-      {/* Main Bottom Dock Bar */}
+      {/* Main Bottom Dock Bar with 7 balanced navigation items */}
       <nav
-        className="w-full bg-[#08090b]/98 backdrop-blur-xl border-t border-white/10 grid grid-cols-3 items-center px-4 pointer-events-auto shadow-[0_-12px_40px_rgba(0,0,0,0.85)] relative transform-gpu"
+        className="w-full bg-[#08090b]/98 backdrop-blur-xl border-t border-white/10 grid grid-cols-[1fr_1fr_1fr_64px_1fr_1fr_1fr] items-center px-1 pointer-events-auto shadow-[0_-12px_40px_rgba(0,0,0,0.85)] relative transform-gpu"
         style={{
-          height: 'calc(78px + env(safe-area-inset-bottom, 0px))',
+          height: 'calc(80px + env(safe-area-inset-bottom, 0px))',
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
         }}
       >
-        {/* Left: Progress */}
-        <Link
-          href="/analytics"
-          aria-label="Progress"
-          aria-current={isProgressActive ? 'page' : undefined}
-          className={twMerge(
-            'flex flex-col items-center justify-center gap-1.5 no-underline transition-all duration-200 min-w-[56px] min-h-[48px] active:scale-95',
-            isProgressActive ? 'opacity-100 text-[#E2FF3B]' : 'opacity-40 text-white hover:opacity-75',
-          )}
-        >
-          <BarChart3Icon className={twMerge('w-6 h-6', isProgressActive && 'text-[#E2FF3B] drop-shadow-[0_0_10px_rgba(226,255,59,0.8)]')} />
-          <span className="text-[11px] font-bold tracking-wide">Progress</span>
-        </Link>
+        {/* Left Navigation: Home, Progress, Guru */}
+        {leftNavItems.map((item) => {
+          const Icon = item.icon;
+          const active = isActive(item.href);
+          return (
+            <Link
+              key={item.label}
+              href={item.href}
+              aria-label={item.label}
+              aria-current={active ? 'page' : undefined}
+              className={twMerge(
+                'flex flex-col items-center justify-center gap-1 no-underline transition-all duration-200 min-w-[40px] min-h-[44px] active:scale-95',
+                active ? 'opacity-100 text-[#E2FF3B]' : 'opacity-40 text-white hover:opacity-75',
+              )}
+            >
+              <Icon className={twMerge('w-5 h-5', active && 'text-[#E2FF3B] drop-shadow-[0_0_8px_rgba(226,255,59,0.8)]')} />
+              <span className="text-[8px] font-black tracking-wider uppercase">{item.label}</span>
+            </Link>
+          );
+        })}
 
         {/* Center: Elevated Hexagon Explore Button */}
-        <div className="relative -top-5 flex flex-col items-center justify-center">
+        <div className="relative -top-4 flex flex-col items-center justify-center">
           {/* Subtle notch aura behind hexagon */}
           <div
             className={twMerge(
-              'absolute top-0 w-[68px] h-[68px] rounded-full blur-lg transition-all duration-500',
-              menuOpen || isExploreActive ? 'bg-[#E2FF3B]/30 scale-110' : 'bg-[#E2FF3B]/15',
+              'absolute top-0 w-[58px] h-[58px] rounded-full blur-md transition-all duration-500',
+              menuOpen || isExploreActive ? 'bg-[#E2FF3B]/35 scale-110' : 'bg-[#E2FF3B]/15',
             )}
           />
 
@@ -163,27 +186,27 @@ export function BottomNav() {
           >
             {/* Hexagon Shell */}
             <div
-              className="relative flex items-center justify-center bg-gradient-to-b from-[#E2FF3B] via-[#C8F500] to-[#8FB500] shadow-[0_0_24px_rgba(226,255,59,0.6)]"
+              className="relative flex items-center justify-center bg-gradient-to-b from-[#E2FF3B] via-[#C8F500] to-[#8FB500] shadow-[0_0_20px_rgba(226,255,59,0.6)]"
               style={{
-                width: 60,
-                height: 66,
+                width: 52,
+                height: 58,
                 clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
               }}
             >
               {/* Inner dark core */}
               <div
-                className="absolute inset-[2.5px] bg-[#0A0D08] flex items-center justify-center"
+                className="absolute inset-[2px] bg-[#0A0D08] flex items-center justify-center"
                 style={{ clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)' }}
               >
-                <ExploreDiamond className="w-7 h-7 text-[#E2FF3B] drop-shadow-[0_0_12px_rgba(226,255,59,1)]" />
+                <ExploreDiamond className="w-6 h-6 text-[#E2FF3B] drop-shadow-[0_0_10px_rgba(226,255,59,1)]" />
               </div>
             </div>
 
             {/* Label */}
             <span
               className={twMerge(
-                'mt-1 text-[11px] font-black tracking-wide uppercase transition-colors',
-                menuOpen || isExploreActive ? 'text-[#E2FF3B] drop-shadow-[0_0_8px_rgba(226,255,59,0.7)]' : 'text-[#E2FF3B]/80',
+                'mt-1 text-[9px] font-black tracking-widest uppercase transition-colors',
+                menuOpen || isExploreActive ? 'text-[#E2FF3B] drop-shadow-[0_0_6px_rgba(226,255,59,0.7)]' : 'text-[#E2FF3B]/80',
               )}
             >
               Explore
@@ -191,19 +214,26 @@ export function BottomNav() {
           </button>
         </div>
 
-        {/* Right: Workouts */}
-        <Link
-          href="/training"
-          aria-label="Workouts"
-          aria-current={isWorkoutsActive ? 'page' : undefined}
-          className={twMerge(
-            'flex flex-col items-center justify-center gap-1.5 no-underline transition-all duration-200 min-w-[56px] min-h-[48px] active:scale-95',
-            isWorkoutsActive ? 'opacity-100 text-[#E2FF3B]' : 'opacity-40 text-white hover:opacity-75',
-          )}
-        >
-          <DumbbellBarIcon className={twMerge('w-6 h-6', isWorkoutsActive && 'text-[#E2FF3B] drop-shadow-[0_0_10px_rgba(226,255,59,0.8)]')} />
-          <span className="text-[11px] font-bold tracking-wide">Workouts</span>
-        </Link>
+        {/* Right Navigation: Reflex, Planner, Profile */}
+        {rightNavItems.map((item) => {
+          const Icon = item.icon;
+          const active = isActive(item.href);
+          return (
+            <Link
+              key={item.label}
+              href={item.href}
+              aria-label={item.label}
+              aria-current={active ? 'page' : undefined}
+              className={twMerge(
+                'flex flex-col items-center justify-center gap-1 no-underline transition-all duration-200 min-w-[40px] min-h-[44px] active:scale-95',
+                active ? 'opacity-100 text-[#E2FF3B]' : 'opacity-40 text-white hover:opacity-75',
+              )}
+            >
+              <Icon className={twMerge('w-5 h-5', active && 'text-[#E2FF3B] drop-shadow-[0_0_8px_rgba(226,255,59,0.8)]')} />
+              <span className="text-[8px] font-black tracking-wider uppercase">{item.label}</span>
+            </Link>
+          );
+        })}
       </nav>
     </div>
   );
