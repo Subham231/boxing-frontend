@@ -86,10 +86,33 @@ body {
     background: rgba(255, 255, 255, 0.2);
   }
 
-  /* Stealth Mode — blurs personally-identifying info (ring name, streak
-     count, phone number) so a glance at the screen doesn't reveal who's
-     training or how long their streak is. Tap-and-hold (or focus, for
-     keyboard/assistive nav) temporarily reveals it. */
+  /* Mobile performance & smoothness optimizations */
+  .gpu-accelerated {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    perspective: 1000px;
+    will-change: transform, opacity;
+  }
+
+  .tap-smooth {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+
+  .neon-glow-lime {
+    filter: drop-shadow(0 0 8px rgba(226, 255, 59, 0.75));
+  }
+
+  .neon-glow-orange {
+    filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.75));
+  }
+
+  .neon-glow-cyan {
+    filter: drop-shadow(0 0 8px rgba(0, 240, 255, 0.75));
+  }
+
+  /* Stealth Mode — blurs personally-identifying info */
   .stealth-active .stealth-sensitive {
     filter: blur(8px);
     transition: filter 0.15s ease;
