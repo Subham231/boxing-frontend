@@ -7,118 +7,166 @@ interface IconProps extends React.SVGProps<SVGSVGElement> {
   glow?: boolean;
 }
 
-const baseSvg =
-  'inline-block stroke-current fill-none stroke-[1.8] stroke-linecap-round stroke-linejoin-round transition-all duration-200';
-
-/** Electric Lime Diamond / Gem Shape (used on Explore button & stats) */
+/** Electric Lime Diamond / Gem Shape (used on Explore button) */
 export function ExploreDiamond({ className, size = 26, glow = true, ...props }: IconProps) {
   return (
     <svg
       viewBox="0 0 24 24"
       width={size}
       height={size}
-      className={twMerge(baseSvg, glow && 'drop-shadow-[0_0_10px_rgba(226,255,59,0.9)]', className)}
+      className={twMerge('inline-block transition-all duration-200', glow && 'drop-shadow-[0_0_10px_rgba(226,255,59,0.95)]', className)}
       {...props}
     >
-      <path d="M12 2.2 L20.5 9.5 L12 21.8 L3.5 9.5 Z" fill="currentColor" fillOpacity="0.95" stroke="none" />
-      <path d="M12 6.5 L16.8 10.2 L12 17.2 L7.2 10.2 Z" fill="#0A0D08" fillOpacity="0.6" stroke="none" />
+      <path d="M12 2.2 L20.5 9.5 L12 21.8 L3.5 9.5 Z" fill="#E2FF3B" stroke="none" />
+      <path d="M12 6.5 L16.8 10.2 L12 17.2 L7.2 10.2 Z" fill="#0A0D08" opacity="0.65" stroke="none" />
     </svg>
   );
 }
 
-/** Video Camera with Light Burst Rays (AI Video Analysis card) */
-export function AnalysisCamIcon({ className, size = 34, glow = true, ...props }: IconProps) {
-  return (
-    <svg
-      viewBox="0 0 40 40"
-      width={size}
-      height={size}
-      className={twMerge(baseSvg, glow && 'drop-shadow-[0_0_12px_rgba(226,255,59,0.85)]', className)}
-      {...props}
-    >
-      {/* Light Burst Rays */}
-      <path d="M7 6 L9 8.5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-      <path d="M14 4 L14 7.5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-      <path d="M21 6 L19 8.5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-
-      {/* Main Camera Body */}
-      <rect x="3" y="11" width="22" height="18" rx="5" fill="currentColor" fillOpacity="0.95" stroke="none" />
-
-      {/* Lens Funnel */}
-      <path d="M25 17 L36 12 V28 L25 23 Z" fill="currentColor" fillOpacity="0.95" stroke="none" />
-
-      {/* Play Triangle Inside Camera */}
-      <polygon points="10.5,15.5 18,20 10.5,24.5" fill="#0A0D08" />
-    </svg>
-  );
-}
-
-/** Boxing Gloves Pair (Sparring card) */
-export function BoxingGlovesIcon({ className, size = 34, glow = true, ...props }: IconProps) {
-  return (
-    <svg
-      viewBox="0 0 40 40"
-      width={size}
-      height={size}
-      className={twMerge(baseSvg, glow && 'drop-shadow-[0_0_12px_rgba(245,158,11,0.85)]', className)}
-      {...props}
-    >
-      {/* Left Glove */}
-      <path
-        d="M15 19 C15 13 11 9 7 12 C3 15 3 21 6 25.5 C8.5 28 11 27.5 13 26 L14 30 L18.5 29 L17.5 24.5 C17.5 22 15 21 15 19 Z"
-        fill="currentColor"
-        fillOpacity="0.95"
-        stroke="none"
-      />
-      {/* Right Glove */}
-      <path
-        d="M24 19 C24 13 28 9 32 12 C36 15 36 21 33 25.5 C30.5 28 28 27.5 26 26 L25 30 L20.5 29 L21.5 24.5 C21.5 22 24 21 24 19 Z"
-        fill="currentColor"
-        fillOpacity="0.95"
-        stroke="none"
-      />
-      {/* Contrast Stitching */}
-      <path d="M13.5 17 L10 18" stroke="#0A0D08" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M25.5 17 L29 18" stroke="#0A0D08" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-/** 3-Bar Chart Icon for Progress (Vertical bars) */
-export function BarChart3Icon({ className, size = 24, ...props }: IconProps) {
-  return (
-    <svg viewBox="0 0 24 24" width={size} height={size} className={twMerge(baseSvg, className)} {...props}>
-      <rect x="17" y="4" width="3.5" height="16" rx="1.5" fill="currentColor" stroke="none" />
-      <rect x="10.25" y="9" width="3.5" height="11" rx="1.5" fill="currentColor" stroke="none" />
-      <rect x="3.5" y="14" width="3.5" height="6" rx="1.5" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
-/** Dumbbell Icon for Workouts */
-export function DumbbellBarIcon({ className, size = 24, ...props }: IconProps) {
-  return (
-    <svg viewBox="0 0 24 24" width={size} height={size} className={twMerge(baseSvg, className)} {...props}>
-      {/* Center bar */}
-      <rect x="7" y="10.5" width="10" height="3" rx="1" fill="currentColor" stroke="none" />
-      {/* Left weights */}
-      <rect x="4" y="7" width="2.5" height="10" rx="1.2" fill="currentColor" stroke="none" />
-      <rect x="1.5" y="8.5" width="2" height="7" rx="1" fill="currentColor" stroke="none" />
-      {/* Right weights */}
-      <rect x="17.5" y="7" width="2.5" height="10" rx="1.2" fill="currentColor" stroke="none" />
-      <rect x="20.5" y="8.5" width="2" height="7" rx="1" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
-/** Crossed Swords (Combat / Sparring) */
-export function SwordsNeonIcon({ className, size = 24, glow = true, ...props }: IconProps) {
+/** Home Icon */
+export function HomeNeonIcon({ className, size = 22, glow = true, ...props }: IconProps) {
   return (
     <svg
       viewBox="0 0 24 24"
       width={size}
       height={size}
-      className={twMerge(baseSvg, glow && 'drop-shadow-[0_0_8px_rgba(226,255,59,0.8)]', className)}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={twMerge('inline-block transition-all duration-200', glow && 'drop-shadow-[0_0_8px_rgba(226,255,59,0.8)]', className)}
+      {...props}
+    >
+      <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      <polyline points="9 22 9 12 15 12 15 22" />
+    </svg>
+  );
+}
+
+/** 3-Bar Chart Icon for Progress */
+export function BarChart3Icon({ className, size = 22, glow = true, ...props }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={twMerge('inline-block transition-all duration-200', glow && 'drop-shadow-[0_0_8px_rgba(226,255,59,0.8)]', className)}
+      {...props}
+    >
+      <path d="M18 20V10" />
+      <path d="M12 20V4" />
+      <path d="M6 20v-6" />
+    </svg>
+  );
+}
+
+/** Guru / AI Brain Icon */
+export function BrainNeonIcon({ className, size = 22, glow = true, ...props }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={twMerge('inline-block transition-all duration-200', glow && 'drop-shadow-[0_0_8px_rgba(226,255,59,0.8)]', className)}
+      {...props}
+    >
+      <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z" />
+      <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z" />
+      <path d="M12 5v13" />
+      <path d="M16 8h2a2 2 0 0 1 2 2v1" />
+      <path d="M8 8H6a2 2 0 0 0-2 2v1" />
+    </svg>
+  );
+}
+
+/** Reflex / Speed Zap Lightning Bolt */
+export function ZapNeonIcon({ className, size = 22, glow = true, ...props }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={twMerge('inline-block transition-all duration-200', glow && 'drop-shadow-[0_0_8px_rgba(226,255,59,0.8)]', className)}
+      {...props}
+    >
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+    </svg>
+  );
+}
+
+/** Calendar / Planner Icon */
+export function CalendarNeonIcon({ className, size = 22, glow = true, ...props }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={twMerge('inline-block transition-all duration-200', glow && 'drop-shadow-[0_0_8px_rgba(226,255,59,0.8)]', className)}
+      {...props}
+    >
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+    </svg>
+  );
+}
+
+/** Profile / User Icon */
+export function UserNeonIcon({ className, size = 22, glow = true, ...props }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={twMerge('inline-block transition-all duration-200', glow && 'drop-shadow-[0_0_8px_rgba(226,255,59,0.8)]', className)}
+      {...props}
+    >
+      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </svg>
+  );
+}
+
+/** Crossed Swords (Combat / Sparring) */
+export function SwordsNeonIcon({ className, size = 22, glow = true, ...props }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={twMerge('inline-block transition-all duration-200', glow && 'drop-shadow-[0_0_8px_rgba(226,255,59,0.8)]', className)}
       {...props}
     >
       <polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5" />
@@ -133,14 +181,43 @@ export function SwordsNeonIcon({ className, size = 24, glow = true, ...props }: 
   );
 }
 
-/** Target Crosshair (Drills & Accuracy) */
-export function TargetNeonIcon({ className, size = 24, glow = true, ...props }: IconProps) {
+/** Dumbbell Icon for Workouts */
+export function DumbbellBarIcon({ className, size = 22, glow = true, ...props }: IconProps) {
   return (
     <svg
       viewBox="0 0 24 24"
       width={size}
       height={size}
-      className={twMerge(baseSvg, glow && 'drop-shadow-[0_0_8px_rgba(226,255,59,0.8)]', className)}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={twMerge('inline-block transition-all duration-200', glow && 'drop-shadow-[0_0_8px_rgba(226,255,59,0.8)]', className)}
+      {...props}
+    >
+      <path d="M6.5 6.5h11" />
+      <path d="M6.5 17.5h11" />
+      <path d="M6 20v-2a6 6 0 0 1 12 0v2" />
+      <path d="M18 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Z" />
+      <line x1="2" y1="12" x2="22" y2="12" strokeWidth="2.5" />
+    </svg>
+  );
+}
+
+/** Target Crosshair (Drills & Accuracy) */
+export function TargetNeonIcon({ className, size = 22, glow = true, ...props }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={twMerge('inline-block transition-all duration-200', glow && 'drop-shadow-[0_0_8px_rgba(226,255,59,0.8)]', className)}
       {...props}
     >
       <circle cx="12" cy="12" r="10" />
@@ -150,14 +227,19 @@ export function TargetNeonIcon({ className, size = 24, glow = true, ...props }: 
   );
 }
 
-/** Combat Shield Half / Shield */
-export function ShieldNeonIcon({ className, size = 24, glow = true, ...props }: IconProps) {
+/** Combat Shield */
+export function ShieldNeonIcon({ className, size = 22, glow = true, ...props }: IconProps) {
   return (
     <svg
       viewBox="0 0 24 24"
       width={size}
       height={size}
-      className={twMerge(baseSvg, glow && 'drop-shadow-[0_0_8px_rgba(226,255,59,0.8)]', className)}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={twMerge('inline-block transition-all duration-200', glow && 'drop-shadow-[0_0_8px_rgba(226,255,59,0.8)]', className)}
       {...props}
     >
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
@@ -166,59 +248,38 @@ export function ShieldNeonIcon({ className, size = 24, glow = true, ...props }: 
 }
 
 /** Flame (Streak & Motivation) */
-export function FlameNeonIcon({ className, size = 24, glow = true, ...props }: IconProps) {
+export function FlameNeonIcon({ className, size = 22, glow = true, ...props }: IconProps) {
   return (
     <svg
       viewBox="0 0 24 24"
       width={size}
       height={size}
-      className={twMerge(baseSvg, glow && 'drop-shadow-[0_0_8px_rgba(245,158,11,0.85)]', className)}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={twMerge('inline-block transition-all duration-200', glow && 'drop-shadow-[0_0_8px_rgba(245,158,11,0.85)]', className)}
       {...props}
     >
-      <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" fill="currentColor" fillOpacity="0.2" />
-    </svg>
-  );
-}
-
-/** Zap Lightning Bolt (Reflex & Speed) */
-export function ZapNeonIcon({ className, size = 24, glow = true, ...props }: IconProps) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width={size}
-      height={size}
-      className={twMerge(baseSvg, glow && 'drop-shadow-[0_0_8px_rgba(226,255,59,0.85)]', className)}
-      {...props}
-    >
-      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" fill="currentColor" fillOpacity="0.2" />
-    </svg>
-  );
-}
-
-/** Brain (Guru / AI Learning) */
-export function BrainNeonIcon({ className, size = 24, glow = true, ...props }: IconProps) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width={size}
-      height={size}
-      className={twMerge(baseSvg, glow && 'drop-shadow-[0_0_8px_rgba(236,72,153,0.85)]', className)}
-      {...props}
-    >
-      <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z" />
-      <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z" />
+      <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
     </svg>
   );
 }
 
 /** Trophy (Leaderboard & Victory) */
-export function TrophyNeonIcon({ className, size = 24, glow = true, ...props }: IconProps) {
+export function TrophyNeonIcon({ className, size = 22, glow = true, ...props }: IconProps) {
   return (
     <svg
       viewBox="0 0 24 24"
       width={size}
       height={size}
-      className={twMerge(baseSvg, glow && 'drop-shadow-[0_0_8px_rgba(226,255,59,0.85)]', className)}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={twMerge('inline-block transition-all duration-200', glow && 'drop-shadow-[0_0_8px_rgba(226,255,59,0.85)]', className)}
       {...props}
     >
       <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
@@ -231,16 +292,77 @@ export function TrophyNeonIcon({ className, size = 24, glow = true, ...props }: 
 }
 
 /** Crown (Tier & Elite Status) */
-export function CrownNeonIcon({ className, size = 24, glow = true, ...props }: IconProps) {
+export function CrownNeonIcon({ className, size = 22, glow = true, ...props }: IconProps) {
   return (
     <svg
       viewBox="0 0 24 24"
       width={size}
       height={size}
-      className={twMerge(baseSvg, glow && 'drop-shadow-[0_0_8px_rgba(226,255,59,0.85)]', className)}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={twMerge('inline-block transition-all duration-200', glow && 'drop-shadow-[0_0_8px_rgba(226,255,59,0.85)]', className)}
       {...props}
     >
       <path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14" />
+    </svg>
+  );
+}
+
+/** Video Camera with Light Burst Rays (AI Video Analysis card) */
+export function AnalysisCamIcon({ className, size = 34, glow = true, ...props }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 40 40"
+      width={size}
+      height={size}
+      className={twMerge('inline-block transition-all duration-200', glow && 'drop-shadow-[0_0_12px_rgba(226,255,59,0.85)]', className)}
+      {...props}
+    >
+      {/* Light Burst Rays */}
+      <path d="M7 6 L9 8.5" stroke="#E2FF3B" strokeWidth="2.2" strokeLinecap="round" />
+      <path d="M14 4 L14 7.5" stroke="#E2FF3B" strokeWidth="2.2" strokeLinecap="round" />
+      <path d="M21 6 L19 8.5" stroke="#E2FF3B" strokeWidth="2.2" strokeLinecap="round" />
+
+      {/* Main Camera Body */}
+      <rect x="3" y="11" width="22" height="18" rx="5" fill="#E2FF3B" stroke="none" />
+
+      {/* Lens Funnel */}
+      <path d="M25 17 L36 12 V28 L25 23 Z" fill="#E2FF3B" stroke="none" />
+
+      {/* Play Triangle Inside Camera */}
+      <polygon points="10.5,15.5 18,20 10.5,24.5" fill="#0A0D08" />
+    </svg>
+  );
+}
+
+/** Boxing Gloves Pair (Sparring card) */
+export function BoxingGlovesIcon({ className, size = 34, glow = true, ...props }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 40 40"
+      width={size}
+      height={size}
+      className={twMerge('inline-block transition-all duration-200', glow && 'drop-shadow-[0_0_12px_rgba(245,158,11,0.85)]', className)}
+      {...props}
+    >
+      {/* Left Glove */}
+      <path
+        d="M15 19 C15 13 11 9 7 12 C3 15 3 21 6 25.5 C8.5 28 11 27.5 13 26 L14 30 L18.5 29 L17.5 24.5 C17.5 22 15 21 15 19 Z"
+        fill="#F59E0B"
+        stroke="none"
+      />
+      {/* Right Glove */}
+      <path
+        d="M24 19 C24 13 28 9 32 12 C36 15 36 21 33 25.5 C30.5 28 28 27.5 26 26 L25 30 L20.5 29 L21.5 24.5 C21.5 22 24 21 24 19 Z"
+        fill="#F59E0B"
+        stroke="none"
+      />
+      {/* Contrast Stitching */}
+      <path d="M13.5 17 L10 18" stroke="#0A0D08" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M25.5 17 L29 18" stroke="#0A0D08" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }
