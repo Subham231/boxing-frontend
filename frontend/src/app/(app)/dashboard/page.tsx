@@ -17,7 +17,8 @@ import {
   Activity,
   ChevronRight,
   Sparkles,
-  Award
+  Award,
+  Swords
 } from 'lucide-react';
 import { getDailyWorkout } from '@/lib/workout-data';
 import { StreakManager } from '@/lib/streak-manager';
@@ -362,6 +363,16 @@ export default function DashboardPage() {
         >
           START SESSION <Play className="w-4 h-4 fill-black text-black ml-1.5" />
         </NeonButton>
+
+        {/* Live 1v1 Spar — free users watch ad; paid use plan allowance */}
+        <button
+          type="button"
+          onClick={() => router.push('/spar')}
+          className="w-full h-14 rounded-2xl border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-all flex items-center justify-center gap-2 text-[11px] font-black uppercase tracking-widest text-primary"
+        >
+          <Swords className="w-4 h-4" />
+          SPAR NOW — LIVE 1V1
+        </button>
 
         {/* Skill Focus Strips */}
         <div>

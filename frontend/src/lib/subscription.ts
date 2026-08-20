@@ -27,7 +27,7 @@ export function isSubscriptionActive(
 // the subscription gate itself, or the subscription page meant to fix the
 // problem, would be unreachable (an infinite redirect loop) or the person
 // couldn't even log out.
-export const SUBSCRIPTION_GATE_EXEMPT_PATHS = ['/subscription', '/settings'];
+export const SUBSCRIPTION_GATE_EXEMPT_PATHS = ['/subscription', '/settings', '/spar'];
 
 export function isExemptFromSubscriptionGate(pathname: string): boolean {
   return SUBSCRIPTION_GATE_EXEMPT_PATHS.some((p) => pathname.startsWith(p));

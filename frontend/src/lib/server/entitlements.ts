@@ -14,6 +14,7 @@ export interface PlanConfig {
   durationDays: number;
   dailyAnalysisLimit: number; // -1 = unlimited
   weeklyPlannerLimit: number; // -1 = unlimited
+  sparDailyLimit: number; // -1 = unlimited
   isElite: boolean;
   premiumGuru: boolean;
   razorpayPlanId: string;
@@ -27,6 +28,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     durationDays: 30,
     dailyAnalysisLimit: 1,
     weeklyPlannerLimit: 1,
+    sparDailyLimit: 1,
     isElite: false,
     premiumGuru: false,
     razorpayPlanId: process.env.RAZORPAY_PLAN_MONTHLY || 'plan_TOsvYdmDfSjY6J',
@@ -38,6 +40,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     durationDays: 30,
     dailyAnalysisLimit: 2,
     weeklyPlannerLimit: 2,
+    sparDailyLimit: 2,
     isElite: false,
     premiumGuru: false,
     razorpayPlanId: process.env.RAZORPAY_PLAN_MONTHLY_PRO || 'plan_TOsxtFg2g3y72B',
@@ -49,6 +52,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     durationDays: 90,
     dailyAnalysisLimit: 3,
     weeklyPlannerLimit: 3,
+    sparDailyLimit: 3,
     isElite: false,
     premiumGuru: false,
     razorpayPlanId: process.env.RAZORPAY_PLAN_THREE_MONTH || 'plan_TOsyUPX0CJPHaN',
@@ -60,6 +64,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     durationDays: 365,
     dailyAnalysisLimit: -1,
     weeklyPlannerLimit: -1,
+    sparDailyLimit: -1,
     isElite: true,
     premiumGuru: true,
     razorpayPlanId: process.env.RAZORPAY_PLAN_YEARLY || 'plan_TOszduZM7Q3GMC',
@@ -72,6 +77,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
 const REFERRAL_REWARD_LIMITS = {
   dailyAnalysisLimit: 1,
   weeklyPlannerLimit: 1,
+  sparDailyLimit: 1,
   isElite: false,
   premiumGuru: false,
 };
@@ -85,8 +91,12 @@ export interface Entitlement {
   premiumGuru: boolean;
   dailyAnalysisLimit: number;
   weeklyPlannerLimit: number;
+  sparDailyLimit: number;
   dailyAnalysisUsed: number;
   weeklyPlannerUsed: number;
+  sparDailyUsed: number;
+  freeSparAvailable: boolean;
+  freeSparUnlocked: boolean;
 }
 
 function isoWeek(d: Date): string {
@@ -126,25 +136,53 @@ export async function getEntitlement(uid: string): Promise<Entitlement> {
     premiumGuru: false,
     dailyAnalysisLimit: 0,
     weeklyPlannerLimit: 0,
+    sparDailyLimit: 0,
     dailyAnalysisUsed: 0,
     weeklyPlannerUsed: 0,
+    sparDailyUsed: 0,
+    freeSparAvailable: false,
+    freeSparUnlocked: false,
   };
 
   if (!supabaseAdmin) return empty;
 
-  const { data: row, error } = await supabaseAdmin
-    .from('reflex_profiles')
-    .select('plan, plan_expires_at, current_period_end, subscription_status, is_elite, daily_analysis_count, daily_analysis_date, weekly_planner_count, weekly_planner_week')
-    .eq('uid', uid)
-    .maybeSingle();
-
-  if (error || !row) return empty;
+  // Prefer spar columns when migration v14 is applied; fall back so older DBs
+  // keep analysis/planner/subscription working without spar tables.
+  let row: Record<string, any> | null = null;
+  {
+    const withSpar = await supabaseAdmin
+      .from('reflex_profiles')
+      .select(
+        'plan, plan_expires_at, current_period_end, subscription_status, is_elite, daily_analysis_count, daily_analysis_date, weekly_planner_count, weekly_planner_week, daily_spar_count, daily_spar_date, free_spar_ad_date, free_spar_unlocked_date',
+      )
+      .eq('uid', uid)
+      .maybeSingle();
+    if (withSpar.error) {
+      const legacy = await supabaseAdmin
+        .from('reflex_profiles')
+        .select(
+          'plan, plan_expires_at, current_period_end, subscription_status, is_elite, daily_analysis_count, daily_analysis_date, weekly_planner_count, weekly_planner_week',
+        )
+        .eq('uid', uid)
+        .maybeSingle();
+      if (legacy.error || !legacy.data) return empty;
+      row = legacy.data;
+    } else if (!withSpar.data) {
+      return empty;
+    } else {
+      row = withSpar.data;
+    }
+  }
 
   const now = Date.now();
   const today = todayDateStr();
   const week = currentIsoWeek();
   const dailyUsed = row.daily_analysis_date === today ? row.daily_analysis_count : 0;
   const weeklyUsed = row.weekly_planner_week === week ? row.weekly_planner_count : 0;
+  const sparUsed = row.daily_spar_date === today ? (row.daily_spar_count || 0) : 0;
+  const freeSparUsedToday = row.free_spar_ad_date === today;
+  const freeSparUnlocked = row.free_spar_unlocked_date === today && !freeSparUsedToday;
+  const freeSparAvailable = !freeSparUsedToday;
 
   const referralExpiry = row.plan_expires_at ? new Date(row.plan_expires_at).getTime() : 0;
   if (row.plan === 'referral_reward' && referralExpiry > now) {
@@ -157,8 +195,12 @@ export async function getEntitlement(uid: string): Promise<Entitlement> {
       premiumGuru: false,
       dailyAnalysisLimit: REFERRAL_REWARD_LIMITS.dailyAnalysisLimit,
       weeklyPlannerLimit: REFERRAL_REWARD_LIMITS.weeklyPlannerLimit,
+      sparDailyLimit: REFERRAL_REWARD_LIMITS.sparDailyLimit,
       dailyAnalysisUsed: dailyUsed,
       weeklyPlannerUsed: weeklyUsed,
+      sparDailyUsed: sparUsed,
+      freeSparAvailable: false,
+      freeSparUnlocked: false,
     };
   }
 
@@ -171,7 +213,14 @@ export async function getEntitlement(uid: string): Promise<Entitlement> {
   const isActive = !!row.plan && expiresAt > now && isActiveStatus;
 
   if (!isActive) {
-    return { ...empty, plan: null, planName: 'No subscription', expiresAt: effectiveExpiryStr || null };
+    return {
+      ...empty,
+      plan: null,
+      planName: 'No subscription',
+      expiresAt: effectiveExpiryStr || null,
+      freeSparAvailable,
+      freeSparUnlocked,
+    };
   }
 
   const cfg = PLANS[row.plan as PlanId];
@@ -186,7 +235,11 @@ export async function getEntitlement(uid: string): Promise<Entitlement> {
     premiumGuru: cfg.premiumGuru,
     dailyAnalysisLimit: cfg.dailyAnalysisLimit,
     weeklyPlannerLimit: cfg.weeklyPlannerLimit,
+    sparDailyLimit: cfg.sparDailyLimit,
     dailyAnalysisUsed: dailyUsed,
     weeklyPlannerUsed: weeklyUsed,
+    sparDailyUsed: sparUsed,
+    freeSparAvailable: false,
+    freeSparUnlocked: false,
   };
 }

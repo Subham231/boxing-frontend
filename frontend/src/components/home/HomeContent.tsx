@@ -578,6 +578,12 @@ export default function HomeContent() {
           </p>
           <div className="w-full sm:w-auto flex flex-col sm:flex-row items-start sm:items-center gap-3">
             <HomeCta />
+            <Link
+              href="/spar"
+              className="w-full sm:w-auto text-center h-12 px-6 rounded-full border border-primary/40 bg-primary/10 text-primary text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-primary/20 transition-colors"
+            >
+              <Swords className="w-3.5 h-3.5" /> Spar Now
+            </Link>
             <a
               href="#explore"
               className="w-full sm:w-auto text-center h-12 px-6 rounded-full border border-white/15 text-white/70 text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:border-primary/40 hover:text-white transition-colors"
