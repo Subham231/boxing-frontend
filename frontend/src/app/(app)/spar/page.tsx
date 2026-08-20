@@ -158,7 +158,7 @@ export default function SparIntroPage() {
               background: 'linear-gradient(180deg, rgba(249,115,22,0.45), rgba(249,115,22,0.1))',
             }}
           >
-            <Swords className="w-7 h-7 drop-shadow-[0_0_10px_rgba(249,115,22,0.9)]" />
+            <SwordsNeonIcon className="w-7 h-7 text-orange-400 drop-shadow-[0_0_10px_rgba(249,115,22,0.9)]" />
           </div>
           <div>
             <p className="text-sm font-black uppercase tracking-wide text-white">Real-time opponent spar</p>
@@ -256,7 +256,7 @@ export default function SparIntroPage() {
                 </>
               ) : (
                 <>
-                  START SPARRING <Swords className="w-4 h-4 ml-1" />
+                  START SPARRING <SwordsNeonIcon className="w-4 h-4 ml-1 text-black" glow={false} />
                 </>
               )}
             </NeonButton>
