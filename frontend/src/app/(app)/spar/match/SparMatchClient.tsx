@@ -236,8 +236,8 @@ export default function SparMatchClient() {
                 payload: { sdp: pc.localDescription, from: match.role },
               });
             }
-          } catch (e) {
-            console.warn('SDP error', e);
+          } catch {
+            /* ignore */
           }
         });
 
