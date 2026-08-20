@@ -376,9 +376,9 @@ export default function DashboardPage() {
         <button
           type="button"
           onClick={() => router.push('/spar')}
-          className="w-full h-14 rounded-2xl border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-all flex items-center justify-center gap-2 text-[11px] font-black uppercase tracking-widest text-primary"
+          className="w-full h-14 rounded-2xl border border-primary/40 bg-gradient-to-r from-primary/15 via-black/50 to-primary/10 hover:border-primary/60 transition-all flex items-center justify-center gap-2.5 text-[11px] font-black uppercase tracking-widest text-primary shadow-[0_0_20px_rgba(226,255,59,0.15)] active:scale-[0.98]"
         >
-          <Swords className="w-4 h-4" />
+          <SwordsNeonIcon className="w-5 h-5 text-primary" />
           SPAR NOW — LIVE 1V1
         </button>
 
@@ -393,42 +393,42 @@ export default function DashboardPage() {
           <div className="grid grid-cols-4 gap-3.5 skills-ref">
             <Link 
               href="/training" 
-              className="flex flex-col items-center gap-2 p-3 bg-black/40 border border-orange-500/10 rounded-2xl hover:border-orange-500/40 hover:bg-orange-500/5 transition-all duration-300 no-underline"
+              className="flex flex-col items-center gap-2 p-3 bg-black/40 border border-orange-500/20 rounded-2xl hover:border-orange-500/50 hover:bg-orange-500/10 transition-all duration-300 no-underline active:scale-95"
             >
-              <div className="w-11 h-11 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.1)]">
-                <Flame className="w-5 h-5 fill-orange-500/20" />
+              <div className="w-11 h-11 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-500 shadow-[0_0_12px_rgba(249,115,22,0.2)]">
+                <FlameNeonIcon className="w-5 h-5 text-orange-400" />
               </div>
-              <span className="text-[9px] font-black tracking-wider text-orange-500 uppercase">GRIND</span>
+              <span className="text-[9px] font-black tracking-wider text-orange-400 uppercase">GRIND</span>
             </Link>
 
             <Link 
               href="/planner" 
-              className="flex flex-col items-center gap-2 p-3 bg-black/40 border border-purple-500/10 rounded-2xl hover:border-purple-500/40 hover:bg-purple-500/5 transition-all duration-300 no-underline"
+              className="flex flex-col items-center gap-2 p-3 bg-black/40 border border-purple-500/20 rounded-2xl hover:border-purple-500/50 hover:bg-purple-500/10 transition-all duration-300 no-underline active:scale-95"
             >
-              <div className="w-11 h-11 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.1)]">
-                <Calendar className="w-5 h-5" />
+              <div className="w-11 h-11 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400 shadow-[0_0_12px_rgba(168,85,247,0.2)]">
+                <Calendar className="w-5 h-5 drop-shadow-[0_0_8px_rgba(168,85,247,0.7)]" />
               </div>
-              <span className="text-[9px] font-black tracking-wider text-purple-500 uppercase">PLANNER</span>
+              <span className="text-[9px] font-black tracking-wider text-purple-400 uppercase">PLANNER</span>
             </Link>
 
             <Link 
               href="/reflex" 
-              className="flex flex-col items-center gap-2 p-3 bg-black/40 border border-cyan-500/10 rounded-2xl hover:border-cyan-500/40 hover:bg-cyan-500/5 transition-all duration-300 no-underline"
+              className="flex flex-col items-center gap-2 p-3 bg-black/40 border border-cyan-500/20 rounded-2xl hover:border-cyan-500/50 hover:bg-cyan-500/10 transition-all duration-300 no-underline active:scale-95"
             >
-              <div className="w-11 h-11 rounded-xl bg-cyan-500/10 flex items-center justify-center text-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.1)]">
-                <Zap className="w-5 h-5 fill-cyan-500/20" />
+              <div className="w-11 h-11 rounded-xl bg-cyan-500/10 flex items-center justify-center text-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.2)]">
+                <ZapNeonIcon className="w-5 h-5 text-cyan-400" />
               </div>
-              <span className="text-[9px] font-black tracking-wider text-cyan-500 uppercase">REFLEX</span>
+              <span className="text-[9px] font-black tracking-wider text-cyan-400 uppercase">REFLEX</span>
             </Link>
 
             <Link 
               href="/guru" 
-              className="flex flex-col items-center gap-2 p-3 bg-black/40 border border-pink-500/10 rounded-2xl hover:border-pink-500/40 hover:bg-pink-500/5 transition-all duration-300 no-underline"
+              className="flex flex-col items-center gap-2 p-3 bg-black/40 border border-pink-500/20 rounded-2xl hover:border-pink-500/50 hover:bg-pink-500/10 transition-all duration-300 no-underline active:scale-95"
             >
-              <div className="w-11 h-11 rounded-xl bg-pink-500/10 flex items-center justify-center text-pink-500 shadow-[0_0_10px_rgba(236,72,153,0.1)]">
-                <Brain className="w-5 h-5" />
+              <div className="w-11 h-11 rounded-xl bg-pink-500/10 flex items-center justify-center text-pink-400 shadow-[0_0_12px_rgba(236,72,153,0.2)]">
+                <BrainNeonIcon className="w-5 h-5 text-pink-400" />
               </div>
-              <span className="text-[9px] font-black tracking-wider text-pink-500 uppercase">GURU</span>
+              <span className="text-[9px] font-black tracking-wider text-pink-400 uppercase">GURU</span>
             </Link>
           </div>
         </div>
