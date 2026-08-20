@@ -20,6 +20,14 @@ import {
   Award,
   Swords
 } from 'lucide-react';
+import {
+  SwordsNeonIcon,
+  FlameNeonIcon,
+  TargetNeonIcon,
+  ZapNeonIcon,
+  BrainNeonIcon,
+  TrophyNeonIcon,
+} from '@/components/ui/NeonIcons';
 import { getDailyWorkout } from '@/lib/workout-data';
 import { StreakManager } from '@/lib/streak-manager';
 import { useFirebaseUser } from '@/lib/useFirebaseUser';
