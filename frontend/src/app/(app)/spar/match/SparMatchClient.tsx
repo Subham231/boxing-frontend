@@ -400,9 +400,6 @@ export default function SparMatchClient() {
         <div className="text-3xl font-black italic uppercase text-primary tracking-tight min-h-[2.5rem]">
           {phase === 'setup' ? <Loader2 className="w-8 h-8 animate-spin mx-auto" /> : currentCommand || '…'}
         </div>
-        <div className="mt-3 text-[10px] font-bold text-white/50 uppercase">
-          Hits {hits} · Misses {misses}
-        </div>
       </GlassCard>
 
       {phase === 'live' && (

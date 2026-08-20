@@ -3,25 +3,118 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import {
-  Home,
-  BarChart3,
-  Brain,
-  Play,
-  Zap,
-  Calendar,
-  User,
-  Flame,
-  Swords,
-  Compass,
-  ChevronUp,
-  Video,
-} from 'lucide-react';
+import { Home, BarChart3, Brain, Zap, Calendar, User, Flame } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { twMerge } from 'tailwind-merge';
 import { useRankState } from '@/lib/rank-client';
 
 type ExploreMode = 'vision' | 'spar';
+
+/** Diamond / gem mark used on the Explore hex (matches reference). */
+function ExploreDiamond({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden>
+      <path d="M12 2.2 20.2 9.5 12 21.8 3.8 9.5 12 2.2Z" opacity="0.95" />
+      <path d="M12 6.2 16.8 10.2 12 17.5 7.2 10.2 12 6.2Z" fill="#0A0D08" opacity="0.55" />
+    </svg>
+  );
+}
+
+/** Play + bolt — AI Analysis swipe state on the Explore button. */
+function PlayBoltIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" aria-hidden>
+      <path
+        d="M8.5 5.8v12.4L18.2 12 8.5 5.8Z"
+        fill="currentColor"
+        fillOpacity="0.35"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M14.2 4.2 12.6 7.4h2.4L11.8 13l1.5-3.2H11l3.2-5.6Z"
+        fill="#FCD34D"
+        stroke="#FCD34D"
+        strokeWidth="0.4"
+      />
+    </svg>
+  );
+}
+
+/** Video camera + sparkles — AI tile logo. */
+function AnalysisCamIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 48 48" className={className} fill="none" aria-hidden>
+      <rect x="4" y="14" width="28" height="20" rx="4" stroke="currentColor" strokeWidth="2.4" />
+      <path d="M32 20l10-5v18l-10-5V20Z" stroke="currentColor" strokeWidth="2.4" strokeLinejoin="round" />
+      <circle cx="18" cy="24" r="5" stroke="currentColor" strokeWidth="2" />
+      <path d="M34 8l1.2 2.4L38 12l-2.8 1.2L34 16l-1.2-2.8L30 12l2.8-1.6L34 8Z" fill="currentColor" />
+      <path d="M40 14l0.7 1.4L42 16l-1.3.6L40 18l-.7-1.4L38 16l1.3-.6L40 14Z" fill="currentColor" opacity="0.7" />
+    </svg>
+  );
+}
+
+/** Crossed boxing gloves — Sparring tile + swipe logo. */
+function BoxingGlovesIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 48 48" className={className} fill="none" aria-hidden>
+      <path
+        d="M14 28c-4.5 0-8-3-8-7.2C6 16 9.2 12 14 12c2.2 0 4 .8 5.4 2.1C21 11.5 24.2 9 28.5 9 34 9 38 13.2 38 18.8c0 2.6-1 4.9-2.6 6.6"
+        stroke="currentColor"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+      />
+      <path
+        d="M12 22c0 6 3.5 11 8 14v5h-5.5C10 41 7 37.5 7 32.5V28"
+        stroke="currentColor"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M28 24c0 6-2.5 11-7 14v5h6c4.5 0 8-3.8 8-8.5V30"
+        stroke="currentColor"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M18 20h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.5" />
+    </svg>
+  );
+}
+
+function HexShell({
+  tone,
+  children,
+  size = 56,
+}: {
+  tone: 'lime' | 'orange';
+  children: React.ReactNode;
+  size?: number;
+}) {
+  const glow =
+    tone === 'lime'
+      ? 'from-[#D4FF00] via-[#B8E000] to-[#8FBF00] shadow-[0_0_22px_rgba(212,255,0,0.55)]'
+      : 'from-[#FF9A1F] via-[#FF7A00] to-[#E85D00] shadow-[0_0_22px_rgba(255,122,0,0.5)]';
+  return (
+    <div
+      className={twMerge('relative flex items-center justify-center bg-gradient-to-b', glow)}
+      style={{
+        width: size,
+        height: Math.round(size * 1.1),
+        clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+      }}
+    >
+      <div
+        className="absolute inset-[2.5px] bg-[#0A0D08] flex items-center justify-center"
+        style={{ clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)' }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
 
 export function BottomNav() {
   const pathname = usePathname();
@@ -50,7 +143,6 @@ export function BottomNav() {
     return pathname.startsWith(href) && href !== '/dashboard';
   };
 
-  // Auto-swipe Explore preview between Sparring and AI Analysis
   useEffect(() => {
     if (menuOpen) return;
     const id = window.setInterval(() => {
@@ -59,7 +151,6 @@ export function BottomNav() {
     return () => window.clearInterval(id);
   }, [menuOpen]);
 
-  // Close flyout on outside tap / route change
   useEffect(() => {
     setMenuOpen(false);
   }, [pathname]);
@@ -69,9 +160,7 @@ export function BottomNav() {
     const onPointer = (e: MouseEvent | TouchEvent) => {
       const el = exploreRef.current;
       if (!el) return;
-      if (e.target instanceof Node && !el.contains(e.target)) {
-        setMenuOpen(false);
-      }
+      if (e.target instanceof Node && !el.contains(e.target)) setMenuOpen(false);
     };
     document.addEventListener('mousedown', onPointer);
     document.addEventListener('touchstart', onPointer);
@@ -88,9 +177,9 @@ export function BottomNav() {
 
   return (
     <nav
-      className="sticky bottom-0 left-0 w-full bg-[#08090b] border-t border-white/10 grid grid-cols-[1fr_1fr_1fr_70px_1fr_1fr_1fr] items-center px-1 z-[999] shadow-[0_-10px_40px_rgba(0,0,0,0.5)]"
+      className="sticky bottom-0 left-0 w-full bg-[#08090b] border-t border-white/10 grid grid-cols-[1fr_1fr_1fr_74px_1fr_1fr_1fr] items-center px-1 z-[999] shadow-[0_-10px_40px_rgba(0,0,0,0.5)]"
       style={{
-        height: 'calc(90px + env(safe-area-inset-bottom))',
+        height: 'calc(92px + env(safe-area-inset-bottom))',
         paddingBottom: 'env(safe-area-inset-bottom)',
       }}
     >
@@ -114,43 +203,35 @@ export function BottomNav() {
         );
       })}
 
-      {/* Explore center control */}
-      <div ref={exploreRef} className="relative -top-6 flex flex-col items-center z-[1000] select-none">
-        {/* Upward dual-option menu */}
+      <div ref={exploreRef} className="relative -top-7 flex flex-col items-center z-[1000] select-none">
+        {/* Upward bubble menu — matches reference */}
         <AnimatePresence>
           {menuOpen && (
             <motion.div
-              initial={{ opacity: 0, y: 24, scale: 0.92 }}
+              initial={{ opacity: 0, y: 28, scale: 0.9 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 16, scale: 0.94 }}
-              transition={{ type: 'spring', stiffness: 380, damping: 28 }}
-              className="absolute bottom-[calc(100%+10px)] left-1/2 -translate-x-1/2 w-[min(92vw,340px)]"
+              exit={{ opacity: 0, y: 18, scale: 0.94 }}
+              transition={{ type: 'spring', stiffness: 420, damping: 30 }}
+              className="absolute bottom-[calc(100%+18px)] left-1/2 -translate-x-1/2 w-[min(94vw,360px)] pointer-events-auto"
             >
-              <div className="rounded-2xl border border-white/10 bg-[#0c0e0c]/95 backdrop-blur-xl p-2.5 shadow-[0_0_40px_rgba(0,0,0,0.75),0_0_24px_rgba(226,255,59,0.12)] grid grid-cols-2 gap-2">
+              <div className="flex justify-center mb-1">
+                <div className="w-0 h-0 border-l-[7px] border-r-[7px] border-b-[8px] border-l-transparent border-r-transparent border-b-white/25" />
+              </div>
+
+              <div className="rounded-[22px] border border-white/12 bg-[#0d0f0c]/97 backdrop-blur-xl p-2.5 shadow-[0_12px_48px_rgba(0,0,0,0.85),0_0_28px_rgba(212,255,0,0.1)] grid grid-cols-2 gap-2.5">
                 {/* AI Video Analysis */}
                 <button
                   type="button"
                   onClick={() => go('/vision')}
-                  className="relative flex flex-col items-center text-center gap-2 rounded-xl border border-primary/35 bg-gradient-to-b from-primary/15 to-transparent px-2 py-4 active:scale-[0.97] transition-transform"
+                  className="relative flex flex-col items-center justify-center gap-2 rounded-2xl border border-[#D4FF00]/45 bg-[#0a0c08] px-2 pt-5 pb-3.5 shadow-[inset_0_0_24px_rgba(212,255,0,0.06),0_0_16px_rgba(212,255,0,0.12)] active:scale-[0.97] transition-transform"
                 >
-                  <span className="absolute -top-2 left-1/2 -translate-x-1/2 flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-gradient-to-r from-orange-500 via-amber-400 to-yellow-300 text-black font-black text-[8px] tracking-wider shadow-[0_0_12px_rgba(249,115,22,0.55)] stealth-sensitive whitespace-nowrap">
-                    <Flame className="w-2.5 h-2.5 fill-black stroke-none" />
-                    {streak} Day Streak
+                  <span className="absolute top-2 right-2 flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-black/80 border border-orange-400/40 text-[8px] font-black text-amber-300 tracking-wide stealth-sensitive">
+                    <Flame className="w-2.5 h-2.5 fill-amber-400 stroke-none" />
+                    {streak} Streak
                   </span>
-                  <div
-                    className="mt-2 w-12 h-12 flex items-center justify-center text-primary"
-                    style={{
-                      clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-                      background: 'linear-gradient(180deg, rgba(226,255,59,0.35), rgba(226,255,59,0.08))',
-                    }}
-                  >
-                    <Video className="w-5 h-5 drop-shadow-[0_0_8px_rgba(226,255,59,0.9)]" />
-                  </div>
-                  <span className="text-[10px] font-black uppercase tracking-wide text-primary leading-tight">
+                  <AnalysisCamIcon className="w-10 h-10 text-[#D4FF00] drop-shadow-[0_0_10px_rgba(212,255,0,0.85)]" />
+                  <span className="text-[11px] font-black text-white uppercase tracking-wide leading-tight text-center">
                     AI Video Analysis
-                  </span>
-                  <span className="text-[9px] text-white/55 font-semibold leading-snug px-0.5">
-                    Analyze your technique and improve with AI.
                   </span>
                 </button>
 
@@ -158,30 +239,16 @@ export function BottomNav() {
                 <button
                   type="button"
                   onClick={() => go('/spar')}
-                  className="relative flex flex-col items-center text-center gap-2 rounded-xl border border-orange-400/40 bg-gradient-to-b from-orange-500/15 to-transparent px-2 py-4 active:scale-[0.97] transition-transform"
+                  className="relative flex flex-col items-center justify-center gap-2 rounded-2xl border border-orange-400/50 bg-[#0a0c08] px-2 pt-5 pb-3.5 shadow-[inset_0_0_24px_rgba(255,122,0,0.07),0_0_16px_rgba(255,122,0,0.14)] active:scale-[0.97] transition-transform"
                 >
-                  <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full bg-primary text-black font-black text-[8px] tracking-widest shadow-[0_0_12px_rgba(226,255,59,0.5)]">
+                  <span className="absolute top-2 right-2 px-2 py-0.5 rounded-md bg-[#D4FF00] text-black text-[8px] font-black tracking-widest">
                     FREE
                   </span>
-                  <div
-                    className="mt-2 w-12 h-12 flex items-center justify-center text-orange-400"
-                    style={{
-                      clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-                      background: 'linear-gradient(180deg, rgba(249,115,22,0.4), rgba(249,115,22,0.08))',
-                    }}
-                  >
-                    <Swords className="w-5 h-5 drop-shadow-[0_0_8px_rgba(249,115,22,0.9)]" />
-                  </div>
-                  <span className="text-[10px] font-black uppercase tracking-wide text-orange-400 leading-tight">
+                  <BoxingGlovesIcon className="w-10 h-10 text-orange-400 drop-shadow-[0_0_10px_rgba(255,122,0,0.85)]" />
+                  <span className="text-[11px] font-black text-white uppercase tracking-wide leading-tight text-center">
                     Sparring
                   </span>
-                  <span className="text-[9px] text-white/55 font-semibold leading-snug px-0.5">
-                    Watch ads to start sparring for free.
-                  </span>
                 </button>
-              </div>
-              <div className="flex justify-center pt-1.5">
-                <ChevronUp className="w-4 h-4 text-white/35" />
               </div>
             </motion.div>
           )}
@@ -194,108 +261,103 @@ export function BottomNav() {
           onClick={() => setMenuOpen((o) => !o)}
           className="relative flex flex-col items-center cursor-pointer group"
         >
-          {/* Cycling tag */}
-          <div className="absolute -top-4 h-5 overflow-hidden z-20">
-            <AnimatePresence mode="wait">
-              {mode === 'vision' ? (
-                <motion.div
-                  key="streak-tag"
-                  initial={{ y: 14, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  exit={{ y: -14, opacity: 0 }}
-                  transition={{ duration: 0.35, ease: 'easeInOut' }}
-                  className="flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-gradient-to-r from-orange-500 via-amber-400 to-yellow-300 text-black font-black text-[8px] tracking-wider shadow-[0_0_12px_rgba(249,115,22,0.6)] stealth-sensitive"
-                >
-                  <Flame className="w-2.5 h-2.5 fill-black stroke-none" />
-                  <span>{streak}</span>
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="free-tag"
-                  initial={{ y: 14, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  exit={{ y: -14, opacity: 0 }}
-                  transition={{ duration: 0.35, ease: 'easeInOut' }}
-                  className="px-2.5 py-0.5 rounded-full bg-primary text-black font-black text-[8px] tracking-widest shadow-[0_0_12px_rgba(226,255,59,0.55)]"
-                >
-                  FREE
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          <div
-            className={twMerge(
-              'absolute top-0 w-[64px] h-[70px] rounded-full blur-md transition-all duration-500 animate-pulse',
-              mode === 'spar' ? 'bg-orange-500/35 group-hover:bg-orange-500/55' : 'bg-primary/40 group-hover:bg-primary/70',
-            )}
-          />
-
-          <div
-            className={twMerge(
-              'w-[62px] relative transition-all duration-300 group-hover:scale-110 group-active:scale-95 flex items-center justify-center',
-              mode === 'spar'
-                ? 'bg-gradient-to-b from-orange-400 via-orange-500/80 to-amber-600 shadow-[0_0_25px_rgba(249,115,22,0.55)]'
-                : 'bg-gradient-to-b from-primary via-primary/80 to-amber-400 shadow-[0_0_25px_rgba(226,255,59,0.6)]',
-            )}
-            style={{
-              clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-              height: '68px',
-            }}
-          >
-            <div
-              className="absolute inset-[2.5px] bg-[#0A0D08] z-10 flex items-center justify-center overflow-hidden group-hover:bg-[#12160d] transition-colors"
-              style={{
-                clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-              }}
-            >
+          {/* Cycling FREE / streak tag — hidden while menu open */}
+          {!menuOpen && (
+            <div className="absolute -top-3.5 z-20 flex justify-center w-full pointer-events-none">
               <AnimatePresence mode="wait">
                 {mode === 'vision' ? (
                   <motion.div
-                    key="vision-icon"
-                    initial={{ x: 22, opacity: 0 }}
-                    animate={{ x: 0, opacity: 1 }}
-                    exit={{ x: -22, opacity: 0 }}
-                    transition={{ duration: 0.4, ease: 'easeInOut' }}
-                    className="relative"
+                    key="streak-tag"
+                    initial={{ y: 12, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{ y: -12, opacity: 0 }}
+                    transition={{ duration: 0.32 }}
+                    className="flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-gradient-to-r from-orange-500 via-amber-400 to-yellow-300 text-black font-black text-[8px] tracking-wider shadow-[0_0_12px_rgba(249,115,22,0.65)] stealth-sensitive"
                   >
-                    <Play className="w-5 h-5 text-primary fill-primary/30 drop-shadow-[0_0_10px_rgba(226,255,59,1)]" />
-                    <Zap className="w-2.5 h-2.5 text-amber-300 absolute -top-1 -right-1" />
+                    <Flame className="w-2.5 h-2.5 fill-black stroke-none" />
+                    <span>{streak}</span>
                   </motion.div>
                 ) : (
                   <motion.div
-                    key="spar-icon"
-                    initial={{ x: 22, opacity: 0 }}
-                    animate={{ x: 0, opacity: 1 }}
-                    exit={{ x: -22, opacity: 0 }}
-                    transition={{ duration: 0.4, ease: 'easeInOut' }}
+                    key="free-tag"
+                    initial={{ y: 12, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{ y: -12, opacity: 0 }}
+                    transition={{ duration: 0.32 }}
+                    className="px-2.5 py-0.5 rounded-full bg-[#D4FF00] text-black font-black text-[8px] tracking-widest shadow-[0_0_12px_rgba(212,255,0,0.55)]"
                   >
-                    <Swords className="w-5 h-5 text-orange-400 drop-shadow-[0_0_10px_rgba(249,115,22,1)]" />
+                    FREE
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
-          </div>
+          )}
 
-          {/* Label: Explore + swiping mode hint */}
-          <div className="mt-1 h-[22px] overflow-hidden flex flex-col items-center">
-            <span className="text-[8px] font-black tracking-[0.2em] text-white/40 uppercase leading-none mb-0.5 flex items-center gap-0.5">
-              <Compass className="w-2.5 h-2.5" /> Explore
-            </span>
-            <div className="h-[11px] overflow-hidden relative w-[72px]">
+          <div
+            className={twMerge(
+              'absolute top-1 w-[66px] h-[72px] rounded-full blur-md transition-colors duration-500 animate-pulse',
+              mode === 'spar' && !menuOpen ? 'bg-orange-500/40' : 'bg-[#D4FF00]/35',
+            )}
+          />
+
+          <HexShell tone={mode === 'spar' && !menuOpen ? 'orange' : 'lime'} size={62}>
+            <div className="w-full h-full flex items-center justify-center overflow-hidden">
+              <AnimatePresence mode="wait">
+                {menuOpen ? (
+                  <motion.div
+                    key="explore-diamond"
+                    initial={{ scale: 0.7, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.7, opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <ExploreDiamond className="w-7 h-7 text-[#D4FF00] drop-shadow-[0_0_10px_rgba(212,255,0,1)]" />
+                  </motion.div>
+                ) : mode === 'vision' ? (
+                  <motion.div
+                    key="vision-icon"
+                    initial={{ x: 20, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    exit={{ x: -20, opacity: 0 }}
+                    transition={{ duration: 0.38, ease: 'easeInOut' }}
+                  >
+                    <PlayBoltIcon className="w-7 h-7 text-[#D4FF00] drop-shadow-[0_0_10px_rgba(212,255,0,1)]" />
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="spar-icon"
+                    initial={{ x: 20, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    exit={{ x: -20, opacity: 0 }}
+                    transition={{ duration: 0.38, ease: 'easeInOut' }}
+                  >
+                    <BoxingGlovesIcon className="w-7 h-7 text-orange-400 drop-shadow-[0_0_10px_rgba(255,122,0,1)]" />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </HexShell>
+
+          <div className="mt-1.5 flex flex-col items-center leading-none gap-0.5">
+            <span className="text-[8px] font-black tracking-[0.22em] text-[#D4FF00]/70 uppercase">Explore</span>
+            <div className="h-[12px] overflow-hidden relative w-[78px]">
               <AnimatePresence mode="wait">
                 <motion.span
-                  key={mode}
+                  key={menuOpen ? 'open' : mode}
                   initial={{ y: 10, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
                   exit={{ y: -10, opacity: 0 }}
-                  transition={{ duration: 0.35, ease: 'easeInOut' }}
+                  transition={{ duration: 0.32 }}
                   className={twMerge(
-                    'absolute inset-x-0 text-center text-[9px] font-black tracking-widest uppercase drop-shadow-[0_0_8px_rgba(226,255,59,0.5)]',
-                    mode === 'spar' ? 'text-orange-400' : 'text-primary',
+                    'absolute inset-x-0 text-center text-[9px] font-black tracking-widest uppercase',
+                    menuOpen
+                      ? 'text-[#D4FF00]'
+                      : mode === 'spar'
+                        ? 'text-orange-400'
+                        : 'text-[#D4FF00]',
                   )}
                 >
-                  {mode === 'spar' ? 'Sparring' : 'AI Analysis'}
+                  {menuOpen ? 'Menu' : mode === 'spar' ? 'Sparring' : 'AI Analysis'}
                 </motion.span>
               </AnimatePresence>
             </div>

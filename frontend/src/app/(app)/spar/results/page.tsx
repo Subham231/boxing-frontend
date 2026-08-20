@@ -79,23 +79,10 @@ function SparResultsInner() {
             </div>
           </GlassCard>
 
-          <GlassCard className="p-5 border-white/5 bg-black/40">
-            <div className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-3">Your Score</div>
-            <div className="grid grid-cols-3 gap-3 text-center">
-              <div>
-                <div className="text-xl font-black text-primary">{result.yourResult?.score ?? '—'}</div>
-                <div className="text-[8px] uppercase text-white/40 font-bold">Score</div>
-              </div>
-              <div>
-                <div className="text-xl font-black text-white">{result.yourResult?.hits ?? '—'}</div>
-                <div className="text-[8px] uppercase text-white/40 font-bold">Hits</div>
-              </div>
-              <div>
-                <div className="text-xl font-black text-white">
-                  {result.yourResult?.avgReactionMs != null ? `${result.yourResult.avgReactionMs}ms` : '—'}
-                </div>
-                <div className="text-[8px] uppercase text-white/40 font-bold">Avg React</div>
-              </div>
+          <GlassCard className="p-6 border-white/5 bg-black/40 text-center">
+            <div className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-2">AI Score</div>
+            <div className="text-5xl font-black text-primary tracking-tight">
+              {result.yourResult?.score ?? '—'}
             </div>
           </GlassCard>
 
