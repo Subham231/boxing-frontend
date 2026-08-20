@@ -29,21 +29,27 @@ export interface SparResultBreakdown {
 const PUNCHES: Array<{ command: string; kind: SparCommandKind }> = [
   { command: 'JAB', kind: 'punch' },
   { command: 'CROSS', kind: 'punch' },
-  { command: 'HOOK', kind: 'punch' },
-  { command: 'UPPERCUT', kind: 'punch' },
+  { command: 'LEAD HOOK', kind: 'punch' },
+  { command: 'REAR HOOK', kind: 'punch' },
+  { command: 'LEAD UPPERCUT', kind: 'punch' },
+  { command: 'REAR UPPERCUT', kind: 'punch' },
+  { command: 'BODY HOOK', kind: 'punch' },
+  { command: 'OVERHAND', kind: 'punch' },
 ];
 
 const DEFENSE: Array<{ command: string; kind: SparCommandKind }> = [
   { command: 'SLIP LEFT', kind: 'defense' },
   { command: 'SLIP RIGHT', kind: 'defense' },
   { command: 'ROLL UNDER', kind: 'defense' },
+  { command: 'PULL COUNTER', kind: 'defense' },
+  { command: 'HIGH GUARD', kind: 'defense' },
+  { command: 'DUCK', kind: 'defense' },
 ];
 
-const GAP_MS = 2800;
-const START_OFFSET_MS = 4000;
-const SEQUENCE_LEN = 12;
+const GAP_MS = 1600; // Hard level: 1.6s rapid tempo
+const START_OFFSET_MS = 3500;
 
-/** Same coach-call pool as the solo vision drill — shared timeline for both spar clients. */
+/** Hard-level coach-call pool — randomly generates 40 to 70 commands for intense spar rounds. */
 export function generateSparCommandSequence(seed?: number): SparCommand[] {
   let s = seed ?? Date.now();
   const rng = () => {
@@ -51,10 +57,13 @@ export function generateSparCommandSequence(seed?: number): SparCommand[] {
     return s / 0xffffffff;
   };
 
+  // Random length between 40 and 70 commands
+  const sequenceLen = Math.floor(rng() * 31) + 40;
+
   const pool = [...PUNCHES, ...PUNCHES, ...DEFENSE];
   const seq: SparCommand[] = [];
   let last = '';
-  for (let i = 0; i < SEQUENCE_LEN; i++) {
+  for (let i = 0; i < sequenceLen; i++) {
     let pick = pool[Math.floor(rng() * pool.length)];
     let guard = 0;
     while (pick.command === last && guard++ < 8) {
@@ -75,8 +84,8 @@ export function shouldGateResultReveal(_entitlementActive: boolean): boolean {
   return false;
 }
 
-const MIN_REACTION_MS = 150;
-const MAX_REACTION_MS = 2500;
+const MIN_REACTION_MS = 100;
+const MAX_REACTION_MS = 1800;
 
 export function validateSparResult(
   sequence: SparCommand[],
