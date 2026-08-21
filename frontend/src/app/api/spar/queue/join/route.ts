@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   }
 
   const uid = auth.uid;
-  await purgeOldFreeMatches();
+  await purgeOldIncompleteMatches();
 
   // Clear stale queue rows older than 3 minutes
   const staleBefore = new Date(Date.now() - 3 * 60 * 1000).toISOString();
