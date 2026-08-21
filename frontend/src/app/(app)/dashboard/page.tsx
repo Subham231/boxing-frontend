@@ -374,15 +374,8 @@ export default function DashboardPage() {
           START SESSION <Play className="w-4 h-4 fill-black text-black ml-1.5" />
         </NeonButton>
 
-        {/* Live 1v1 Spar — free users watch ad; paid use plan allowance */}
-        <button
-          type="button"
-          onClick={() => router.push('/spar')}
-          className="w-full h-14 rounded-2xl border border-primary/40 bg-gradient-to-r from-primary/15 via-black/50 to-primary/10 hover:border-primary/60 transition-all flex items-center justify-center gap-2.5 text-[11px] font-black uppercase tracking-widest text-primary shadow-[0_0_20px_rgba(226,255,59,0.15)] active:scale-[0.98]"
-        >
-          <SwordsNeonIcon className="w-5 h-5 text-primary" />
-          SPAR NOW — LIVE 1V1
-        </button>
+        {/* Live 1v1 Spar & Limited Deals Spotlight Banner */}
+        <HomePromoDealsBanner />
 
         {/* Skill Focus Strips */}
         <div>
