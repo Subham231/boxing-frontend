@@ -169,7 +169,7 @@ export default function AnalyticsPage() {
 
     if (validReflexes.length > 0) {
       bestReflex = `${(Math.min(...validReflexes) / 1000).toFixed(2)}s`;
-    } else {
+    } else if (typeof window !== 'undefined') {
       const rtBestVal = localStorage.getItem('reflex_rt_best');
       if (rtBestVal) {
         bestReflex = `${parseFloat(rtBestVal).toFixed(2)}s`;
