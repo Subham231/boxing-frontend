@@ -510,32 +510,132 @@ function FaqAccordion() {
 export default function HomeContent() {
   return (
     <div className="relative min-h-screen bg-[#08080A] text-white font-sans overflow-x-hidden">
-      {/* Animated ambient background */}
+      {/* ── Animated boxing-themed background ── */}
       <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+
+        {/* Large ambient glow orbs */}
         <motion.div
-          className="absolute -top-40 -left-32 w-[420px] h-[420px] rounded-full bg-primary/10 blur-[120px]"
-          animate={{ x: [0, 40, 0], y: [0, 30, 0] }}
-          transition={{ duration: 14, repeat: Infinity, ease: 'easeInOut' }}
+          className="absolute -top-40 -left-32 w-[520px] h-[520px] rounded-full bg-primary/8 blur-[140px]"
+          animate={{ x: [0, 50, 0], y: [0, 35, 0], scale: [1, 1.08, 1] }}
+          transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut' }}
         />
         <motion.div
-          className="absolute top-1/2 -right-40 w-[380px] h-[380px] rounded-full bg-red-600/10 blur-[130px]"
-          animate={{ x: [0, -30, 0], y: [0, -20, 0] }}
-          transition={{ duration: 16, repeat: Infinity, ease: 'easeInOut' }}
+          className="absolute top-1/3 -right-48 w-[450px] h-[450px] rounded-full bg-red-600/8 blur-[150px]"
+          animate={{ x: [0, -40, 0], y: [0, -25, 0], scale: [1, 1.12, 1] }}
+          transition={{ duration: 20, repeat: Infinity, ease: 'easeInOut' }}
         />
-        {Array.from({ length: 14 }).map((_, i) => (
-          <motion.span
-            key={i}
-            className="absolute rounded-full bg-primary/30"
-            style={{
-              width: 2 + (i % 3),
-              height: 2 + (i % 3),
-              left: `${(i * 41) % 100}%`,
-              top: `${(i * 29) % 100}%`,
+        <motion.div
+          className="absolute bottom-0 left-1/3 w-[350px] h-[350px] rounded-full bg-primary/5 blur-[120px]"
+          animate={{ x: [0, 30, 0], y: [0, -20, 0] }}
+          transition={{ duration: 22, repeat: Infinity, ease: 'easeInOut' }}
+        />
+
+        {/* Subtle dark grid scanlines */}
+        <div
+          className="absolute inset-0 opacity-[0.025]"
+          style={{
+            backgroundImage: 'linear-gradient(rgba(226,255,59,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(226,255,59,0.6) 1px, transparent 1px)',
+            backgroundSize: '80px 80px',
+          }}
+        />
+
+        {/* Diagonal speed-lines (boxing ring ropes effect) */}
+        {[0, 1, 2].map((i) => (
+          <motion.div
+            key={`rope-${i}`}
+            className="absolute inset-0"
+            style={{ opacity: 0.04 - i * 0.01 }}
+            animate={{ x: ['-100%', '100%'] }}
+            transition={{ duration: 28 + i * 6, repeat: Infinity, ease: 'linear', delay: i * 4 }}
+          >
+            <div
+              className="absolute inset-y-0 w-[1px] bg-gradient-to-b from-transparent via-primary to-transparent"
+              style={{ left: `${30 + i * 20}%` }}
+            />
+          </motion.div>
+        ))}
+
+        {/* Floating boxing hexagon shapes */}
+        {[
+          { size: 120, left: '8%', top: '15%', delay: 0, dur: 12 },
+          { size: 80,  left: '78%', top: '8%', delay: 2, dur: 15 },
+          { size: 60,  left: '55%', top: '60%', delay: 4, dur: 10 },
+          { size: 100, left: '20%', top: '72%', delay: 1, dur: 18 },
+          { size: 50,  left: '88%', top: '50%', delay: 3, dur: 14 },
+          { size: 70,  left: '42%', top: '25%', delay: 5, dur: 16 },
+        ].map((h, i) => (
+          <motion.svg
+            key={`hex-${i}`}
+            width={h.size}
+            height={h.size}
+            viewBox="0 0 100 100"
+            className="absolute"
+            style={{ left: h.left, top: h.top }}
+            animate={{
+              y: [0, -20, 0],
+              rotate: [0, 60, 0],
+              opacity: [0.04, 0.1, 0.04],
             }}
-            animate={{ opacity: [0.1, 0.5, 0.1], y: [0, -16, 0] }}
-            transition={{ duration: 5 + (i % 5), repeat: Infinity, delay: i * 0.3 }}
+            transition={{ duration: h.dur, repeat: Infinity, ease: 'easeInOut', delay: h.delay }}
+          >
+            <polygon
+              points="50,5 90,27.5 90,72.5 50,95 10,72.5 10,27.5"
+              fill="none"
+              stroke="#E2FF3B"
+              strokeWidth="1.5"
+            />
+          </motion.svg>
+        ))}
+
+        {/* Floating small glowing particles */}
+        {Array.from({ length: 18 }).map((_, i) => (
+          <motion.span
+            key={`particle-${i}`}
+            className="absolute rounded-full"
+            style={{
+              width: 1.5 + (i % 3),
+              height: 1.5 + (i % 3),
+              left: `${(i * 37 + 5) % 100}%`,
+              top: `${(i * 23 + 10) % 100}%`,
+              backgroundColor: i % 4 === 0 ? 'rgba(226,255,59,0.6)' : 'rgba(226,255,59,0.35)',
+            }}
+            animate={{
+              opacity: [0.05, 0.45, 0.05],
+              y: [0, -(12 + (i % 8)), 0],
+              scale: [1, 1.4, 1],
+            }}
+            transition={{ duration: 4 + (i % 6), repeat: Infinity, delay: i * 0.22 }}
           />
         ))}
+
+        {/* Corner accent rings — like boxing ring corner posts */}
+        {[
+          { top: '-20px', left: '-20px' },
+          { top: '-20px', right: '-20px' },
+          { bottom: '-20px', left: '-20px' },
+          { bottom: '-20px', right: '-20px' },
+        ].map((pos, i) => (
+          <motion.div
+            key={`corner-${i}`}
+            className="absolute w-32 h-32 rounded-full border border-primary/10"
+            style={pos as React.CSSProperties}
+            animate={{ scale: [1, 1.3, 1], opacity: [0.15, 0.3, 0.15] }}
+            transition={{ duration: 6 + i, repeat: Infinity, ease: 'easeInOut', delay: i * 1.5 }}
+          />
+        ))}
+
+        {/* Pulsing center cross-hair — fight ring center mark */}
+        <motion.div
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+          animate={{ opacity: [0.03, 0.07, 0.03], scale: [0.95, 1.05, 0.95] }}
+          transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
+        >
+          <div className="w-40 h-40 rounded-full border border-primary/20" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-20 h-20 rounded-full border border-primary/15" />
+          </div>
+        </motion.div>
+
       </div>
 
       {/* Nav */}
