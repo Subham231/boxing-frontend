@@ -216,19 +216,24 @@ export async function getEntitlement(uid: string): Promise<Entitlement> {
   const isActiveStatus = !row.subscription_status || !blockingStatus.has(row.subscription_status);
   const isActive = !!row.plan && expiresAt > now && isActiveStatus;
 
+  const hadPlan = !!(row.plan || row.razorpay_subscription_id);
+  const hadExpiredPlan = hadPlan && (expiresAt > 0 && expiresAt <= now);
+
   if (!isActive) {
     return {
       ...empty,
       plan: null,
       planName: 'No subscription',
-      expiresAt: effectiveExpiryStr || null,
+      expiresAt: hadExpiredPlan ? (effectiveExpiryStr || null) : null,
       freeSparAvailable,
       freeSparUnlocked,
+      wasSubscribed: hadPlan,
+      hasPurchasedPlan: hadPlan,
     };
   }
 
   const cfg = PLANS[row.plan as PlanId];
-  if (!cfg) return { ...empty, expiresAt: effectiveExpiryStr };
+  if (!cfg) return { ...empty, expiresAt: effectiveExpiryStr, wasSubscribed: hadPlan, hasPurchasedPlan: hadPlan };
 
   return {
     active: true,
@@ -245,5 +250,7 @@ export async function getEntitlement(uid: string): Promise<Entitlement> {
     sparDailyUsed: sparUsed,
     freeSparAvailable: false,
     freeSparUnlocked: false,
+    wasSubscribed: true,
+    hasPurchasedPlan: true,
   };
 }
