@@ -42,6 +42,7 @@ import WelcomeIntro, { WELCOME_INTRO_KEY } from '@/components/tutorial/WelcomeIn
 import SpotlightTour, { TourStep } from '@/components/tutorial/SpotlightTour';
 import { SparFreePromoModal } from '@/components/ui/SparFreePromoModal';
 import { HomePromoDealsBanner } from '@/components/ui/HomePromoDealsBanner';
+import { FeatureShowcaseTemplates } from '@/components/dashboard/FeatureShowcaseTemplates';
 
 const TUTORIAL_DONE_KEY = 'boxing_tutorial_done';
 
