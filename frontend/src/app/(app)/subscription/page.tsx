@@ -268,6 +268,8 @@ function SubscriptionContent() {
             </div>
           </div>
         </GlassCard>
+      ) : null}
+
       {/* Limit Reached Notification Banner */}
       {reason && (
         <GlassCard className="p-4 mb-6 border-amber-500/40 bg-amber-500/10 flex items-center gap-3">
