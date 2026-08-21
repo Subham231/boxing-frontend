@@ -18,20 +18,13 @@ export default function ProtectedLayout({
 
   const isExempt = isExemptFromSubscriptionGate(pathname);
 
-  // Synchronously check local cache for immediate zero-lag decision
-  const [allowed, setAllowed] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    if (isExempt) return true;
-    const cached = localStorage.getItem('sparai_sub_active');
-    return cached === 'true';
-  });
+  // If on an exempt route (/settings, /spar, /subscription, /checkout), never block or show loader
+  const [mounted, setMounted] = useState(false);
+  const [allowed, setAllowed] = useState(true);
 
-  const [checked, setChecked] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    if (isExempt) return true;
-    const cached = localStorage.getItem('sparai_sub_active');
-    return cached !== null;
-  });
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (authLoading) return;
@@ -47,23 +40,24 @@ export default function ProtectedLayout({
     };
 
     if (!isOnboardingComplete() || !user) {
-      window.location.replace('/onboarding');
+      if (!isExempt) {
+        window.location.replace('/onboarding');
+      }
       return;
     }
 
-    // If exempt and already checked, allow immediate navigation
+    // Exempt routes don't require active plan check
     if (isExempt) {
       setAllowed(true);
-      setChecked(true);
-    } else {
-      // Check cached active state immediately before async network roundtrip
-      const cached = localStorage.getItem('sparai_sub_active');
-      if (cached === 'false') {
-        setAllowed(false);
-        setChecked(true);
-        router.replace('/subscription');
-        return;
-      }
+      return;
+    }
+
+    // Fast local cache check for instant navigation
+    const cached = localStorage.getItem('sparai_sub_active');
+    if (cached === 'false') {
+      setAllowed(false);
+      router.replace('/subscription');
+      return;
     }
 
     let cancelled = false;
@@ -96,17 +90,14 @@ export default function ProtectedLayout({
 
         if (!isExempt && !isActive) {
           setAllowed(false);
-          setChecked(true);
           window.location.replace('/subscription');
           return;
         }
 
         setAllowed(true);
-        setChecked(true);
       } catch {
         if (!cancelled && isExempt) {
           setAllowed(true);
-          setChecked(true);
         }
       }
     };
@@ -117,16 +108,10 @@ export default function ProtectedLayout({
     };
   }, [user, authLoading, pathname, isExempt, router]);
 
-  if (!checked) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-bg-dark gap-4">
-        <Loader2 className="w-10 h-10 text-primary animate-spin" />
-        <p className="text-[10px] text-text-muted uppercase tracking-[3px]">Authenticating Protocol...</p>
-      </div>
-    );
+  // If on non-exempt route and not allowed, don't show content
+  if (!isExempt && !allowed) {
+    return null;
   }
-
-  if (!allowed && !isExempt) return null;
 
   return <AppShell>{children}</AppShell>;
 }
