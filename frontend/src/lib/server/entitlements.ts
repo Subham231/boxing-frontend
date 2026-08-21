@@ -97,6 +97,8 @@ export interface Entitlement {
   sparDailyUsed: number;
   freeSparAvailable: boolean;
   freeSparUnlocked: boolean;
+  wasSubscribed: boolean;
+  hasPurchasedPlan: boolean;
 }
 
 function isoWeek(d: Date): string {
@@ -142,6 +144,8 @@ export async function getEntitlement(uid: string): Promise<Entitlement> {
     sparDailyUsed: 0,
     freeSparAvailable: false,
     freeSparUnlocked: false,
+    wasSubscribed: false,
+    hasPurchasedPlan: false,
   };
 
   if (!supabaseAdmin) return empty;
