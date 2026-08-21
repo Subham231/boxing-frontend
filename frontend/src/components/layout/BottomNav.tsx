@@ -77,65 +77,59 @@ export function BottomNav() {
       <AnimatePresence>
         {menuOpen && (
           <motion.div
-            initial={{ opacity: 0, y: 32, scale: 0.94 }}
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 24, scale: 0.94 }}
-            transition={{ type: 'spring', stiffness: 450, damping: 32 }}
-            className="w-[min(94vw,400px)] mb-3 pointer-events-auto transform-gpu"
+            exit={{ opacity: 0, y: 16, scale: 0.95 }}
+            transition={{ type: 'spring', stiffness: 450, damping: 30 }}
+            className="w-[min(90vw,340px)] mb-2 pointer-events-auto transform-gpu"
           >
-            {/* Top Chevron Indicator */}
-            <div className="flex justify-center -mb-2 z-20 relative">
-              <div className="w-8 h-8 rounded-full bg-[#10130d] border border-white/10 flex items-center justify-center text-[#E2FF3B] shadow-[0_0_12px_rgba(226,255,59,0.3)]">
-                <ChevronUp className="w-4 h-4 text-[#E2FF3B]" />
+            {/* Glass Tray Container with Arched Top Chevron */}
+            <div className="relative rounded-[22px] border border-white/15 bg-[#090d07]/95 backdrop-blur-2xl p-2 shadow-[0_12px_40px_rgba(0,0,0,0.95),0_0_25px_rgba(226,255,59,0.08)]">
+              {/* Arched Top Chevron Center Tab */}
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-t-lg bg-[#090d07] border-t border-x border-white/15 flex items-center justify-center shadow-md">
+                <ChevronUp className="w-3 h-3 text-[#E2FF3B]" />
               </div>
-            </div>
 
-            {/* Glass Tray Container */}
-            <div className="rounded-[26px] border border-white/15 bg-[#0b0e09]/95 backdrop-blur-2xl p-3 shadow-[0_16px_50px_rgba(0,0,0,0.9),0_0_35px_rgba(226,255,59,0.1)] grid grid-cols-2 gap-2.5">
-              {/* Card 1: AI Video Analysis */}
-              <button
-                type="button"
-                onClick={() => go('/vision')}
-                className="relative flex flex-col items-start justify-between rounded-2xl border border-[#E2FF3B]/50 bg-gradient-to-b from-[#16200d] via-[#0d1208] to-[#070905] p-3.5 min-h-[92px] shadow-[inset_0_0_24px_rgba(226,255,59,0.08),0_0_20px_rgba(226,255,59,0.15)] active:scale-[0.97] transition-all text-left group overflow-hidden"
-              >
-                {/* Glow aura */}
-                <div className="absolute -top-6 -left-6 w-20 h-20 bg-[#E2FF3B]/20 rounded-full blur-xl pointer-events-none" />
+              <div className="grid grid-cols-2 gap-2">
+                {/* Card 1: AI Video Analysis */}
+                <button
+                  type="button"
+                  onClick={() => go('/vision')}
+                  className="relative flex flex-col justify-between rounded-[18px] border border-[#E2FF3B]/60 bg-gradient-to-b from-[#131d0b] via-[#0b1007] to-[#060804] p-2.5 h-[66px] shadow-[inset_0_0_15px_rgba(226,255,59,0.06),0_0_15px_rgba(226,255,59,0.12)] active:scale-[0.97] transition-all text-left overflow-hidden group"
+                >
+                  {/* Streak Badge */}
+                  <div className="self-end flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-black/85 border border-orange-500/50 text-[8px] font-black text-amber-300 tracking-tight">
+                    <Flame className="w-2.5 h-2.5 fill-amber-400 stroke-none" />
+                    <span>{streak} Streak</span>
+                  </div>
 
-                {/* Streak Badge */}
-                <div className="self-end flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/80 border border-orange-500/40 text-[9px] font-black text-amber-300 tracking-wide stealth-sensitive">
-                  <Flame className="w-2.5 h-2.5 fill-amber-400 stroke-none" />
-                  <span>{streak} Streak</span>
-                </div>
+                  <div className="flex items-center gap-2">
+                    <AnalysisCamIcon size={26} className="text-[#E2FF3B] shrink-0 drop-shadow-[0_0_8px_rgba(226,255,59,0.9)]" />
+                    <span className="text-[11px] font-black text-white leading-[1.1] uppercase tracking-tight">
+                      AI Video<br />Analysis
+                    </span>
+                  </div>
+                </button>
 
-                <div className="flex items-center gap-2 mt-1">
-                  <AnalysisCamIcon className="w-8 h-8 text-[#E2FF3B] shrink-0 drop-shadow-[0_0_10px_rgba(226,255,59,0.9)]" />
-                  <span className="text-xs font-black text-white leading-tight uppercase tracking-tight">
-                    AI Video<br />Analysis
-                  </span>
-                </div>
-              </button>
+                {/* Card 2: Sparing */}
+                <button
+                  type="button"
+                  onClick={() => go('/spar')}
+                  className="relative flex flex-col justify-between rounded-[18px] border border-amber-500/60 bg-gradient-to-b from-[#221609] via-[#120d05] to-[#070503] p-2.5 h-[66px] shadow-[inset_0_0_15px_rgba(245,158,11,0.06),0_0_15px_rgba(245,158,11,0.12)] active:scale-[0.97] transition-all text-left overflow-hidden group"
+                >
+                  {/* Free Badge */}
+                  <div className="self-end px-2 py-0.5 rounded-full bg-[#E2FF3B] text-black font-black text-[8px] tracking-wider shadow-[0_0_8px_rgba(226,255,59,0.7)]">
+                    FREE
+                  </div>
 
-              {/* Card 2: Sparing */}
-              <button
-                type="button"
-                onClick={() => go('/spar')}
-                className="relative flex flex-col items-start justify-between rounded-2xl border border-amber-500/50 bg-gradient-to-b from-[#24170a] via-[#140e06] to-[#080604] p-3.5 min-h-[92px] shadow-[inset_0_0_24px_rgba(245,158,11,0.08),0_0_20px_rgba(245,158,11,0.15)] active:scale-[0.97] transition-all text-left group overflow-hidden"
-              >
-                {/* Glow aura */}
-                <div className="absolute -top-6 -left-6 w-20 h-20 bg-amber-500/20 rounded-full blur-xl pointer-events-none" />
-
-                {/* Free Badge */}
-                <div className="self-end px-2.5 py-0.5 rounded-full bg-[#E2FF3B] text-black font-black text-[9px] tracking-widest shadow-[0_0_10px_rgba(226,255,59,0.6)]">
-                  FREE
-                </div>
-
-                <div className="flex items-center gap-2 mt-1">
-                  <BoxingGlovesIcon className="w-8 h-8 text-amber-400 shrink-0 drop-shadow-[0_0_10px_rgba(245,158,11,0.9)]" />
-                  <span className="text-xs font-black text-white leading-tight uppercase tracking-tight">
-                    Sparing
-                  </span>
-                </div>
-              </button>
+                  <div className="flex items-center gap-2">
+                    <BoxingGlovesIcon size={26} className="text-amber-400 shrink-0 drop-shadow-[0_0_8px_rgba(245,158,11,0.9)]" />
+                    <span className="text-[11px] font-black text-white leading-tight uppercase tracking-tight">
+                      Sparing
+                    </span>
+                  </div>
+                </button>
+              </div>
             </div>
           </motion.div>
         )}

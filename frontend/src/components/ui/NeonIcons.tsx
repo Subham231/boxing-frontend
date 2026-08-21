@@ -312,57 +312,75 @@ export function CrownNeonIcon({ className, size = 22, glow = true, ...props }: I
 }
 
 /** Video Camera with Light Burst Rays (AI Video Analysis card) */
-export function AnalysisCamIcon({ className, size = 34, glow = true, ...props }: IconProps) {
+export function AnalysisCamIcon({ className, size = 28, glow = true, ...props }: IconProps) {
   return (
     <svg
-      viewBox="0 0 40 40"
+      viewBox="0 0 28 24"
       width={size}
-      height={size}
-      className={twMerge('inline-block transition-all duration-200', glow && 'drop-shadow-[0_0_12px_rgba(226,255,59,0.85)]', className)}
+      height={(size * 24) / 28}
+      className={twMerge('inline-block transition-all duration-200 shrink-0', glow && 'drop-shadow-[0_0_10px_rgba(226,255,59,0.9)]', className)}
       {...props}
     >
       {/* Light Burst Rays */}
-      <path d="M7 6 L9 8.5" stroke="#E2FF3B" strokeWidth="2.2" strokeLinecap="round" />
-      <path d="M14 4 L14 7.5" stroke="#E2FF3B" strokeWidth="2.2" strokeLinecap="round" />
-      <path d="M21 6 L19 8.5" stroke="#E2FF3B" strokeWidth="2.2" strokeLinecap="round" />
+      <line x1="3.5" y1="3.5" x2="5.5" y2="5.5" stroke="#E2FF3B" strokeWidth="1.8" strokeLinecap="round" />
+      <line x1="9" y1="1.5" x2="9" y2="4.5" stroke="#E2FF3B" strokeWidth="1.8" strokeLinecap="round" />
+      <line x1="14.5" y1="3.5" x2="12.5" y2="5.5" stroke="#E2FF3B" strokeWidth="1.8" strokeLinecap="round" />
 
       {/* Main Camera Body */}
-      <rect x="3" y="11" width="22" height="18" rx="5" fill="#E2FF3B" stroke="none" />
+      <rect x="2" y="7" width="16" height="13" rx="3.5" fill="#E2FF3B" />
 
       {/* Lens Funnel */}
-      <path d="M25 17 L36 12 V28 L25 23 Z" fill="#E2FF3B" stroke="none" />
+      <path d="M18 11.5 L25 8 V19 L18 15.5 Z" fill="#E2FF3B" />
 
       {/* Play Triangle Inside Camera */}
-      <polygon points="10.5,15.5 18,20 10.5,24.5" fill="#0A0D08" />
+      <polygon points="7.5,10.5 12.5,13.5 7.5,16.5" fill="#080B06" />
     </svg>
   );
 }
 
-/** Boxing Gloves Pair (Sparring card) */
-export function BoxingGlovesIcon({ className, size = 34, glow = true, ...props }: IconProps) {
+/** Boxing Gloves Pair (Sparring card) matching reference design */
+export function BoxingGlovesIcon({ className, size = 28, glow = true, ...props }: IconProps) {
   return (
     <svg
-      viewBox="0 0 40 40"
+      viewBox="0 0 32 26"
       width={size}
-      height={size}
-      className={twMerge('inline-block transition-all duration-200', glow && 'drop-shadow-[0_0_12px_rgba(245,158,11,0.85)]', className)}
+      height={(size * 26) / 32}
+      className={twMerge('inline-block transition-all duration-200 shrink-0', glow && 'drop-shadow-[0_0_10px_rgba(245,158,11,0.9)]', className)}
       {...props}
     >
       {/* Left Glove */}
-      <path
-        d="M15 19 C15 13 11 9 7 12 C3 15 3 21 6 25.5 C8.5 28 11 27.5 13 26 L14 30 L18.5 29 L17.5 24.5 C17.5 22 15 21 15 19 Z"
-        fill="#F59E0B"
-        stroke="none"
-      />
+      <g transform="translate(1, 2) rotate(-18 8 10)">
+        {/* Main Glove Fist */}
+        <path
+          d="M4 6 C4 2.5 7 1 10.5 1 C14 1 16 3 16 6.5 C16 10 13.5 12.5 10 12.5 C8.5 12.5 7.5 12 6.5 11 L6.5 14 L3 14 L3 8 C3 7 3.5 6.5 4 6 Z"
+          fill="#F59E0B"
+        />
+        {/* Thumb */}
+        <path
+          d="M4 6.5 C2.5 6.5 1.5 8 1.5 9.5 C1.5 11 2.8 11.8 4.2 11.8 L4.5 10 C3.8 10 3.2 9.5 3.2 9 C3.2 8.3 3.6 7.8 4.2 7.8 Z"
+          fill="#D97706"
+        />
+        {/* Cuff Ribbing */}
+        <rect x="2.5" y="13.5" width="4.5" height="4.5" rx="1" fill="#F59E0B" />
+        <line x1="2.5" y1="15.5" x2="7" y2="15.5" stroke="#080B06" strokeWidth="1" />
+      </g>
+
       {/* Right Glove */}
-      <path
-        d="M24 19 C24 13 28 9 32 12 C36 15 36 21 33 25.5 C30.5 28 28 27.5 26 26 L25 30 L20.5 29 L21.5 24.5 C21.5 22 24 21 24 19 Z"
-        fill="#F59E0B"
-        stroke="none"
-      />
-      {/* Contrast Stitching */}
-      <path d="M13.5 17 L10 18" stroke="#0A0D08" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M25.5 17 L29 18" stroke="#0A0D08" strokeWidth="1.8" strokeLinecap="round" />
+      <g transform="translate(14, 2) rotate(18 8 10)">
+        {/* Main Glove Fist */}
+        <path
+          d="M12 6 C12 2.5 9 1 5.5 1 C2 1 0 3 0 6.5 C0 10 2.5 12.5 6 12.5 C7.5 12.5 8.5 12 9.5 11 L9.5 14 L13 14 L13 8 C13 7 12.5 6.5 12 6 Z"
+          fill="#F59E0B"
+        />
+        {/* Thumb */}
+        <path
+          d="M12 6.5 C13.5 6.5 14.5 8 14.5 9.5 C14.5 11 13.2 11.8 11.8 11.8 L11.5 10 C12.2 10 12.8 9.5 12.8 9 C12.8 8.3 12.4 7.8 11.8 7.8 Z"
+          fill="#D97706"
+        />
+        {/* Cuff Ribbing */}
+        <rect x="9" y="13.5" width="4.5" height="4.5" rx="1" fill="#F59E0B" />
+        <line x1="9" y1="15.5" x2="13.5" y2="15.5" stroke="#080B06" strokeWidth="1" />
+      </g>
     </svg>
   );
 }
