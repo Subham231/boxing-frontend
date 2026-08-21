@@ -234,6 +234,9 @@ export default function DashboardPage() {
 
   return (
     <div className="relative w-full">
+      {/* Non-repeating One-Time Limited Free Sparring & Deals Launch Popup */}
+      <SparFreePromoModal />
+
       <div className="flex flex-col gap-6 anim-fade-in">
         {/* Unified Fighter Header */}
         <header className="flex justify-between items-start">
