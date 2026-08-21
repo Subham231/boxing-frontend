@@ -432,6 +432,9 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* Dynamic Theme Feature Showcase Templates */}
+        <FeatureShowcaseTemplates />
+
         {/* Live Analyser banner */}
         <div className="relative mt-2 analyser-ref">
           <div className="absolute -top-3.5 right-6 z-10">
