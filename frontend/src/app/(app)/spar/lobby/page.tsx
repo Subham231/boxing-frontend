@@ -20,14 +20,25 @@ type SparStatus = {
   planName: string | null;
 };
 
-type LeaderRow = { uid: string; display_name: string; wins: number; losses: number };
+type LeaderRow = {
+  uid: string;
+  display_name: string;
+  avatar_url?: string | null;
+  wins: number;
+  losses: number;
+  matches_played: number;
+  win_rate: number;
+  avg_score: number;
+};
 
 /** Matchmaking + leaderboard — reached after rules intro / ad unlock. */
 export default function SparLobbyPage() {
   const router = useRouter();
   const [status, setStatus] = useState<SparStatus | null>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderRow[]>([]);
+  const [leaderboardPeriod, setLeaderboardPeriod] = useState<'weekly' | 'monthly'>('weekly');
   const [loading, setLoading] = useState(true);
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,28 +49,42 @@ export default function SparLobbyPage() {
     return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
   }, []);
 
+  const loadLeaderboard = useCallback(async (period: 'weekly' | 'monthly') => {
+    setLoadingLeaderboard(true);
+    try {
+      const headers = await authHeaders();
+      const res = await fetch(`/api/spar/leaderboard?period=${period}`, { headers });
+      const data = await res.json();
+      setLeaderboard(data.rows || []);
+    } catch {
+      /* ignore */
+    } finally {
+      setLoadingLeaderboard(false);
+    }
+  }, [authHeaders]);
+
   const refresh = useCallback(async () => {
     try {
       const headers = await authHeaders();
-      const [sRes, lRes] = await Promise.all([
-        fetch('/api/spar/status', { headers }),
-        fetch('/api/spar/leaderboard', { headers }),
-      ]);
+      const sRes = await fetch('/api/spar/status', { headers });
       const sData = await sRes.json();
-      const lData = await lRes.json();
       if (sRes.ok) setStatus(sData);
-      setLeaderboard(lData.rows || []);
+      await loadLeaderboard(leaderboardPeriod);
     } catch (e: any) {
       setError(e.message || 'Failed to load spar status.');
     } finally {
       setLoading(false);
     }
-  }, [authHeaders]);
+  }, [authHeaders, leaderboardPeriod, loadLeaderboard]);
 
   useEffect(() => {
     const unsub = firebaseAuth.onAuthStateChanged(() => refresh());
     return () => unsub();
   }, [refresh]);
+
+  useEffect(() => {
+    loadLeaderboard(leaderboardPeriod);
+  }, [leaderboardPeriod, loadLeaderboard]);
 
   const startSearch = async () => {
     setError(null);
@@ -132,7 +157,7 @@ export default function SparLobbyPage() {
       <header className="flex items-center gap-4 mb-6">
         <button
           onClick={() => router.push('/spar')}
-          className="w-10 h-10 rounded-full border border-white/10 bg-white/5 flex items-center justify-center text-white/60"
+          className="w-10 h-10 rounded-full border border-white/10 bg-white/5 flex items-center justify-center text-white/60 hover:text-white transition-all"
         >
           <ArrowLeft className="w-4 h-4" />
         </button>
@@ -212,26 +237,104 @@ export default function SparLobbyPage() {
             )}
           </GlassCard>
 
-          <GlassCard className="p-5 border-white/5 bg-black/40">
-            <div className="flex items-center gap-2 mb-4">
-              <Trophy className="w-4 h-4 text-primary" />
-              <span className="text-[9px] font-black text-white/50 uppercase tracking-widest">
-                Spar Leaderboard (Paid Matches)
-              </span>
+          {/* Weekly & Monthly Sparring Leaderboard */}
+          <GlassCard className="p-5 border-white/10 bg-black/50">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Trophy className="w-4 h-4 text-primary" />
+                <span className="text-[10px] font-black text-white/70 uppercase tracking-widest">
+                  Spar Leaderboard
+                </span>
+              </div>
+
+              {/* Period Toggle */}
+              <div className="flex items-center bg-black/60 border border-white/10 rounded-xl p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setLeaderboardPeriod('weekly')}
+                  className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${
+                    leaderboardPeriod === 'weekly'
+                      ? 'bg-primary text-black shadow-[0_0_10px_rgba(226,255,59,0.5)]'
+                      : 'text-white/40 hover:text-white'
+                  }`}
+                >
+                  Weekly
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLeaderboardPeriod('monthly')}
+                  className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${
+                    leaderboardPeriod === 'monthly'
+                      ? 'bg-primary text-black shadow-[0_0_10px_rgba(226,255,59,0.5)]'
+                      : 'text-white/40 hover:text-white'
+                  }`}
+                >
+                  Monthly
+                </button>
+              </div>
             </div>
-            {leaderboard.length === 0 ? (
-              <p className="text-[11px] text-white/40 font-semibold">No paid match results yet.</p>
+
+            <div className="text-[9px] text-white/40 font-bold uppercase tracking-wider mb-3">
+              {leaderboardPeriod === 'weekly'
+                ? '⚡ Resets every Monday · Ranked by Wins, Win Rate & Combat Score'
+                : '🏆 Resets 1st of every month · Ranked by Wins, Win Rate & Combat Score'}
+            </div>
+
+            {loadingLeaderboard ? (
+              <div className="flex justify-center py-6 text-primary">
+                <Loader2 className="w-5 h-5 animate-spin" />
+              </div>
+            ) : leaderboard.length === 0 ? (
+              <div className="text-center py-6 text-white/30 text-[11px] font-semibold">
+                No matches recorded this {leaderboardPeriod === 'weekly' ? 'week' : 'month'} yet. Be the first to spar!
+              </div>
             ) : (
-              <div className="flex flex-col gap-2">
-                {leaderboard.slice(0, 10).map((row, i) => (
-                  <div key={row.uid} className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-white/80">
-                      <span className="text-white/30 mr-2">#{i + 1}</span>
-                      {row.display_name}
-                    </span>
-                    <span className="font-black text-primary">
-                      {row.wins}W · {row.losses}L
-                    </span>
+              <div className="flex flex-col gap-2.5">
+                {leaderboard.slice(0, 15).map((row, i) => (
+                  <div
+                    key={row.uid || i}
+                    className={`flex items-center justify-between p-3 rounded-2xl border transition-all ${
+                      i === 0
+                        ? 'border-primary/40 bg-gradient-to-r from-primary/10 via-black/40 to-transparent'
+                        : i === 1
+                          ? 'border-amber-400/30 bg-amber-400/[0.04]'
+                          : i === 2
+                            ? 'border-orange-500/20 bg-orange-500/[0.03]'
+                            : 'border-white/5 bg-white/[0.02]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span
+                        className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${
+                          i === 0
+                            ? 'bg-primary text-black font-black shadow-[0_0_8px_rgba(226,255,59,0.6)]'
+                            : i === 1
+                              ? 'bg-amber-400 text-black'
+                              : i === 2
+                                ? 'bg-orange-500 text-black'
+                                : 'text-white/40 border border-white/10'
+                        }`}
+                      >
+                        {i + 1}
+                      </span>
+                      <div>
+                        <div className="text-xs font-black text-white uppercase tracking-tight">
+                          {row.display_name}
+                        </div>
+                        <div className="text-[9px] text-white/40 font-bold uppercase">
+                          {row.matches_played} Matches · {row.wins}W - {row.losses}L
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-right">
+                      <div className="flex flex-col items-end">
+                        <span className="text-xs font-black text-primary">{row.win_rate}% WR</span>
+                        <span className="text-[8px] font-black text-white/40 uppercase">
+                          {row.avg_score} Avg Score
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
