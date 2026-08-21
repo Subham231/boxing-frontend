@@ -205,6 +205,8 @@ export async function getEntitlement(uid: string): Promise<Entitlement> {
       sparDailyUsed: sparUsed,
       freeSparAvailable: false,
       freeSparUnlocked: false,
+      wasSubscribed: false,
+      hasPurchasedPlan: false,
     };
   }
 
