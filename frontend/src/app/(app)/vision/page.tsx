@@ -639,10 +639,11 @@ export default function VisionPage() {
       if (!res.ok || !data.allowed) {
         if (data.reason === 'daily_limit_reached') {
           setSubscriptionError(`Daily analysis limit reached (${data.used}/${data.limit}). Upgrade your plan or come back tomorrow.`);
+          router.push('/subscription?reason=analysis_limit');
         } else {
           setSubscriptionError('An active subscription is required for AI Video Analysis.');
+          router.push('/subscription');
         }
-        router.push('/subscription');
         return;
       }
     } catch (e) {
