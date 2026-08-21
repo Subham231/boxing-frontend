@@ -268,7 +268,30 @@ function SubscriptionContent() {
             </div>
           </div>
         </GlassCard>
-      ) : null}
+      {/* Limit Reached Notification Banner */}
+      {reason && (
+        <GlassCard className="p-4 mb-6 border-amber-500/40 bg-amber-500/10 flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-amber-400 shrink-0" />
+          <div>
+            <div className="text-xs font-black text-amber-400 uppercase tracking-wide">
+              {reason === 'analysis_limit' && 'Daily AI Video Analysis Limit Reached'}
+              {reason === 'planner_limit' && 'Weekly Planner Generation Limit Reached'}
+              {reason === 'spar_limit' && 'Daily Sparring Limit Reached'}
+              {!['analysis_limit', 'planner_limit', 'spar_limit'].includes(reason) && 'Subscription Required'}
+            </div>
+            <div className="text-[10px] text-white/70 font-semibold mt-0.5">
+              {reason === 'analysis_limit' &&
+                'You have reached your daily AI Video Analysis allowance. Upgrade your plan below for higher daily limits or unlimited sessions.'}
+              {reason === 'planner_limit' &&
+                'You have used your weekly workout protocol generations. Upgrade your plan below to generate more custom protocols.'}
+              {reason === 'spar_limit' &&
+                'You have completed your daily sparring allowance. Upgrade your plan below for more matches.'}
+              {!['analysis_limit', 'planner_limit', 'spar_limit'].includes(reason) &&
+                'Select a plan below to unlock this feature.'}
+            </div>
+          </div>
+        </GlassCard>
+      )}
 
       {error && (
         <div className="flex items-start gap-2 p-4 mb-6 bg-red-500/10 border border-red-500/20 rounded-2xl">
@@ -338,5 +361,19 @@ function SubscriptionContent() {
         <span>Payments protected with 256-bit SSL encryption by Razorpay</span>
       </footer>
     </div>
+  );
+}
+
+export default function SubscriptionPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-[#0A0A0A]">
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        </div>
+      }
+    >
+      <SubscriptionContent />
+    </Suspense>
   );
 }
