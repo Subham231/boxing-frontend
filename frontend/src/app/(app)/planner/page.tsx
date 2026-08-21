@@ -208,7 +208,11 @@ export default function PlannerPage() {
     });
     const gateData = await gateRes.json();
     if (!gateRes.ok || !gateData.allowed) {
-      router.push('/subscription');
+      if (gateData.reason === 'weekly_limit_reached') {
+        router.push('/subscription?reason=planner_limit');
+      } else {
+        router.push('/subscription');
+      }
       throw new Error(
         gateData.reason === 'weekly_limit_reached'
           ? `Weekly planner limit reached (${gateData.used}/${gateData.limit}). Upgrade your plan or wait for next week.`
