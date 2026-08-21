@@ -40,6 +40,8 @@ import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
 import WelcomeIntro, { WELCOME_INTRO_KEY } from '@/components/tutorial/WelcomeIntro';
 import SpotlightTour, { TourStep } from '@/components/tutorial/SpotlightTour';
+import { SparFreePromoModal } from '@/components/ui/SparFreePromoModal';
+import { HomePromoDealsBanner } from '@/components/ui/HomePromoDealsBanner';
 
 const TUTORIAL_DONE_KEY = 'boxing_tutorial_done';
 
