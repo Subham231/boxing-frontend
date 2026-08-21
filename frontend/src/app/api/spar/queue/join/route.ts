@@ -6,13 +6,13 @@ import { generateSparCommandSequence } from '@/lib/server/spar';
 
 export const runtime = 'nodejs';
 
-async function purgeOldFreeMatches() {
+async function purgeOldIncompleteMatches() {
   if (!supabaseAdmin) return;
   const cutoff = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   await supabaseAdmin
     .from('spar_matches')
     .delete()
-    .eq('is_paid_match', false)
+    .in('status', ['pending', 'active', 'abandoned'])
     .lt('created_at', cutoff);
 }
 
