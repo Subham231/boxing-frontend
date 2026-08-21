@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import Script from 'next/script';
-import { useRouter } from 'next/navigation';
-import { ArrowLeft, Check, Crown, Loader2, ShieldCheck, AlertCircle, XCircle } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { ArrowLeft, Check, Crown, Loader2, ShieldCheck, AlertCircle, XCircle, Zap, Swords, Video } from 'lucide-react';
 import { firebaseAuth } from '@/lib/firebase';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
@@ -25,14 +25,14 @@ const PLAN_CARDS: PlanCard[] = [
     name: 'SparAI Monthly',
     price: '₹629',
     period: '/ month',
-    features: ['1 AI Video Analysis / day', '1 Planner Generation / week'],
+    features: ['1 AI Video Analysis / day', '1 Planner Generation / week', '1 Live Spar / day'],
   },
   {
     id: 'monthly_pro',
     name: 'SparAI Pro',
     price: '₹729',
     period: '/ month',
-    features: ['2 AI Video Analyses / day', '2 Planner Generations / week'],
+    features: ['2 AI Video Analyses / day', '2 Planner Generations / week', '2 Live Spars / day'],
     highlight: true,
   },
   {
@@ -40,7 +40,7 @@ const PLAN_CARDS: PlanCard[] = [
     name: 'SparAI Performance',
     price: '₹1,629',
     period: '/ 3 months',
-    features: ['3 AI Video Analyses / day', '3 Planner Generations / week'],
+    features: ['3 AI Video Analyses / day', '3 Planner Generations / week', '3 Live Spars / day'],
   },
   {
     id: 'yearly',
@@ -50,14 +50,18 @@ const PLAN_CARDS: PlanCard[] = [
     features: [
       'Unlimited AI Video Analyses',
       'Unlimited Planner Generations',
+      'Unlimited Live Spars',
       'Premium Guru skills unlocked',
       'Elite Member badge',
     ],
   },
 ];
 
-export default function SubscriptionPage() {
+function SubscriptionContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const reason = searchParams.get('reason');
+
   const [status, setStatus] = useState<any>(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
   const [processingPlan, setProcessingPlan] = useState<string | null>(null);
