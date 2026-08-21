@@ -244,19 +244,27 @@ export default function SubscriptionPage() {
         </GlassCard>
       )}
 
-      {!loadingStatus && !status?.active && (
+      {!loadingStatus && !status?.active && status?.wasSubscribed && status?.expiresAt ? (
         <GlassCard className="p-5 mb-6 border-red-500/30 bg-red-500/5 flex items-center gap-3">
           <AlertCircle className="w-6 h-6 text-red-400 shrink-0" />
           <div>
-            <div className="text-sm font-black text-white uppercase">Subscription Expired or Inactive</div>
+            <div className="text-sm font-black text-white uppercase">Subscription Expired</div>
             <div className="text-[10px] text-white/60 font-bold uppercase tracking-wide">
-              {status?.expiresAt
-                ? `Your access expired on ${new Date(status.expiresAt).toLocaleDateString()}. Select a plan below to renew or upgrade your access.`
-                : 'No active plan. Select a subscription below to unlock full access.'}
+              Your access expired on {new Date(status.expiresAt).toLocaleDateString()}. Select a plan below to renew or upgrade your access.
             </div>
           </div>
         </GlassCard>
-      )}
+      ) : !loadingStatus && !status?.active ? (
+        <GlassCard className="p-5 mb-6 border-primary/30 bg-primary/5 flex items-center gap-3.5 shadow-[0_0_20px_rgba(226,255,59,0.08)]">
+          <Crown className="w-6 h-6 text-primary shrink-0 drop-shadow-[0_0_8px_rgba(226,255,59,0.8)]" />
+          <div>
+            <div className="text-sm font-black text-white uppercase tracking-wide">Unlock Full SparAI Protocol</div>
+            <div className="text-[10px] text-white/60 font-bold uppercase tracking-wide mt-0.5">
+              Select a subscription plan below to unlock AI Video Analysis, Custom Workouts, Guru & Tactical Training.
+            </div>
+          </div>
+        </GlassCard>
+      ) : null}
 
       {error && (
         <div className="flex items-start gap-2 p-4 mb-6 bg-red-500/10 border border-red-500/20 rounded-2xl">
