@@ -583,12 +583,34 @@ export default function SettingsPage() {
       {/* DANGER ZONE */}
       <div className="flex flex-col gap-3.5">
         <span className="text-[9px] font-black tracking-[3px] text-red-500/70 uppercase pl-2.5">
-          DANGER ZONE
+          ACCOUNT ACTIONS
         </span>
 
+        {/* LOGOUT BUTTON */}
+        <div 
+          onClick={handleLogout}
+          className="p-4 sm:p-5 rounded-3xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] cursor-pointer transition-all flex items-center justify-between"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white">
+              <LogOut className="w-4 h-4" />
+            </div>
+            <div>
+              <h4 className="text-xs font-black uppercase text-white leading-none">
+                LOG OUT OF ACCOUNT
+              </h4>
+              <span className="text-[8px] font-black text-white/40 uppercase block mt-1">
+                SIGN OUT & RETURN TO HOME PAGE
+              </span>
+            </div>
+          </div>
+          <ChevronRight className="w-4 h-4 text-white/40" />
+        </div>
+
+        {/* RESET ENGINE */}
         <div 
           onClick={handleResetEngine}
-          className="p-5 rounded-3xl border border-red-500/20 bg-red-500/[0.03] hover:bg-red-500/[0.06] cursor-pointer transition-all flex items-center justify-between"
+          className="p-4 sm:p-5 rounded-3xl border border-red-500/20 bg-red-500/[0.03] hover:bg-red-500/[0.06] cursor-pointer transition-all flex items-center justify-between"
         >
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500">
