@@ -141,29 +141,71 @@ const OnboardingFlow: React.FC = () => {
         );
     }
 
+    const percent = Math.min(100, Math.round((currentStep / totalSteps) * 100));
+
+    // Dynamic milestone toast on top of the progression bar (spaced periodically, not rapid)
+    const milestoneMessage = useMemo(() => {
+        const remaining = totalSteps - currentStep;
+        if (currentStep === 1) return 'Getting Started';
+        if (remaining === 0 || currentStep >= totalSteps) return 'Final Step — Entering Ring!';
+        if (remaining <= 3) return `Almost there! Just ${remaining} more to go`;
+        if (percent >= 80) return 'Nearly Done — Finalizing Protocol';
+        if (percent >= 50 && percent < 60) return 'Halfway there, fighter!';
+        if (percent >= 25 && percent < 35) return 'Building your combat profile...';
+        return null;
+    }, [currentStep, totalSteps, percent]);
+
     return (
-        <div className="flex-1 flex flex-col items-center justify-center p-6 pb-16 bg-[#0a0a0c] h-dvh max-h-dvh overflow-hidden scrollbar-hide">
+        <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 pb-20 bg-[#0a0a0c] h-dvh max-h-dvh overflow-hidden scrollbar-hide">
             <AnimatePresence mode="wait">
                 <motion.div
                     key={currentStep}
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.4, ease: 'easeOut' }}
-                    className="w-full max-w-lg h-full overflow-y-auto overflow-x-hidden scrollbar-hide"
+                    transition={{ duration: 0.35, ease: 'easeOut' }}
+                    className="w-full max-w-lg h-full overflow-y-auto overflow-x-hidden scrollbar-hide flex flex-col justify-between"
                 >
                     {screens[currentStep - 1] || <FinalPromise />}
                 </motion.div>
             </AnimatePresence>
 
-            <div className="fixed bottom-10 left-0 right-0 px-10 flex gap-1 pointer-events-none">
-                {Array.from({ length: totalSteps }).map((_, i) => (
-                    <div
-                        key={i}
-                        className={`h-[2px] flex-1 transition-all duration-500 ${i + 1 <= Math.min(currentStep, totalSteps) ? 'bg-primary' : 'bg-white/10'
-                            }`}
+            {/* Bottom Progression Bar with Percentage & Periodic Milestone Popup */}
+            <div className="fixed bottom-3 sm:bottom-4 left-0 right-0 max-w-lg mx-auto px-6 sm:px-8 z-30 pointer-events-none flex flex-col gap-1.5">
+                {/* Milestone Toast Tag */}
+                <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-widest text-white/50">
+                    <AnimatePresence mode="wait">
+                        {milestoneMessage ? (
+                            <motion.div
+                                key={milestoneMessage}
+                                initial={{ opacity: 0, y: 4, scale: 0.95 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, y: -4, scale: 0.95 }}
+                                transition={{ duration: 0.4 }}
+                                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-primary/10 border border-primary/30 text-primary text-[8px] font-black shadow-[0_0_10px_rgba(226,255,59,0.2)]"
+                            >
+                                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                                {milestoneMessage}
+                            </motion.div>
+                        ) : (
+                            <span className="text-[8px] text-white/30 tracking-widest">TACTICAL ONBOARDING</span>
+                        )}
+                    </AnimatePresence>
+
+                    <span className="text-[9px] font-black text-primary drop-shadow-[0_0_8px_rgba(226,255,59,0.5)]">
+                        {percent}%
+                    </span>
+                </div>
+
+                {/* Progress Bar Container */}
+                <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden p-0.5 border border-white/5 backdrop-blur-md">
+                    <motion.div
+                        className="h-full bg-gradient-to-r from-primary/80 via-primary to-yellow-300 rounded-full shadow-[0_0_10px_rgba(226,255,59,0.6)]"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${percent}%` }}
+                        transition={{ duration: 0.5, ease: 'easeOut' }}
                     />
-                ))}
+                </div>
             </div>
         </div>
     );
