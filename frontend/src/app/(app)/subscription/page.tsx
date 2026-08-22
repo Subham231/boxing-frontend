@@ -1,9 +1,8 @@
-'use client';
-
 import React, { useEffect, useState, Suspense } from 'react';
 import Script from 'next/script';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Check, Crown, Loader2, ShieldCheck, AlertCircle, XCircle, Zap, Swords, Video } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ArrowLeft, Check, Crown, Loader2, ShieldCheck, AlertCircle, XCircle, Zap, Swords, Video, Sparkles, X, Gift } from 'lucide-react';
 import { firebaseAuth } from '@/lib/firebase';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
