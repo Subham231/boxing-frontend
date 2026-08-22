@@ -16,7 +16,7 @@ const config: Config = {
         'text-muted': '#888888',
       },
       fontFamily: {
-        sans: ['var(--font-space-grotesk)', 'Space Grotesk', 'system-ui', '-apple-system', 'sans-serif'],
+        sans: ['Space Grotesk', 'system-ui', '-apple-system', 'sans-serif'],
       },
       backgroundImage: {
         'glass-gradient': 'linear-gradient(to bottom, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.01))',
