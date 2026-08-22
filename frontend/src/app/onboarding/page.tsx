@@ -8,6 +8,7 @@ import { Loader2 } from 'lucide-react';
 import Welcome from './components/Welcome';
 import TrainingProblem from './components/TrainingProblem';
 import Obstacle from './components/Obstacle';
+import FreestyleAnalysis from './components/FreestyleAnalysis';
 import FavoriteFighter from './components/FavoriteFighter';
 import Motivation from './components/Motivation';
 import FutureSelf from './components/FutureSelf';
@@ -27,6 +28,7 @@ import Identity from './components/Problem';
 import Commitment from './components/Commitment';
 import PromiseStep from './components/Promise';
 import OtpVerification from './components/OtpVerification';
+import AnalysisMeritsReveal from './components/AnalysisMeritsReveal';
 import SubscriptionOffer from './components/SubscriptionOffer';
 import FinalPromise from './components/FinalPromise';
 
