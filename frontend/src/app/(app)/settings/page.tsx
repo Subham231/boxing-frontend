@@ -19,13 +19,15 @@ import {
   X,
   Volume2,
   Brain,
-  ChevronRight
+  ChevronRight,
+  LogOut
 } from 'lucide-react';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
 import { API_BASE_URL } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
 import { useMyProfile } from '@/lib/profile-client';
+import { signOutFirebase } from '@/lib/firebase-auth';
 
 interface OnboardingData {
   ringName?: string;
