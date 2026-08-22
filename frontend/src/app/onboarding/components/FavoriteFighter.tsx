@@ -46,19 +46,19 @@ const FavoriteFighter: React.FC = () => {
               type="button"
               onClick={() => handleSelect(f.name)}
               whileTap={{ scale: 0.98 }}
-              className={`text-left p-4 rounded-3xl border transition-all duration-300 ${
+              className={`text-left p-3.5 sm:p-4 rounded-3xl border transition-all duration-300 ${
                 active ? 'bg-primary/10 border-primary shadow-[0_0_20px_rgba(226,255,59,0.15)]' : 'bg-black/30 border-white/5 hover:border-white/10'
               }`}
             >
               <div className="flex items-center justify-between">
-                <span className={`text-sm font-black uppercase ${active ? 'text-primary' : 'text-white'}`}>{f.name}</span>
-                <div className="flex gap-1.5">
-                  {f.traits.map((t) => (
-                    <span key={t} className="text-[8px] font-bold text-white/30 uppercase bg-white/5 px-2 py-0.5 rounded-full">
-                      {t}
-                    </span>
-                  ))}
-                </div>
+                <span className={`text-xs sm:text-sm font-black uppercase ${active ? 'text-primary' : 'text-white'}`}>{f.name}</span>
+                {f.tag && (
+                  <span className={`text-[8px] font-black uppercase px-2.5 py-0.5 rounded-full ${
+                    active ? 'bg-primary text-black' : 'bg-white/5 text-white/40 border border-white/5'
+                  }`}>
+                    {f.tag}
+                  </span>
+                )}
               </div>
             </motion.button>
           );
