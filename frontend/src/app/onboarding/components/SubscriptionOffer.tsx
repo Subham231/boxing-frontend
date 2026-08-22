@@ -105,6 +105,7 @@ const SubscriptionOffer: React.FC = () => {
         </p>
       </header>
 
+      <main className="flex-1 flex flex-col gap-4 overflow-y-auto scrollbar-hide">
         {/* Psychological Price Comparison: Traditional Boxing Gyms vs SparAI */}
         <div className="rounded-3xl border border-red-500/30 bg-gradient-to-br from-red-500/10 via-black/60 to-black/90 p-4.5 sm:p-5 shadow-[0_0_25px_rgba(239,68,68,0.15)] relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-full blur-2xl pointer-events-none" />
