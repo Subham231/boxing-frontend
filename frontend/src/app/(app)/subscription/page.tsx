@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useEffect, useState, Suspense } from 'react';
 import Script from 'next/script';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -68,6 +70,19 @@ function SubscriptionContent() {
   const [scriptLoaded, setScriptLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [showSparPopup, setShowSparPopup] = useState(false);
+
+  useEffect(() => {
+    // Show free sparring pop-up upon arriving at subscription page
+    const hasSeenSparPopup = sessionStorage.getItem('spar_sub_page_popup_shown');
+    if (!hasSeenSparPopup) {
+      const timer = setTimeout(() => {
+        setShowSparPopup(true);
+        sessionStorage.setItem('spar_sub_page_popup_shown', 'true');
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, []);
 
   const fetchStatus = async () => {
     const user = firebaseAuth.currentUser;
