@@ -140,15 +140,6 @@ const OnboardingFlow: React.FC = () => {
         ];
     }, [middleOrder]);
 
-    if (!isLoaded || !middleOrder) {
-        return (
-            <div className="flex-1 flex flex-col items-center justify-center p-6 min-h-screen bg-bg-dark gap-4 overflow-hidden scrollbar-hide">
-                <Loader2 className="w-10 h-10 text-primary animate-spin" />
-                <p className="text-[10px] text-text-muted uppercase tracking-[3px]">Loading System...</p>
-            </div>
-        );
-    }
-
     const percent = Math.min(100, Math.round((currentStep / totalSteps) * 100));
 
     // Dynamic milestone toast on top of the progression bar (spaced periodically, not rapid)
@@ -162,6 +153,15 @@ const OnboardingFlow: React.FC = () => {
         if (percent >= 25 && percent < 35) return 'Building your combat profile...';
         return null;
     }, [currentStep, totalSteps, percent]);
+
+    if (!isLoaded || !middleOrder) {
+        return (
+            <div className="flex-1 flex flex-col items-center justify-center p-6 min-h-screen bg-bg-dark gap-4 overflow-hidden scrollbar-hide">
+                <Loader2 className="w-10 h-10 text-primary animate-spin" />
+                <p className="text-[10px] text-text-muted uppercase tracking-[3px]">Loading System...</p>
+            </div>
+        );
+    }
 
     return (
         <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 pb-20 bg-[#0a0a0c] h-dvh max-h-dvh overflow-hidden scrollbar-hide">
