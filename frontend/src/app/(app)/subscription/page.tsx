@@ -411,6 +411,86 @@ function SubscriptionContent() {
         </div>
       )}
 
+      {/* Free Trial Hub VIP Banner */}
+      <div 
+        onClick={() => router.push('/free-trial')}
+        className="mb-6 cursor-pointer p-4 rounded-[28px] border border-primary/40 bg-gradient-to-r from-primary/15 via-black to-black hover:border-primary transition-all flex items-center justify-between shadow-[0_0_25px_rgba(226,255,59,0.15)] group"
+      >
+        <div className="flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-2xl bg-primary/20 border border-primary/30 flex items-center justify-center text-primary shrink-0 group-hover:scale-110 transition-transform">
+            <Gift className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-black uppercase text-white tracking-wide">30-Day Free Trial Hub</span>
+              <span className="text-[7px] font-black uppercase bg-primary text-black px-2 py-0.5 rounded-full">INVITE 5</span>
+            </div>
+            <span className="text-[10px] text-white/50 font-semibold block mt-0.5">
+              Share your referral code to unlock 30 days of full Pro access for free
+            </span>
+          </div>
+        </div>
+        <ChevronRight className="w-5 h-5 text-primary group-hover:translate-x-1 transition-transform shrink-0" />
+      </div>
+
+      {/* Traditional Boxing Gyms Overpriced Comparison Card */}
+      <div className="mb-6 rounded-[28px] border-2 border-red-500/30 bg-gradient-to-br from-red-500/10 via-black/80 to-black p-4.5 sm:p-5 shadow-[0_0_25px_rgba(239,68,68,0.15)] relative overflow-hidden flex flex-col gap-3">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-full blur-2xl pointer-events-none" />
+        
+        <div className="flex items-center justify-between">
+          <span className="text-[9px] font-black uppercase tracking-[2px] text-red-400">
+            TRADITIONAL BOXING ACADEMY
+          </span>
+          <span className="text-[8px] bg-red-500/20 text-red-400 border border-red-500/30 font-black px-2.5 py-0.5 rounded-full uppercase">
+            OVERPRICED
+          </span>
+        </div>
+
+        <div className="flex items-baseline justify-between border-b border-red-500/20 pb-3">
+          <div>
+            <div className="text-xl sm:text-2xl font-black text-red-500 tracking-tight line-through opacity-90">
+              ₹8,500 – ₹18,000
+            </div>
+            <span className="text-[9px] text-red-400/80 font-bold uppercase block mt-0.5">
+              / MONTH + ₹1,500/HR COACH FEES
+            </span>
+          </div>
+          <div className="text-right">
+            <span className="text-sm sm:text-base font-black text-primary uppercase">
+              FROM ₹629/MO
+            </span>
+            <span className="text-[8px] font-bold text-white/50 uppercase block">
+              24/7 AI COACH (SAVE 94%)
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 text-[10px] font-bold">
+          <div className="flex flex-col gap-1 text-red-400/80">
+            <span className="flex items-center gap-1.5 line-through">
+              <span className="text-red-500 font-black">✕</span> ₹1,500/hr Trainer Fee
+            </span>
+            <span className="flex items-center gap-1.5 line-through">
+              <span className="text-red-500 font-black">✕</span> Fixed Time Slots
+            </span>
+            <span className="flex items-center gap-1.5 line-through">
+              <span className="text-red-500 font-black">✕</span> Zero Computer Vision
+            </span>
+          </div>
+          <div className="flex flex-col gap-1 text-white/90">
+            <span className="flex items-center gap-1.5 text-primary">
+              <Check className="w-3 h-3 text-primary stroke-[3]" /> 24/7 AI Form Feedback
+            </span>
+            <span className="flex items-center gap-1.5 text-primary">
+              <Check className="w-3 h-3 text-primary stroke-[3]" /> Train Anytime from Home
+            </span>
+            <span className="flex items-center gap-1.5 text-primary">
+              <Check className="w-3 h-3 text-primary stroke-[3]" /> Realtime Live Sparring
+            </span>
+          </div>
+        </div>
+      </div>
+
       <div className="flex flex-col gap-4">
         {PLAN_CARDS.map((plan) => (
           <GlassCard
