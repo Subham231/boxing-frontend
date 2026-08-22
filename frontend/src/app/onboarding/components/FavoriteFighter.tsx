@@ -7,18 +7,15 @@ import { useOnboarding } from '@/context/OnboardingContext';
 import StepBadge from './StepBadge';
 
 const FIGHTERS = [
-  { name: 'Floyd Mayweather', traits: ['Defense', 'Precision', 'Discipline'], quote: 'Hard work and dedication — that\'s the difference.' },
-  { name: 'Muhammad Ali', traits: ['Confidence', 'Movement', 'Greatness'], quote: 'I am the greatest, I said that even before I knew I was.' },
-  { name: 'Mike Tyson', traits: ['Aggression', 'Power', 'Fearlessness'], quote: 'Discipline is doing what needs to be done even when you don\'t feel like doing it.' },
-  { name: 'Manny Pacquiao', traits: ['Speed', 'Endurance', 'Heart'], quote: 'Explosiveness, that\'s my strength.' },
-  { name: 'Canelo Alvarez', traits: ['IQ', 'Technique', 'Patience'], quote: 'I always believe in myself and my abilities.' },
-  { name: 'Oleksandr Usyk', traits: ['Footwork', 'Strategy', 'Adaptability'], quote: 'You have to work hard in silence.' },
-  { name: 'Someone Else', traits: ['My own path'], quote: 'Every great fighter starts by writing their own story.' },
+  { name: 'Floyd Mayweather', tag: 'Defense Master', traits: ['Defense', 'IQ'], quote: 'Hard work and dedication — that\'s the difference.' },
+  { name: 'Mike Tyson', tag: 'Most Popular', traits: ['Power', 'Aggression'], quote: 'Discipline is doing what needs to be done even when you don\'t feel like doing it.' },
+  { name: 'Muhammad Ali', tag: 'GOAT Legend', traits: ['Movement', 'Heart'], quote: 'I am the greatest, I said that even before I knew I was.' },
+  { name: 'Manny Pacquiao', tag: 'Speed Demon', traits: ['Speed', 'Angles'], quote: 'Explosiveness, that\'s my strength.' },
 ];
 
 const FavoriteFighter: React.FC = () => {
   const { data, updateData, nextStep, prevStep } = useOnboarding();
-  const [selected, setSelected] = useState<string | null>(data.favoriteFighter || null);
+  const [selected, setSelected] = useState<string>(data.favoriteFighter || 'Mike Tyson');
 
   const handleSelect = (name: string) => {
     setSelected(name);
