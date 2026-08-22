@@ -422,9 +422,21 @@ function SubscriptionContent() {
             <div className="flex justify-between items-start">
               <div className="flex items-center gap-2">
                 {plan.highlight && <Crown className="w-4 h-4 text-primary" />}
-                <span className="text-sm font-black uppercase text-white tracking-wider">{plan.name}</span>
+                <div>
+                  <span className="text-sm font-black uppercase text-white tracking-wider block">{plan.name}</span>
+                  {plan.discountTag && (
+                    <span className="text-[8px] font-black text-black bg-primary px-2 py-0.5 rounded-full uppercase tracking-wider inline-block mt-0.5">
+                      {plan.discountTag}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="text-right">
+                {plan.originalPrice && (
+                  <span className="text-xs font-bold text-red-400/80 line-through block">
+                    {plan.originalPrice}
+                  </span>
+                )}
                 <span className="text-xl font-black text-white">{plan.price}</span>
                 <span className="text-[9px] text-white/40 font-bold block">{plan.period}</span>
               </div>
