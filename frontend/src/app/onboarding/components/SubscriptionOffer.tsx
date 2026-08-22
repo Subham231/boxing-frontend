@@ -105,7 +105,64 @@ const SubscriptionOffer: React.FC = () => {
         </p>
       </header>
 
-      <main className="flex-1 flex flex-col gap-4 overflow-y-auto scrollbar-hide">
+        {/* Psychological Price Comparison: Traditional Boxing Gyms vs SparAI */}
+        <div className="rounded-3xl border border-red-500/30 bg-gradient-to-br from-red-500/10 via-black/60 to-black/90 p-4.5 sm:p-5 shadow-[0_0_25px_rgba(239,68,68,0.15)] relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-full blur-2xl pointer-events-none" />
+          
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[9px] font-black uppercase tracking-[2px] text-red-400">
+              TRADITIONAL BOXING GYM
+            </span>
+            <span className="text-[8px] bg-red-500/20 text-red-400 border border-red-500/30 font-black px-2.5 py-0.5 rounded-full uppercase">
+              OVERPRICED
+            </span>
+          </div>
+
+          <div className="flex items-baseline justify-between mb-3 border-b border-red-500/20 pb-3">
+            <div>
+              <div className="text-xl sm:text-2xl font-black text-red-500 tracking-tight line-through opacity-90">
+                ₹8,500 – ₹18,000
+              </div>
+              <span className="text-[9px] text-red-400/80 font-bold uppercase block">
+                / MONTH + PERSONAL COACH FEES
+              </span>
+            </div>
+            <div className="text-right">
+              <span className="text-sm font-black text-primary uppercase">
+                FROM ₹629<span className="text-[9px] text-white/50">/mo</span>
+              </span>
+              <span className="text-[8px] font-bold text-white/40 uppercase block">
+                SPARAI 24/7 AI COACH
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 text-[10px] font-bold">
+            <div className="flex flex-col gap-1 text-red-400/80">
+              <span className="flex items-center gap-1.5 line-through">
+                <span className="text-red-500 font-black">✕</span> ₹1,500/hr Coach Fee
+              </span>
+              <span className="flex items-center gap-1.5 line-through">
+                <span className="text-red-500 font-black">✕</span> Fixed Time Slots
+              </span>
+              <span className="flex items-center gap-1.5 line-through">
+                <span className="text-red-500 font-black">✕</span> Zero Computer Vision
+              </span>
+            </div>
+            <div className="flex flex-col gap-1 text-white/90">
+              <span className="flex items-center gap-1.5 text-primary">
+                <Check className="w-3 h-3 text-primary stroke-[3]" /> 24/7 Live AI Analysis
+              </span>
+              <span className="flex items-center gap-1.5 text-primary">
+                <Check className="w-3 h-3 text-primary stroke-[3]" /> Train Anytime, Anywhere
+              </span>
+              <span className="flex items-center gap-1.5 text-primary">
+                <Check className="w-3 h-3 text-primary stroke-[3]" /> Save Over 90% Costs
+              </span>
+            </div>
+          </div>
+        </div>
+
         {PLANS.map((plan) => {
           const active = selected === plan.id;
           return (
@@ -113,16 +170,16 @@ const SubscriptionOffer: React.FC = () => {
               key={plan.id}
               type="button"
               onClick={() => setSelected(plan.id)}
-              className={`relative text-left p-5 rounded-3xl border transition-all duration-300 ${
+              className={`relative text-left p-4.5 sm:p-5 rounded-3xl border transition-all duration-300 ${
                 active ? 'bg-primary/10 border-primary shadow-[0_0_20px_rgba(226,255,59,0.15)]' : 'bg-black/30 border-white/5 hover:border-white/10'
               }`}
             >
               {plan.highlight && (
                 <div className="absolute -top-2.5 right-5 bg-primary text-black text-[8px] font-black px-3 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
-                  <Crown className="w-2.5 h-2.5" /> Popular
+                  <Crown className="w-2.5 h-2.5" /> Popular Choice
                 </div>
               )}
-              <div className="flex items-baseline justify-between mb-3">
+              <div className="flex items-baseline justify-between mb-2.5">
                 <span className={`text-sm font-black uppercase ${active ? 'text-primary' : 'text-white'}`}>{plan.name}</span>
                 <span className="text-xl font-black text-white">
                   {plan.price}<span className="text-[10px] text-white/40 font-bold">{plan.period}</span>
