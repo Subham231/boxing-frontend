@@ -37,7 +37,7 @@ export default function ReferralCard({ uid }: { uid: string }) {
       <div className="flex items-center gap-2">
         <Gift className="w-4 h-4 text-primary" />
         <span className="text-[10px] font-black text-primary uppercase tracking-widest">
-          {rewardClaimed ? 'Referral Reward Claimed' : 'Refer 5 Friends, Get 14 Days Premium'}
+          {rewardClaimed ? 'Referral Reward Claimed' : 'Refer 5 Friends, Get 30 Days Full Premium Free'}
         </span>
       </div>
 
@@ -62,7 +62,7 @@ export default function ReferralCard({ uid }: { uid: string }) {
 
       {rewardStillActive && (
         <div className="text-[10px] font-black text-primary uppercase text-center bg-primary/10 border border-primary/20 rounded-xl py-2">
-          14-Day Reward Active until {new Date(profile.plan_expires_at!).toLocaleDateString()}
+          30-Day Reward Active until {new Date(profile.plan_expires_at!).toLocaleDateString()}
         </div>
       )}
       {rewardClaimed && !rewardStillActive && (
