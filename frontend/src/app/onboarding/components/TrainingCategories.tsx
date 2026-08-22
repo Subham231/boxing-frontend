@@ -7,13 +7,10 @@ import { useOnboarding } from '@/context/OnboardingContext';
 import StepBadge from './StepBadge';
 
 const CATEGORIES = [
-  { icon: Target, label: 'Technique', desc: 'Sharpen your form' },
-  { icon: Zap, label: 'Speed', desc: 'Faster hands & feet' },
-  { icon: Dumbbell, label: 'Power', desc: 'Hit harder' },
-  { icon: Wind, label: 'Conditioning', desc: 'Go the distance' },
-  { icon: Footprints, label: 'Footwork', desc: 'Control the ring' },
-  { icon: ShieldHalf, label: 'Defense', desc: 'Slip & guard' },
-  { icon: Activity, label: 'Mobility', desc: 'Stay injury-free' },
+  { icon: Target, label: 'Technique & Form', tag: 'Core Pillar', desc: 'Sharpen your kinetic chain' },
+  { icon: Zap, label: 'Speed & Reflexes', tag: 'Rapid AI Drills', desc: 'Faster hands, slips & reaction' },
+  { icon: Dumbbell, label: 'Power & Combos', tag: 'High Velocity', desc: 'Heavy strikes & leverage' },
+  { icon: Footprints, label: 'Ring Footwork', tag: 'Tactical IQ', desc: 'Control distance and angles' },
 ];
 
 const TrainingCategories: React.FC = () => {
@@ -21,13 +18,13 @@ const TrainingCategories: React.FC = () => {
 
   return (
     <div className="flex flex-col min-h-[85vh] justify-between py-2">
-      <header className="text-left mb-6">
+      <header className="text-left mb-4">
         <StepBadge />
-        <h1 className="text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
+        <h1 className="text-2xl sm:text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
           Every workout has a <span className="text-primary">purpose</span>.
         </h1>
-        <p className="text-white/50 mt-4 text-sm leading-relaxed font-semibold">
-          Every session is designed to help you improve a specific part of your boxing performance.
+        <p className="text-white/50 mt-2 text-xs sm:text-sm leading-relaxed font-semibold">
+          Every session is designed to help you master key boxing skills.
         </p>
       </header>
 
@@ -41,13 +38,22 @@ const TrainingCategories: React.FC = () => {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: i * 0.06 }}
-              className="glass-card p-4 rounded-3xl border-white/5 bg-black/40 flex flex-col gap-2"
+              className="glass-card p-3.5 sm:p-4 rounded-3xl border-white/5 bg-black/40 flex flex-col justify-between gap-2"
             >
-              <div className="w-9 h-9 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
-                <Icon className="w-4 h-4" />
+              <div className="flex justify-between items-start">
+                <div className="w-9 h-9 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
+                  <Icon className="w-4 h-4" />
+                </div>
+                {cat.tag && (
+                  <span className="text-[7px] font-black uppercase tracking-wider text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full">
+                    {cat.tag}
+                  </span>
+                )}
               </div>
-              <span className="text-xs font-black text-white uppercase tracking-wide">{cat.label}</span>
-              <span className="text-[9px] text-white/40 font-semibold leading-tight">{cat.desc}</span>
+              <div>
+                <span className="text-xs font-black text-white uppercase tracking-wide block">{cat.label}</span>
+                <span className="text-[9px] text-white/40 font-semibold leading-tight block mt-0.5">{cat.desc}</span>
+              </div>
             </motion.div>
           );
         })}
