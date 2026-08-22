@@ -123,12 +123,18 @@ const OnboardingFlow: React.FC = () => {
         if (!middleOrder) return [];
         return [
             <Welcome key="welcome" />,
-            ...middleOrder.map((id) => MIDDLE_COMPONENTS[id]),
+            <TrainingProblem key="training-problem" />,
+            <Obstacle key="obstacle" />,
+            <FreestyleAnalysis key="freestyle-analysis" />,
+            ...middleOrder
+                .filter((id) => id !== 'training-problem' && id !== 'obstacle')
+                .map((id) => MIDDLE_COMPONENTS[id]),
             <JourneyStart key="journey" />,
             <Commitment key="commitment" />,
             <Identity key="identity" />,
             <PromiseStep key="promise" />,
             <OtpVerification key="otp" />,
+            <AnalysisMeritsReveal key="merits-reveal" />,
             <SubscriptionOffer key="subscription" />,
             <FinalPromise key="finalpromise" />,
         ];
