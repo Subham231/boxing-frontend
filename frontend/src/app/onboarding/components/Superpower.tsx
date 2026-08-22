@@ -7,17 +7,15 @@ import { useOnboarding } from '@/context/OnboardingContext';
 import StepBadge from './StepBadge';
 
 const SUPERPOWERS = [
-  { icon: Shield, label: 'Iron Chin', desc: 'Nothing knocks me down.' },
-  { icon: Zap, label: 'Lightning Hands', desc: "I'm faster than I look." },
-  { icon: Footprints, label: 'Footwork Wizard', desc: 'I control the distance.' },
-  { icon: Flame, label: 'Relentless Heart', desc: 'I outwork everyone.' },
-  { icon: Snowflake, label: 'Ice-Cold Focus', desc: 'Pressure doesn\'t rattle me.' },
-  { icon: Sparkles, label: 'Explosive Power', desc: 'One shot changes everything.' },
+  { icon: Zap, label: 'Lightning Hands', tag: 'Top Picked', desc: "I'm faster than I look." },
+  { icon: Sparkles, label: 'Explosive Power', tag: 'KO Power', desc: 'One clean shot changes everything.' },
+  { icon: Footprints, label: 'Footwork Wizard', tag: 'Recommended', desc: 'I control distance & angles.' },
+  { icon: Flame, label: 'Relentless Engine', tag: 'Best Stamina', desc: 'I outwork & break pace.' },
 ];
 
 const Superpower: React.FC = () => {
   const { data, updateData, nextStep, prevStep } = useOnboarding();
-  const [selected, setSelected] = useState<string | null>(data.trainingSuperpower || null);
+  const [selected, setSelected] = useState<string>(data.trainingSuperpower || 'Lightning Hands');
 
   const handleSelect = (label: string) => {
     setSelected(label);
@@ -26,13 +24,13 @@ const Superpower: React.FC = () => {
 
   return (
     <div className="flex flex-col min-h-[85vh] justify-between py-2">
-      <header className="text-left mb-6">
+      <header className="text-left mb-4">
         <StepBadge />
-        <h1 className="text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
+        <h1 className="text-2xl sm:text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
           What's your training <span className="text-primary">superpower</span>?
         </h1>
-        <p className="text-white/50 mt-4 text-sm leading-relaxed font-semibold">
-          Every fighter has a trait that sets them apart. What's yours — or the one you're building?
+        <p className="text-white/50 mt-2 text-xs sm:text-sm leading-relaxed font-semibold">
+          Every fighter has a trait that sets them apart. What's yours?
         </p>
       </header>
 
@@ -45,16 +43,21 @@ const Superpower: React.FC = () => {
               key={s.label}
               type="button"
               whileTap={{ scale: 0.95 }}
-              animate={active ? { scale: [1, 1.06, 1] } : { scale: 1 }}
-              transition={{ duration: 0.4 }}
               onClick={() => handleSelect(s.label)}
-              className={`flex flex-col items-center gap-2 p-4 rounded-3xl border text-center transition-all duration-300 ${
+              className={`relative flex flex-col items-center justify-between p-3.5 rounded-3xl border text-center transition-all duration-300 ${
                 active ? 'bg-primary/10 border-primary shadow-[0_0_20px_rgba(226,255,59,0.2)]' : 'bg-black/30 border-white/5 hover:border-white/10'
               }`}
             >
-              <Icon className={`w-7 h-7 ${active ? 'text-primary' : 'text-primary/40'}`} strokeWidth={2.25} />
+              {s.tag && (
+                <span className={`text-[7px] font-black uppercase px-2 py-0.5 rounded-full mb-1 ${
+                  active ? 'bg-primary text-black' : 'bg-white/5 text-white/40 border border-white/5'
+                }`}>
+                  {s.tag}
+                </span>
+              )}
+              <Icon className={`w-6 h-6 my-1 ${active ? 'text-primary' : 'text-primary/40'}`} strokeWidth={2.25} />
               <span className={`text-[10px] font-black uppercase leading-tight ${active ? 'text-primary' : 'text-white/70'}`}>{s.label}</span>
-              <span className="text-[8px] text-white/30 font-semibold italic leading-tight">"{s.desc}"</span>
+              <span className="text-[8px] text-white/35 font-semibold italic leading-tight mt-0.5">"{s.desc}"</span>
             </motion.button>
           );
         })}
