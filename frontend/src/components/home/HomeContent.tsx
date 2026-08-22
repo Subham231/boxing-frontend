@@ -190,12 +190,39 @@ const FEATURE_SHOWCASE = [
 // Real plan data — mirrors app/(app)/subscription/page.tsx exactly, so the
 // public homepage never shows numbers that don't match the actual app.
 const PRICING_PLANS = [
-  { name: 'Monthly', price: '₹399', period: '/ month', features: ['1 AI Video Analysis / day', '1 Planner Generation / week'] },
-  { name: 'Monthly Pro', price: '₹499', period: '/ month', features: ['2 AI Video Analyses / day', '2 Planner Generations / week'] },
-  { name: '3 Months', price: '₹999', period: '/ 3 months', features: ['3 AI Video Analyses / day', '3 Planner Generations / week'] },
+  { 
+    name: 'SparAI Monthly', 
+    price: '₹629', 
+    originalPrice: '₹1,299',
+    discountTag: '51% OFF',
+    period: '/ month', 
+    features: ['1 AI Video Analysis / day', '1 Planner Generation / week', '1 Live Spar / day'] 
+  },
+  { 
+    name: 'SparAI Pro', 
+    price: '₹729', 
+    originalPrice: '₹1,599',
+    discountTag: '54% OFF',
+    period: '/ month', 
+    features: ['2 AI Video Analyses / day', '2 Planner Generations / week', '2 Live Spars / day'], 
+    highlight: true 
+  },
+  { 
+    name: 'SparAI Performance', 
+    price: '₹1,629', 
+    originalPrice: '₹3,999',
+    discountTag: '59% OFF',
+    period: '/ 3 months', 
+    features: ['3 AI Video Analyses / day', '3 Planner Generations / week', '3 Live Spars / day'] 
+  },
   {
-    name: 'Yearly', price: '₹2,999', period: '/ year', highlight: true,
-    features: ['Unlimited AI Video Analyses', 'Unlimited Planner Generations', 'Premium Guru skills unlocked', 'Elite Member badge'],
+    name: 'SparAI Elite 👑', 
+    price: '₹6,290', 
+    originalPrice: '₹15,499',
+    discountTag: '60% OFF',
+    period: '/ year', 
+    highlight: true,
+    features: ['Unlimited AI Video Analyses', 'Unlimited Planner Generations', 'Unlimited Live Spars', 'Premium Guru skills unlocked', 'Elite Member badge'],
   },
 ];
 
@@ -1230,22 +1257,34 @@ export default function HomeContent() {
             {PRICING_PLANS.map((plan) => (
               <div
                 key={plan.name}
-                className={`rounded-[20px] p-4 flex flex-col gap-3 border ${
+                className={`rounded-[20px] p-4 flex flex-col justify-between gap-3 border ${
                   plan.highlight
                     ? 'bg-gradient-to-br from-primary/15 to-transparent border-primary/30'
                     : 'bg-white/[0.03] border-white/10'
                 }`}
               >
-                {plan.highlight && (
-                  <span className="self-start text-[8px] font-black uppercase tracking-widest text-black bg-primary rounded-full px-2 py-1">
-                    Best Value
-                  </span>
-                )}
-                <p className="text-xs font-black uppercase tracking-wide text-white/80">{plan.name}</p>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-xl font-black text-white">{plan.price}</span>
-                  <span className="text-[10px] font-bold text-white/40">{plan.period}</span>
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-black uppercase tracking-wide text-white/80">{plan.name}</p>
+                    {plan.discountTag && (
+                      <span className="text-[7px] font-black uppercase tracking-wider text-black bg-primary rounded-full px-2 py-0.5">
+                        {plan.discountTag}
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    {plan.originalPrice && (
+                      <span className="text-[11px] font-bold text-red-400/80 line-through block">
+                        {plan.originalPrice}
+                      </span>
+                    )}
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-xl font-black text-white">{plan.price}</span>
+                      <span className="text-[10px] font-bold text-white/40">{plan.period}</span>
+                    </div>
+                  </div>
                 </div>
+
                 <ul className="flex flex-col gap-1.5 mt-1">
                   {plan.features.map((f) => (
                     <li key={f} className="flex items-start gap-1.5 text-[10px] font-semibold text-white/60 leading-snug">
@@ -1253,6 +1292,17 @@ export default function HomeContent() {
                     </li>
                   ))}
                 </ul>
+
+                <Link
+                  href="/onboarding"
+                  className={`mt-2 py-2 rounded-xl text-center text-[10px] font-black uppercase tracking-wider transition-all ${
+                    plan.highlight
+                      ? 'bg-primary text-black hover:bg-[#cdea2a]'
+                      : 'bg-white/10 text-white hover:bg-white/20'
+                  }`}
+                >
+                  Get Started
+                </Link>
               </div>
             ))}
           </div>

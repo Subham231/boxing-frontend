@@ -31,13 +31,15 @@ export function SparFreePromoModal() {
   const handleEnterSpar = () => {
     localStorage.setItem(PROMO_STORAGE_KEY, 'true');
     setIsOpen(false);
-    router.push('/spar');
+    // Direct unauthenticated users to onboarding/signup first to create profile
+    router.push('/onboarding');
   };
 
   const handleViewDeals = () => {
     localStorage.setItem(PROMO_STORAGE_KEY, 'true');
     setIsOpen(false);
-    router.push('/subscription');
+    // Direct users to signup / onboarding first to claim subscription or deals
+    router.push('/onboarding');
   };
 
   return (
