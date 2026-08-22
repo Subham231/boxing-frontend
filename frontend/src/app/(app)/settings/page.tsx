@@ -293,11 +293,20 @@ export default function SettingsPage() {
     }
   };
 
-  const handleLogout = () => {
-    if (confirm("Log out of session? Identity data will remain on device.")) {
-      // Clear login state and return to login gate
-      localStorage.removeItem('boxing_guest_mode');
-      router.push('/');
+  const handleLogout = async () => {
+    if (confirm("Log out of your account and return to home page?")) {
+      try {
+        await signOutFirebase();
+      } catch (e) {
+        console.error('Logout error:', e);
+      }
+      localStorage.removeItem('boxing_onboarding_done');
+      localStorage.removeItem('boxing_onboarding_data');
+      localStorage.removeItem('boxing_user_avatar');
+      localStorage.removeItem('spar_match');
+      localStorage.removeItem('sparai_profile_cache');
+      sessionStorage.clear();
+      window.location.href = '/';
     }
   };
 
