@@ -34,33 +34,29 @@ const PUNCHES: Array<{ command: string; kind: SparCommandKind }> = [
   { command: 'LEAD UPPERCUT', kind: 'punch' },
   { command: 'REAR UPPERCUT', kind: 'punch' },
   { command: 'BODY HOOK', kind: 'punch' },
-  { command: 'OVERHAND', kind: 'punch' },
+  { command: 'OVERHAND RIGHT', kind: 'punch' },
+  { command: 'DOUBLE JAB', kind: 'punch' },
+  { command: '1-2 COMBO', kind: 'punch' },
+  { command: '1-2-3 COMBO', kind: 'punch' },
+  { command: 'BODY-HEAD COMBO', kind: 'punch' },
 ];
 
-const DEFENSE: Array<{ command: string; kind: SparCommandKind }> = [
-  { command: 'SLIP LEFT', kind: 'defense' },
-  { command: 'SLIP RIGHT', kind: 'defense' },
-  { command: 'ROLL UNDER', kind: 'defense' },
-  { command: 'PULL COUNTER', kind: 'defense' },
-  { command: 'HIGH GUARD', kind: 'defense' },
-  { command: 'DUCK', kind: 'defense' },
-];
-
-const GAP_MS = 1600; // Hard level: 1.6s rapid tempo
+const GAP_MS = 1600; // Hard rapid tempo
 const START_OFFSET_MS = 3500;
 
-/** Hard-level coach-call pool — randomly generates 40 to 70 commands for intense spar rounds. */
+/** Punch-only coach-call pool — randomly generates 40 to 70 punch commands, unique every match but identical for both paired fighters. */
 export function generateSparCommandSequence(seed?: number): SparCommand[] {
-  let s = seed ?? Date.now();
+  // Generate high-entropy seed if not explicitly passed
+  let s = seed ?? (Date.now() ^ (Math.floor(Math.random() * 1000000) + 1));
   const rng = () => {
     s = (s * 1664525 + 1013904223) >>> 0;
     return s / 0xffffffff;
   };
 
-  // Random length between 40 and 70 commands
+  // Random length between 40 and 70 punch commands
   const sequenceLen = Math.floor(rng() * 31) + 40;
 
-  const pool = [...PUNCHES, ...PUNCHES, ...DEFENSE];
+  const pool = PUNCHES;
   const seq: SparCommand[] = [];
   let last = '';
   for (let i = 0; i < sequenceLen; i++) {
@@ -72,7 +68,7 @@ export function generateSparCommandSequence(seed?: number): SparCommand[] {
     last = pick.command;
     seq.push({
       command: pick.command,
-      kind: pick.kind,
+      kind: 'punch',
       callAtMs: START_OFFSET_MS + i * GAP_MS,
     });
   }
