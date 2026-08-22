@@ -7,21 +7,21 @@ import { useOnboarding } from '@/context/OnboardingContext';
 import StepBadge from './StepBadge';
 
 const DRIVERS = [
-  { icon: Dumbbell, label: 'Get Stronger' },
-  { icon: Swords, label: 'Become a Better Boxer' },
-  { icon: Heart, label: 'Improve My Health' },
-  { icon: Target, label: 'Build Discipline' },
-  { icon: Sparkles, label: 'Gain Confidence' },
-  { icon: Trophy, label: 'Prepare For Competition' },
-  { icon: Shield, label: 'Learn Self Defense' },
-  { icon: Flame, label: 'Transform My Lifestyle' },
+  { icon: Swords, label: 'Become a Better Boxer', tag: 'Most Popular' },
+  { icon: Dumbbell, label: 'Get Stronger & Lean', tag: 'Recommended' },
+  { icon: Target, label: 'Build Iron Discipline', tag: 'Best Choice' },
+  { icon: Sparkles, label: 'Gain Fighting Confidence', tag: 'High Impact' },
+  { icon: Trophy, label: 'Prepare For Sparring', tag: 'Pro Focus' },
+  { icon: Shield, label: 'Learn Self Defense', tag: 'Essential' },
 ];
 
 const MAX_SELECT = 3;
 
 const Motivation: React.FC = () => {
   const { data, updateData, nextStep, prevStep } = useOnboarding();
-  const [selected, setSelected] = useState<string[]>(data.motivations || []);
+  const [selected, setSelected] = useState<string[]>(
+    data.motivations && data.motivations.length > 0 ? data.motivations : ['Become a Better Boxer', 'Get Stronger & Lean']
+  );
 
   const toggle = (label: string) => {
     setSelected((prev) => {
@@ -60,11 +60,18 @@ const Motivation: React.FC = () => {
               type="button"
               whileTap={{ scale: 0.96 }}
               onClick={() => toggle(d.label)}
-              className={`flex flex-col items-center gap-2 p-4 rounded-3xl border text-center transition-all duration-300 ${
+              className={`relative flex flex-col items-center justify-between p-3.5 rounded-3xl border text-center transition-all duration-300 ${
                 active ? 'bg-primary/10 border-primary shadow-[0_0_15px_rgba(226,255,59,0.15)]' : 'bg-black/30 border-white/5 hover:border-white/10'
               }`}
             >
-              <Icon className={`w-6 h-6 ${active ? 'text-primary' : 'text-primary/40'}`} strokeWidth={2.25} />
+              {d.tag && (
+                <span className={`text-[7px] font-black uppercase px-2 py-0.5 rounded-full mb-1 ${
+                  active ? 'bg-primary text-black' : 'bg-white/5 text-white/40 border border-white/5'
+                }`}>
+                  {d.tag}
+                </span>
+              )}
+              <Icon className={`w-5 h-5 my-1 ${active ? 'text-primary' : 'text-primary/40'}`} strokeWidth={2.25} />
               <span className={`text-[10px] font-black uppercase leading-tight ${active ? 'text-primary' : 'text-white/70'}`}>{d.label}</span>
             </motion.button>
           );

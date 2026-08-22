@@ -7,17 +7,15 @@ import { useOnboarding } from '@/context/OnboardingContext';
 import StepBadge from './StepBadge';
 
 const OBSTACLES = [
-  { icon: Clock, label: 'Lack of Time', response: "We'll build a plan that fits your real schedule, not the other way around." },
-  { icon: BatteryLow, label: 'Lack of Motivation', response: "Consistency beats motivation — small daily wins keep you moving even on low days." },
-  { icon: Map, label: 'No Clear Plan', response: "That's exactly what a Tactical Protocol solves — structure instead of guesswork." },
-  { icon: TrendingDown, label: 'Inconsistent Results', response: 'Progress you can track is progress you can trust.' },
-  { icon: RefreshCw, label: 'Boredom With Routines', response: "Every regeneration keeps your training fresh — never the same session twice." },
-  { icon: HeartPulse, label: 'Injuries or Setbacks', response: "We'll factor in your limitations so training works around you, safely." },
+  { icon: Clock, label: 'Lack of Time', tag: 'Most Common', response: "We'll build a plan that fits your real schedule, not the other way around." },
+  { icon: BatteryLow, label: 'Lack of Motivation', tag: 'Recommended Focus', response: "Consistency beats motivation — small daily wins keep you moving even on low days." },
+  { icon: Map, label: 'No Clear Structure', tag: 'Best Choice', response: "That's exactly what a Tactical Protocol solves — structure instead of guesswork." },
+  { icon: TrendingDown, label: 'Inconsistent Results', tag: 'High Impact', response: 'Progress you can track is progress you can trust.' },
 ];
 
 const Obstacle: React.FC = () => {
   const { data, updateData, nextStep, prevStep } = useOnboarding();
-  const [selected, setSelected] = useState<string | null>(data.biggestObstacle || null);
+  const [selected, setSelected] = useState<string>(data.biggestObstacle || 'Lack of Time');
 
   const handleSelect = (label: string) => {
     setSelected(label);
@@ -48,12 +46,21 @@ const Obstacle: React.FC = () => {
               type="button"
               whileTap={{ scale: 0.98 }}
               onClick={() => handleSelect(o.label)}
-              className={`flex items-center gap-4 p-4 rounded-3xl border text-left transition-all duration-300 ${
+              className={`relative flex items-center justify-between p-4 rounded-3xl border text-left transition-all duration-300 ${
                 isActive ? 'bg-primary/10 border-primary shadow-[0_0_15px_rgba(226,255,59,0.15)]' : 'bg-black/30 border-white/5 hover:border-white/10'
               }`}
             >
-              <Icon className={`w-6 h-6 shrink-0 ${isActive ? 'text-primary' : 'text-primary/40'}`} strokeWidth={2.25} />
-              <span className={`text-sm font-black uppercase ${isActive ? 'text-primary' : 'text-white'}`}>{o.label}</span>
+              <div className="flex items-center gap-3.5">
+                <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-primary' : 'text-primary/40'}`} strokeWidth={2.25} />
+                <span className={`text-xs sm:text-sm font-black uppercase ${isActive ? 'text-primary' : 'text-white'}`}>{o.label}</span>
+              </div>
+              {o.tag && (
+                <span className={`text-[8px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
+                  isActive ? 'bg-primary text-black' : 'bg-white/5 text-white/40 border border-white/10'
+                }`}>
+                  {o.tag}
+                </span>
+              )}
             </motion.button>
           );
         })}
