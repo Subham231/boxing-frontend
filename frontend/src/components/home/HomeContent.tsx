@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
   Flame, Trophy, ChevronRight, Video, CalendarDays,
@@ -10,6 +11,8 @@ import {
   Play, GraduationCap, Sparkles, ShieldCheck, Check, Lock, Gift,
 } from 'lucide-react';
 import HomeCta from './HomeCta';
+import { SparFreePromoModal } from '@/components/ui/SparFreePromoModal';
+import { useFirebaseUser } from '@/lib/useFirebaseUser';
 
 // ─────────────────────────────────────────────────────────────────────────
 // PUBLIC marketing home page (sparai.in). Must stay a real, crawlable,
@@ -508,111 +511,128 @@ function FaqAccordion() {
 }
 
 export default function HomeContent() {
+  const router = useRouter();
+  const { user, loading } = useFirebaseUser();
+
+  useEffect(() => {
+    if (loading || !user) return;
+    try {
+      const isDone = localStorage.getItem('boxing_onboarding_done') === 'true';
+      const stored = JSON.parse(localStorage.getItem('boxing_onboarding_data') || '{}');
+      if (isDone || stored?.onboarding_completed) {
+        router.replace('/dashboard');
+      }
+    } catch {
+      // ignore
+    }
+  }, [user, loading, router]);
+
   return (
     <div className="relative min-h-screen bg-[#08080A] text-white font-sans overflow-x-hidden">
+      {/* Interactive Mobile-Ready Free Spar & Deals Popup */}
+      <SparFreePromoModal />
 
-      {/* ── Boxing-themed animated background — HOME PAGE ONLY ──
-          Uses `absolute` (not `fixed`) so it's scoped to this page's
-          scroll container and doesn't trigger repaints on other pages.
-          All animations use only `transform` + `opacity` (GPU-composited).
-          Heavy blur orbs are limited to 2 on mobile via CSS.          ── */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+      {/* ── Boxing-themed animated background — HOME PAGE ONLY ── */}
+      {/* NOTE: No overflow-hidden here — that clips the negatively-positioned orbs */}
+      <div className="pointer-events-none absolute inset-0" aria-hidden="true">
 
-        {/* Ambient glow orbs — only transform+opacity, GPU-friendly */}
+        {/* Ambient glow orbs */}
         <motion.div
-          className="absolute -top-32 -left-24 w-[380px] h-[380px] rounded-full bg-primary/[0.07] blur-[100px]"
+          className="absolute -top-32 -left-24 w-[420px] h-[420px] rounded-full bg-primary/[0.18] blur-[80px]"
           style={{ willChange: 'transform' }}
           animate={{ x: [0, 40, 0], y: [0, 28, 0] }}
           transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut' }}
         />
         <motion.div
-          className="absolute top-[35%] -right-32 w-[340px] h-[340px] rounded-full bg-red-600/[0.07] blur-[110px]"
+          className="absolute top-[35%] -right-28 w-[360px] h-[360px] rounded-full bg-red-600/[0.16] blur-[80px]"
           style={{ willChange: 'transform' }}
           animate={{ x: [0, -32, 0], y: [0, -22, 0] }}
           transition={{ duration: 22, repeat: Infinity, ease: 'easeInOut' }}
         />
-        {/* Third orb — hidden on small screens to save GPU */}
+        {/* Third orb — hidden on mobile to save GPU */}
         <motion.div
-          className="absolute bottom-[10%] left-[30%] w-[280px] h-[280px] rounded-full bg-primary/[0.04] blur-[90px] hidden sm:block"
+          className="absolute bottom-[5%] left-[28%] w-[300px] h-[300px] rounded-full bg-primary/[0.10] blur-[70px] hidden sm:block"
           style={{ willChange: 'transform' }}
           animate={{ x: [0, 24, 0], y: [0, -18, 0] }}
           transition={{ duration: 26, repeat: Infinity, ease: 'easeInOut' }}
         />
 
-        {/* Static grid — NO animation, zero CPU cost */}
+        {/* Static grid — zero CPU cost, purely decorative */}
         <div
-          className="absolute inset-0 opacity-[0.018]"
+          className="absolute inset-0 opacity-[0.03]"
           style={{
             backgroundImage:
-              'linear-gradient(rgba(226,255,59,0.5) 1px, transparent 1px),' +
-              'linear-gradient(90deg, rgba(226,255,59,0.5) 1px, transparent 1px)',
+              'linear-gradient(rgba(226,255,59,0.7) 1px, transparent 1px),' +
+              'linear-gradient(90deg, rgba(226,255,59,0.7) 1px, transparent 1px)',
             backgroundSize: '72px 72px',
           }}
         />
 
-        {/* Floating hexagons — 4 on desktop, 2 on mobile (hidden sm:block) */}
+        {/* Floating hexagons */}
         {[
-          { size: 110, left: '7%',  top: '12%', delay: 0,   dur: 14 },
-          { size: 72,  left: '76%', top: '9%',  delay: 2.5, dur: 17, mobileHide: true },
-          { size: 56,  left: '54%', top: '58%', delay: 4,   dur: 11, mobileHide: true },
-          { size: 90,  left: '18%', top: '70%', delay: 1,   dur: 20 },
+          { size: 110, left: '7%',  top: '10%', delay: 0,   dur: 14 },
+          { size: 75,  left: '76%', top: '8%',  delay: 2.5, dur: 17 },
+          { size: 58,  left: '55%', top: '55%', delay: 4,   dur: 11 },
+          { size: 92,  left: '15%', top: '68%', delay: 1,   dur: 20 },
         ].map((h, i) => (
           <motion.svg
             key={`hex-${i}`}
             width={h.size}
             height={h.size}
             viewBox="0 0 100 100"
-            className={`absolute${h.mobileHide ? ' hidden sm:block' : ''}`}
+            className="absolute"
             style={{ left: h.left, top: h.top, willChange: 'transform, opacity' }}
-            animate={{ y: [0, -18, 0], rotate: [0, 45, 0], opacity: [0.05, 0.12, 0.05] }}
+            initial={{ opacity: 0.18, y: 0, rotate: 0 }}
+            animate={{ y: [0, -18, 0], rotate: [0, 45, 0], opacity: [0.18, 0.35, 0.18] }}
             transition={{ duration: h.dur, repeat: Infinity, ease: 'easeInOut', delay: h.delay }}
           >
             <polygon
               points="50,5 90,27.5 90,72.5 50,95 10,72.5 10,27.5"
               fill="none"
               stroke="#E2FF3B"
-              strokeWidth="1.5"
+              strokeWidth="2"
             />
           </motion.svg>
         ))}
 
-        {/* Floating particles — 10 on mobile, 10 total (no extra desktop set) */}
+        {/* Glowing particles */}
         {Array.from({ length: 10 }).map((_, i) => (
           <motion.span
             key={`pt-${i}`}
             className="absolute rounded-full"
             style={{
-              width:  2 + (i % 2),
-              height: 2 + (i % 2),
+              width:  3 + (i % 2),
+              height: 3 + (i % 2),
               left: `${(i * 43 + 6) % 100}%`,
               top:  `${(i * 31 + 8) % 100}%`,
-              backgroundColor: 'rgba(226,255,59,0.4)',
+              backgroundColor: 'rgba(226,255,59,0.7)',
+              boxShadow: '0 0 6px rgba(226,255,59,0.5)',
               willChange: 'transform, opacity',
             }}
-            animate={{ opacity: [0.06, 0.4, 0.06], y: [0, -(10 + (i % 7)), 0] }}
+            animate={{ opacity: [0.2, 0.7, 0.2], y: [0, -(10 + (i % 7)), 0] }}
             transition={{ duration: 5 + (i % 5), repeat: Infinity, delay: i * 0.35 }}
           />
         ))}
 
-        {/* Slow-drifting vertical rope line — one single line, very cheap */}
+        {/* Slow-drifting vertical rope line */}
         <motion.div
-          className="absolute inset-y-0 w-px bg-gradient-to-b from-transparent via-primary/20 to-transparent hidden sm:block"
+          className="absolute inset-y-0 w-px bg-gradient-to-b from-transparent via-primary/30 to-transparent"
           style={{ left: '50%', willChange: 'transform' }}
           animate={{ x: ['-120vw', '120vw'] }}
           transition={{ duration: 40, repeat: Infinity, ease: 'linear' }}
         />
 
-        {/* Pulsing ring rings — opacity-only, extremely cheap */}
+        {/* Pulsing concentric rings */}
         <motion.div
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[180px] h-[180px] rounded-full border border-primary/[0.12]"
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[200px] h-[200px] rounded-full border border-primary/[0.25]"
           style={{ willChange: 'opacity' }}
-          animate={{ opacity: [0.05, 0.15, 0.05] }}
+          animate={{ opacity: [0.1, 0.3, 0.1] }}
           transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut' }}
         />
         <motion.div
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90px] h-[90px] rounded-full border border-primary/[0.08]"
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[100px] h-[100px] rounded-full border border-primary/[0.20]"
           style={{ willChange: 'opacity' }}
-          animate={{ opacity: [0.08, 0.2, 0.08] }}
+          animate={{ opacity: [0.15, 0.4, 0.15] }}
           transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
         />
 

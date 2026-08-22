@@ -43,7 +43,7 @@ export function SparFreePromoModal() {
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4">
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
@@ -59,7 +59,7 @@ export function SparFreePromoModal() {
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.9, opacity: 0, y: 20 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="relative w-full max-w-md bg-gradient-to-b from-[#161C10] via-[#0D0F0B] to-[#080A07] border-2 border-primary/50 rounded-3xl p-6 shadow-[0_0_50px_rgba(226,255,59,0.25)] overflow-hidden z-10"
+            className="relative w-full max-w-md max-h-[90dvh] overflow-y-auto bg-gradient-to-b from-[#161C10] via-[#0D0F0B] to-[#080A07] border-2 border-primary/50 rounded-[28px] p-5 sm:p-6 shadow-[0_0_50px_rgba(226,255,59,0.25)] z-10 custom-scrollbar"
           >
             {/* Background Glow */}
             <div className="absolute top-0 right-0 w-48 h-48 bg-primary/15 rounded-full blur-3xl pointer-events-none" />
@@ -68,18 +68,18 @@ export function SparFreePromoModal() {
             {/* Close Button */}
             <button
               onClick={handleClose}
-              className="absolute top-4 right-4 w-8 h-8 rounded-full border border-white/10 bg-white/5 flex items-center justify-center text-white/50 hover:text-white transition-all z-20"
+              className="absolute top-3.5 right-3.5 w-8 h-8 rounded-full border border-white/10 bg-white/5 flex items-center justify-center text-white/50 hover:text-white transition-all z-20 active:scale-95"
             >
               <X className="w-4 h-4" />
             </button>
 
             {/* Header Badge */}
-            <div className="flex items-center gap-2 mb-3">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-primary/40 bg-primary/10 text-primary text-[9px] font-black tracking-widest uppercase shadow-[0_0_10px_rgba(226,255,59,0.3)]">
+            <div className="flex flex-wrap items-center gap-2 mb-3 pr-8">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-primary/40 bg-primary/10 text-primary text-[8px] sm:text-[9px] font-black tracking-widest uppercase shadow-[0_0_10px_rgba(226,255,59,0.3)]">
                 <Sparkles className="w-3 h-3 animate-spin" />
                 LIMITED-TIME EVENT
               </div>
-              <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-amber-400/30 bg-amber-400/10 text-amber-400 text-[9px] font-black tracking-widest uppercase">
+              <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-amber-400/30 bg-amber-400/10 text-amber-400 text-[8px] sm:text-[9px] font-black tracking-widest uppercase">
                 <Gift className="w-3 h-3" />
                 FREE ACCESS
               </div>
@@ -87,62 +87,62 @@ export function SparFreePromoModal() {
 
             {/* Title */}
             <div className="mb-4">
-              <h2 className="text-2xl font-black italic uppercase leading-none text-white tracking-wide">
+              <h2 className="text-xl sm:text-2xl font-black italic uppercase leading-none text-white tracking-wide">
                 SPARRING IS <span className="text-primary drop-shadow-[0_0_12px_rgba(226,255,59,0.8)]">100% FREE</span>
               </h2>
-              <p className="text-xs font-semibold text-white/60 mt-1.5 leading-snug">
+              <p className="text-[11px] sm:text-xs font-semibold text-white/60 mt-1.5 leading-snug">
                 Step inside the octagon! Test your reaction and punch combos live against fighters worldwide with zero subscription required.
               </p>
             </div>
 
             {/* Highlights Grid */}
-            <div className="grid grid-cols-2 gap-2.5 mb-5">
-              <div className="p-3 rounded-2xl border border-white/10 bg-white/[0.03] flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/30 flex items-center justify-center text-primary shrink-0">
-                  <Swords className="w-4 h-4" />
+            <div className="grid grid-cols-2 gap-2 sm:gap-2.5 mb-4 sm:mb-5">
+              <div className="p-2.5 sm:p-3 rounded-2xl border border-white/10 bg-white/[0.03] flex items-center gap-2 sm:gap-2.5">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-primary/10 border border-primary/30 flex items-center justify-center text-primary shrink-0">
+                  <Swords className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </div>
                 <div>
-                  <div className="text-[10px] font-black text-white uppercase">Live 1v1 Spar</div>
-                  <div className="text-[8px] text-white/40 font-bold uppercase">Realtime WebRTC</div>
+                  <div className="text-[9px] sm:text-[10px] font-black text-white uppercase leading-tight">Live 1v1 Spar</div>
+                  <div className="text-[7px] sm:text-[8px] text-white/40 font-bold uppercase">Realtime WebRTC</div>
                 </div>
               </div>
 
-              <div className="p-3 rounded-2xl border border-white/10 bg-white/[0.03] flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-amber-400/10 border border-amber-400/30 flex items-center justify-center text-amber-400 shrink-0">
-                  <Trophy className="w-4 h-4" />
+              <div className="p-2.5 sm:p-3 rounded-2xl border border-white/10 bg-white/[0.03] flex items-center gap-2 sm:gap-2.5">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-amber-400/10 border border-amber-400/30 flex items-center justify-center text-amber-400 shrink-0">
+                  <Trophy className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </div>
                 <div>
-                  <div className="text-[10px] font-black text-white uppercase">Leaderboard</div>
-                  <div className="text-[8px] text-white/40 font-bold uppercase">Weekly & Monthly</div>
+                  <div className="text-[9px] sm:text-[10px] font-black text-white uppercase leading-tight">Leaderboard</div>
+                  <div className="text-[7px] sm:text-[8px] text-white/40 font-bold uppercase">Weekly & Monthly</div>
                 </div>
               </div>
 
-              <div className="p-3 rounded-2xl border border-white/10 bg-white/[0.03] flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-cyan-400/10 border border-cyan-400/30 flex items-center justify-center text-cyan-400 shrink-0">
-                  <Zap className="w-4 h-4" />
+              <div className="p-2.5 sm:p-3 rounded-2xl border border-white/10 bg-white/[0.03] flex items-center gap-2 sm:gap-2.5">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-cyan-400/10 border border-cyan-400/30 flex items-center justify-center text-cyan-400 shrink-0">
+                  <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </div>
                 <div>
-                  <div className="text-[10px] font-black text-white uppercase">Hard AI Coach</div>
-                  <div className="text-[8px] text-white/40 font-bold uppercase">40-70 Rapid Calls</div>
+                  <div className="text-[9px] sm:text-[10px] font-black text-white uppercase leading-tight">Hard AI Coach</div>
+                  <div className="text-[7px] sm:text-[8px] text-white/40 font-bold uppercase">40-70 Rapid Calls</div>
                 </div>
               </div>
 
-              <div className="p-3 rounded-2xl border border-white/10 bg-white/[0.03] flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-purple-400/10 border border-purple-400/30 flex items-center justify-center text-purple-400 shrink-0">
-                  <Crown className="w-4 h-4" />
+              <div className="p-2.5 sm:p-3 rounded-2xl border border-white/10 bg-white/[0.03] flex items-center gap-2 sm:gap-2.5">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-purple-400/10 border border-purple-400/30 flex items-center justify-center text-purple-400 shrink-0">
+                  <Crown className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </div>
                 <div>
-                  <div className="text-[10px] font-black text-white uppercase">Special Deals</div>
-                  <div className="text-[8px] text-white/40 font-bold uppercase">Up to 40% Off</div>
+                  <div className="text-[9px] sm:text-[10px] font-black text-white uppercase leading-tight">Special Deals</div>
+                  <div className="text-[7px] sm:text-[8px] text-white/40 font-bold uppercase">Up to 40% Off</div>
                 </div>
               </div>
             </div>
 
             {/* Actions */}
-            <div className="flex flex-col gap-2.5">
+            <div className="flex flex-col gap-2">
               <NeonButton
                 onClick={handleEnterSpar}
-                className="w-full h-12 text-xs font-black italic tracking-widest text-black uppercase flex items-center justify-center gap-2"
+                className="w-full h-11 sm:h-12 text-[11px] sm:text-xs font-black italic tracking-widest text-black uppercase flex items-center justify-center gap-2"
               >
                 ENTER SPARRING ARENA <Swords className="w-4 h-4 ml-1" />
               </NeonButton>

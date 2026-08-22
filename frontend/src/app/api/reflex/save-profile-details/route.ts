@@ -23,12 +23,19 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}));
-  const displayName = typeof body.displayName === 'string' ? body.displayName.trim().slice(0, 60) : undefined;
-  const age = Number.isFinite(body.age) ? Math.max(0, Math.min(120, Math.round(body.age))) : undefined;
-  const profession = typeof body.profession === 'string' ? body.profession.trim().slice(0, 100) : undefined;
-  const promiseWord = typeof body.promiseWord === 'string' ? body.promiseWord.trim().slice(0, 200) : undefined;
-  const avatarUrl = typeof body.avatarUrl === 'string' ? body.avatarUrl.trim().slice(0, 2000) : undefined;
   const onboardingData = body.onboardingData && typeof body.onboardingData === 'object' ? body.onboardingData : undefined;
+  
+  const rawDisplayName = body.displayName || onboardingData?.ring_name || onboardingData?.ringName;
+  const rawAge = body.age !== undefined ? body.age : onboardingData?.user_metrics?.age ?? onboardingData?.age;
+  const rawProfession = body.profession || onboardingData?.profession;
+  const rawPromiseWord = body.promiseWord || onboardingData?.promise || onboardingData?.promiseWord || onboardingData?.promise_trigger;
+  const rawAvatarUrl = body.avatarUrl || onboardingData?.avatar_url || onboardingData?.avatarUrl;
+
+  const displayName = typeof rawDisplayName === 'string' ? rawDisplayName.trim().slice(0, 60) : undefined;
+  const age = Number.isFinite(Number(rawAge)) && Number(rawAge) > 0 ? Math.max(0, Math.min(120, Math.round(Number(rawAge)))) : undefined;
+  const profession = typeof rawProfession === 'string' ? rawProfession.trim().slice(0, 100) : undefined;
+  const promiseWord = typeof rawPromiseWord === 'string' ? rawPromiseWord.trim().slice(0, 200) : undefined;
+  const avatarUrl = typeof rawAvatarUrl === 'string' ? rawAvatarUrl.trim().slice(0, 2000) : undefined;
 
   const update: Record<string, unknown> = {};
   if (displayName) update.display_name = displayName;

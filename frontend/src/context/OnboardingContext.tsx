@@ -193,8 +193,15 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     const syncToSupabase = async () => {
         if (typeof window === 'undefined') return;
+        const serialized = serializeOnboarding(data);
         const payload = {
-            ...serializeOnboarding(data),
+            ...serialized,
+            ringName: data.ringName,
+            ring_name: data.ringName,
+            age: Number(data.age),
+            profession: data.profession,
+            promise: data.promiseWord,
+            promise_trigger: data.promiseWord,
             onboarding_completed: true,
             init_timestamp: Date.now(),
         };
@@ -203,15 +210,22 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         localStorage.removeItem('boxing_onboarding_screen_order');
         updateData({ hasCompletedOnboarding: true });
 
-        // Persist the full onboarding payload to Supabase so a returning user
-        // sees the same persona, lifestyle, goals, etc. on any device.
+        // Persist the full onboarding payload and individual fields to Supabase
         try {
             const token = await getFirebaseIdToken();
             if (token) {
+                const avatar = localStorage.getItem('boxing_user_avatar') || undefined;
                 await fetch('/api/reflex/save-profile-details', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                    body: JSON.stringify({ onboardingData: payload }),
+                    body: JSON.stringify({
+                        displayName: data.ringName,
+                        age: Number(data.age),
+                        profession: data.profession,
+                        promiseWord: data.promiseWord,
+                        avatarUrl: avatar,
+                        onboardingData: payload,
+                    }),
                 });
             }
         } catch {

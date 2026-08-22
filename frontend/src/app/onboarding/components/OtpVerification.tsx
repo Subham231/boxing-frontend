@@ -57,13 +57,16 @@ const OtpVerification: React.FC = () => {
       const { user, isNew, profile } = await confirmOtp(confirmation, trimmedCode);
       updateData({ phone: trimmedPhone });
 
+      const avatar = typeof window !== 'undefined' ? localStorage.getItem('boxing_user_avatar') || undefined : undefined;
+      await saveProfileDetails(user, {
+        displayName: data.ringName,
+        age: Number(data.age),
+        profession: data.profession,
+        promiseWord: data.promiseWord,
+        avatarUrl: avatar,
+      }).catch(() => {});
+
       if (isNew) {
-        await saveProfileDetails(user, {
-          displayName: data.ringName,
-          age: data.age,
-          profession: data.profession,
-          promiseWord: data.promiseWord,
-        });
         nextStep();
         return;
       }

@@ -25,6 +25,7 @@ import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
 import { API_BASE_URL } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
+import { useMyProfile } from '@/lib/profile-client';
 
 interface OnboardingData {
   ringName?: string;
@@ -40,6 +41,7 @@ interface OnboardingData {
   experience_level?: string;
   phone_number?: string;
   age?: number;
+  profession?: string;
   height?: number;
   weight?: number;
 }
@@ -48,13 +50,14 @@ export default function SettingsPage() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [profileData, setProfileData] = useState<OnboardingData>({});
+  const { profile: liveProfile, updateProfile } = useMyProfile();
 
   // App Settings
   const [notifications, setNotifications] = useState(true);
   const [stealth, setStealth] = useState(false);
 
   // Edit fields modal
-  const [editField, setEditField] = useState<'ringName' | 'promise' | 'avatar_url' | null>(null);
+  const [editField, setEditField] = useState<'ringName' | 'promise' | 'avatar_url' | 'age' | 'profession' | null>(null);
   const [editValue, setEditValue] = useState('');
 
   // Debrief Overlay State
@@ -94,6 +97,25 @@ export default function SettingsPage() {
     } catch (e) {}
   }, []);
 
+  useEffect(() => {
+    if (liveProfile) {
+      setProfileData((prev) => ({
+        ...prev,
+        ringName: liveProfile.display_name || prev.ringName,
+        ring_name: liveProfile.display_name || prev.ring_name,
+        age: liveProfile.age ?? prev.age,
+        profession: liveProfile.profession || prev.profession,
+        avatar_url: liveProfile.avatar_url || prev.avatar_url,
+        promise: liveProfile.promise_word || prev.promise,
+        promise_trigger: liveProfile.promise_word || prev.promise_trigger,
+        phone_number: liveProfile.phone || prev.phone_number,
+        ...(liveProfile.onboarding_data && typeof liveProfile.onboarding_data === 'object'
+          ? (liveProfile.onboarding_data as Record<string, unknown>)
+          : {}),
+      }));
+    }
+  }, [liveProfile]);
+
   const saveSettings = (updatedNotif: boolean, updatedStealth: boolean) => {
     localStorage.setItem('app_settings', JSON.stringify({ notifications: updatedNotif, stealth: updatedStealth }));
     setNotifications(updatedNotif);
@@ -106,17 +128,27 @@ export default function SettingsPage() {
     }
   };
 
-  const handleEditSubmit = () => {
+  const handleEditSubmit = async () => {
     if (!editField) return;
     const updated = { ...profileData };
     if (editField === 'ringName') {
       updated.ringName = editValue;
       updated.ring_name = editValue;
+      await updateProfile({ displayName: editValue });
     } else if (editField === 'promise') {
       updated.promise = editValue;
       updated.promise_trigger = editValue;
+      await updateProfile({ promiseWord: editValue });
     } else if (editField === 'avatar_url') {
       updated.avatar_url = editValue;
+      await updateProfile({ avatarUrl: editValue });
+    } else if (editField === 'age') {
+      const numAge = Number(editValue);
+      updated.age = numAge;
+      await updateProfile({ age: numAge });
+    } else if (editField === 'profession') {
+      updated.profession = editValue;
+      await updateProfile({ profession: editValue });
     }
 
     localStorage.setItem('boxing_onboarding_data', JSON.stringify(updated));
@@ -124,13 +156,17 @@ export default function SettingsPage() {
     setEditField(null);
   };
 
-  const openEdit = (field: 'ringName' | 'promise' | 'avatar_url', label: string) => {
+  const openEdit = (field: 'ringName' | 'promise' | 'avatar_url' | 'age' | 'profession', label: string) => {
     setEditField(field);
     const currVal = field === 'ringName' 
       ? (profileData.ringName || profileData.ring_name || '') 
       : field === 'promise' 
         ? (profileData.promise || profileData.promise_trigger || '') 
-        : (profileData.avatar_url || '');
+        : field === 'avatar_url'
+          ? (profileData.avatar_url || '')
+          : field === 'age'
+            ? String(profileData.age ?? '')
+            : (profileData.profession || '');
     setEditValue(currVal);
   };
 
@@ -362,19 +398,27 @@ export default function SettingsPage() {
           {/* Details Grid */}
           <div className="grid grid-cols-2 gap-3.5 border-t border-white/5 pt-4">
             <div>
-              <span className="text-[7px] font-black text-white/30 tracking-wider block uppercase">
-                LIFESTYLE
+              <span className="text-[7px] font-black text-white/30 tracking-wider flex items-center gap-1 uppercase">
+                AGE
+                <Edit2 
+                  className="w-2.5 h-2.5 cursor-pointer text-white/40 hover:text-white" 
+                  onClick={() => openEdit('age', 'Fighter Age')}
+                />
               </span>
               <span className="text-xs font-black text-white uppercase mt-0.5 block">
-                {profileData.lifestyle || 'Varied'}
+                {profileData.age ? `${profileData.age} YRS` : '25 YRS'}
               </span>
             </div>
             <div>
-              <span className="text-[7px] font-black text-white/30 tracking-wider block uppercase">
-                LEVEL
+              <span className="text-[7px] font-black text-white/30 tracking-wider flex items-center gap-1 uppercase">
+                PROFESSION
+                <Edit2 
+                  className="w-2.5 h-2.5 cursor-pointer text-white/40 hover:text-white" 
+                  onClick={() => openEdit('profession', 'Fighter Profession')}
+                />
               </span>
-              <span className="text-xs font-black text-white uppercase mt-0.5 block">
-                {profileData.experience_level || 'Novice'}
+              <span className="text-xs font-black text-white uppercase mt-0.5 block truncate">
+                {profileData.profession || 'FIGHTER'}
               </span>
             </div>
             <div>
@@ -390,7 +434,7 @@ export default function SettingsPage() {
                 BIOMETRICS
               </span>
               <span className="text-xs font-black text-white uppercase mt-0.5 block">
-                {profileData.height ? `${profileData.height}cm / ${profileData.weight}kg` : '--'}
+                {profileData.height ? `${profileData.height}cm / ${profileData.weight}kg` : '175cm / 75kg'}
               </span>
             </div>
           </div>
@@ -563,7 +607,7 @@ export default function SettingsPage() {
           >
             <div className="w-full max-w-sm bg-zinc-950 border border-white/10 rounded-3xl p-6 flex flex-col gap-4 text-left shadow-2xl">
               <h3 className="text-sm font-black uppercase text-white tracking-widest leading-none mb-1">
-                EDIT {editField === 'ringName' ? 'RING NAME' : editField === 'promise' ? 'COMBAT PROMISE' : 'AVATAR IMAGE URL'}
+                EDIT {editField === 'ringName' ? 'RING NAME' : editField === 'promise' ? 'COMBAT PROMISE' : editField === 'age' ? 'AGE' : editField === 'profession' ? 'PROFESSION' : 'AVATAR IMAGE URL'}
               </h3>
               
               {editField === 'promise' ? (
