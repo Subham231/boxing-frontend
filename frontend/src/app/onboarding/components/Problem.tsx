@@ -21,34 +21,59 @@ const Identity: React.FC = () => {
 
     const startCamera = async () => {
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
-            if (videoRef.current) {
-                videoRef.current.srcObject = stream;
-                setCameraActive(true);
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+                audio: false,
+            });
+            // Poll briefly in case the video element hasn't committed to DOM yet
+            let videoEl: HTMLVideoElement | null = null;
+            const deadline = Date.now() + 1500;
+            while (Date.now() < deadline) {
+                if (videoRef.current) { videoEl = videoRef.current; break; }
+                await new Promise(r => setTimeout(r, 30));
             }
-        } catch (err) {
-            alert('Camera access denied.');
+            if (!videoEl) { stream.getTracks().forEach(t => t.stop()); alert('Camera preview could not start. Try again.'); return; }
+            videoEl.srcObject = stream;
+            setCameraActive(true);
+            // Wait for metadata then play
+            await new Promise<void>(resolve => {
+                videoEl!.onloadedmetadata = () => resolve();
+                // safety timeout
+                setTimeout(resolve, 1000);
+            });
+            try { await videoEl.play(); } catch { /* autoplay may be blocked; still shows preview */ }
+        } catch (err: any) {
+            const n = err?.name || '';
+            if (n === 'NotAllowedError' || n === 'PermissionDeniedError') {
+                alert('Camera permission denied. Please allow camera access in your browser settings.');
+            } else if (n === 'NotFoundError') {
+                alert('No camera found on this device.');
+            } else {
+                alert('Could not start camera. Please try the gallery upload instead.');
+            }
         }
     };
 
     const capturePhoto = () => {
-        if (videoRef.current) {
-            const canvas = document.createElement('canvas');
-            canvas.width = videoRef.current.videoWidth;
-            canvas.height = videoRef.current.videoHeight;
-            const ctx = canvas.getContext('2d');
-            ctx?.drawImage(videoRef.current, 0, 0);
-            const dataUrl = canvas.toDataURL('image/jpeg');
-            setPreviewUrl(dataUrl);
-            localStorage.setItem('boxing_user_avatar', dataUrl);
-            stopCamera();
-        }
+        const videoEl = videoRef.current;
+        if (!videoEl) return;
+        const canvas = document.createElement('canvas');
+        canvas.width  = videoEl.videoWidth  || 320;
+        canvas.height = videoEl.videoHeight || 240;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.drawImage(videoEl, 0, 0);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        setPreviewUrl(dataUrl);
+        localStorage.setItem('boxing_user_avatar', dataUrl);
+        stopCamera();
     };
 
     const stopCamera = () => {
-        if (videoRef.current?.srcObject) {
-            (videoRef.current.srcObject as MediaStream).getTracks().forEach((t) => t.stop());
-            videoRef.current.srcObject = null;
+        const videoEl = videoRef.current;
+        if (videoEl?.srcObject) {
+            (videoEl.srcObject as MediaStream).getTracks().forEach(t => t.stop());
+            videoEl.srcObject = null;
         }
         setCameraActive(false);
     };
@@ -96,35 +121,51 @@ const Identity: React.FC = () => {
             </header>
 
             <main className="flex-1 flex flex-col gap-4 py-1">
-                {/* Avatar Row */}
-                <div className="flex items-center gap-4 p-3 rounded-2xl bg-white/[0.02] border border-white/5">
-                    <div className="relative w-16 h-16 rounded-full border-2 border-primary overflow-hidden shadow-[0_0_20px_rgba(var(--primary-rgb),0.25)] bg-white/5 flex items-center justify-center shrink-0">
-                        {previewUrl ? (
-                            <img src={previewUrl} className="w-full h-full object-cover" alt="Preview" />
-                        ) : cameraActive ? (
-                            <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover scale-x-[-1]" />
-                        ) : (
-                            <UserCircle2 size={36} className="text-white/20" />
-                        )}
-                    </div>
-
-                    <div className="flex-1 flex gap-2">
-                        <button
-                            type="button"
-                            onClick={cameraActive ? capturePhoto : startCamera}
-                            className="flex-1 py-2.5 px-3 rounded-xl border border-primary/50 bg-primary/10 text-primary font-bold text-[9px] tracking-wider flex items-center justify-center gap-1.5 hover:bg-primary/20 transition-all active:scale-95"
-                        >
-                            <Camera size={12} /> {cameraActive ? 'CAPTURE' : 'PHOTO'}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => fileInputRef.current?.click()}
-                            className="flex-1 py-2.5 px-3 rounded-xl border border-white/10 text-white/80 font-bold text-[9px] tracking-wider flex items-center justify-center gap-1.5 hover:bg-white/5 transition-all active:scale-95"
-                        >
-                            <Upload size={12} /> GALLERY
-                        </button>
-                        <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept="image/*" />
-                    </div>
+                {/* Avatar Section */}
+                <div className="flex flex-col gap-2">
+                    {/* Large camera preview when active */}
+                    {cameraActive ? (
+                        <div className="relative w-full rounded-3xl overflow-hidden bg-black border-2 border-primary shadow-[0_0_25px_rgba(226,255,59,0.2)]" style={{ aspectRatio: '4/3' }}>
+                            <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
+                            <div className="absolute inset-0 flex flex-col items-center justify-end p-4 gap-2 bg-gradient-to-t from-black/60 to-transparent">
+                                <button
+                                    type="button"
+                                    onClick={capturePhoto}
+                                    className="w-16 h-16 rounded-full bg-primary border-4 border-white shadow-[0_0_20px_rgba(226,255,59,0.5)] flex items-center justify-center active:scale-95 transition-transform"
+                                >
+                                    <Camera size={24} className="text-black" />
+                                </button>
+                                <button type="button" onClick={stopCamera} className="text-[9px] font-black text-white/60 uppercase tracking-wider">Cancel</button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-3 p-3 rounded-2xl bg-white/[0.02] border border-white/5">
+                            <div className="relative w-16 h-16 rounded-full border-2 border-primary overflow-hidden shadow-[0_0_20px_rgba(var(--primary-rgb),0.25)] bg-white/5 flex items-center justify-center shrink-0">
+                                {previewUrl ? (
+                                    <img src={previewUrl} className="w-full h-full object-cover" alt="Preview" />
+                                ) : (
+                                    <UserCircle2 size={36} className="text-white/20" />
+                                )}
+                            </div>
+                            <div className="flex-1 flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={startCamera}
+                                    className="flex-1 py-2.5 px-3 rounded-xl border border-primary/50 bg-primary/10 text-primary font-bold text-[9px] tracking-wider flex items-center justify-center gap-1.5 hover:bg-primary/20 transition-all active:scale-95"
+                                >
+                                    <Camera size={12} /> {previewUrl ? 'RETAKE' : 'TAKE PHOTO'}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="flex-1 py-2.5 px-3 rounded-xl border border-white/10 text-white/80 font-bold text-[9px] tracking-wider flex items-center justify-center gap-1.5 hover:bg-white/5 transition-all active:scale-95"
+                                >
+                                    <Upload size={12} /> GALLERY
+                                </button>
+                                <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept="image/*" />
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Form Fields & Interactive Menus */}
