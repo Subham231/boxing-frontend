@@ -7,19 +7,15 @@ import { useOnboarding } from '@/context/OnboardingContext';
 import StepBadge from './StepBadge';
 
 const FUTURES = [
-  { icon: Trophy, label: 'Winning Competitions' },
-  { icon: Swords, label: 'Looking Like A Fighter' },
-  { icon: Zap, label: 'Faster And More Athletic' },
-  { icon: Flame, label: 'Leaner And Healthier' },
-  { icon: Dumbbell, label: 'Stronger Physically' },
-  { icon: Brain, label: 'More Disciplined' },
-  { icon: Sparkles, label: 'More Confident' },
-  { icon: Heart, label: 'Better Mental Health' },
+  { icon: Swords, label: 'Looking Like A Real Fighter', tag: 'Most Popular' },
+  { icon: Zap, label: 'Faster & More Explosive', tag: 'Top Choice' },
+  { icon: Flame, label: 'Leaner & Peak Stamina', tag: 'Recommended' },
+  { icon: Brain, label: 'Unshakeable Discipline', tag: 'High Impact' },
 ];
 
 const FutureSelf: React.FC = () => {
   const { data, updateData, nextStep, prevStep } = useOnboarding();
-  const [selected, setSelected] = useState<string | null>(data.futureSelf || null);
+  const [selected, setSelected] = useState<string>(data.futureSelf || 'Looking Like A Real Fighter');
 
   const handleSelect = (label: string) => {
     setSelected(label);
@@ -28,12 +24,12 @@ const FutureSelf: React.FC = () => {
 
   return (
     <div className="flex flex-col min-h-[85vh] justify-between py-2">
-      <header className="text-left mb-6">
+      <header className="text-left mb-4">
         <StepBadge />
-        <h1 className="text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
+        <h1 className="text-2xl sm:text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
           Imagine yourself <span className="text-primary">6 months</span> from now.
         </h1>
-        <p className="text-white/50 mt-4 text-sm leading-relaxed font-semibold">
+        <p className="text-white/50 mt-2 text-xs sm:text-sm leading-relaxed font-semibold">
           If you stay consistent, what would success look like?
         </p>
       </header>
@@ -47,23 +43,20 @@ const FutureSelf: React.FC = () => {
               key={f.label}
               type="button"
               whileTap={{ scale: 0.96 }}
-              animate={active ? { scale: [1, 1.05, 1] } : { scale: 1 }}
-              transition={{ duration: 0.5 }}
               onClick={() => handleSelect(f.label)}
-              className={`relative flex flex-col items-center gap-2 p-4 rounded-3xl border text-center transition-all duration-300 overflow-hidden ${
+              className={`relative flex flex-col items-center justify-between p-3.5 rounded-3xl border text-center transition-all duration-300 ${
                 active ? 'bg-primary/10 border-primary shadow-[0_0_20px_rgba(226,255,59,0.2)]' : 'bg-black/30 border-white/5 hover:border-white/10'
               }`}
             >
-              {active && (
-                <motion.div
-                  className="absolute inset-0 bg-primary/10"
-                  initial={{ opacity: 0.6, scale: 0 }}
-                  animate={{ opacity: 0, scale: 2 }}
-                  transition={{ duration: 0.8 }}
-                />
+              {f.tag && (
+                <span className={`text-[7px] font-black uppercase px-2 py-0.5 rounded-full mb-1 ${
+                  active ? 'bg-primary text-black' : 'bg-white/5 text-white/40 border border-white/5'
+                }`}>
+                  {f.tag}
+                </span>
               )}
-              <Icon className={`w-6 h-6 relative z-10 ${active ? 'text-primary' : 'text-primary/40'}`} strokeWidth={2.25} />
-              <span className={`text-[10px] font-black uppercase leading-tight relative z-10 ${active ? 'text-primary' : 'text-white/70'}`}>{f.label}</span>
+              <Icon className={`w-6 h-6 my-1 ${active ? 'text-primary' : 'text-primary/40'}`} strokeWidth={2.25} />
+              <span className={`text-[10px] font-black uppercase leading-tight ${active ? 'text-primary' : 'text-white/70'}`}>{f.label}</span>
             </motion.button>
           );
         })}
