@@ -15,6 +15,8 @@ interface PlanCard {
   id: 'monthly' | 'monthly_pro' | 'three_month' | 'yearly';
   name: string;
   price: string;
+  originalPrice?: string;
+  discountTag?: string;
   period: string;
   features: string[];
   highlight?: boolean;
@@ -25,6 +27,8 @@ const PLAN_CARDS: PlanCard[] = [
     id: 'monthly',
     name: 'SparAI Monthly',
     price: '₹629',
+    originalPrice: '₹1,299',
+    discountTag: '51% OFF',
     period: '/ month',
     features: ['1 AI Video Analysis / day', '1 Planner Generation / week', '1 Live Spar / day'],
   },
@@ -32,6 +36,8 @@ const PLAN_CARDS: PlanCard[] = [
     id: 'monthly_pro',
     name: 'SparAI Pro',
     price: '₹729',
+    originalPrice: '₹1,599',
+    discountTag: '54% OFF',
     period: '/ month',
     features: ['2 AI Video Analyses / day', '2 Planner Generations / week', '2 Live Spars / day'],
     highlight: true,
@@ -40,6 +46,8 @@ const PLAN_CARDS: PlanCard[] = [
     id: 'three_month',
     name: 'SparAI Performance',
     price: '₹1,629',
+    originalPrice: '₹3,999',
+    discountTag: '59% OFF',
     period: '/ 3 months',
     features: ['3 AI Video Analyses / day', '3 Planner Generations / week', '3 Live Spars / day'],
   },
@@ -47,6 +55,8 @@ const PLAN_CARDS: PlanCard[] = [
     id: 'yearly',
     name: 'SparAI Elite 👑',
     price: '₹6,290',
+    originalPrice: '₹15,499',
+    discountTag: '60% OFF',
     period: '/ year',
     features: [
       'Unlimited AI Video Analyses',
