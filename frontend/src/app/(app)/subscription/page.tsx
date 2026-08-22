@@ -218,8 +218,86 @@ function SubscriptionContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-white p-6 pb-16 font-sans">
+    <div className="min-h-screen bg-[#0A0A0A] text-white p-4 sm:p-6 pb-16 font-sans relative">
       <Script src="https://checkout.razorpay.com/v1/checkout.js" onLoad={() => setScriptLoaded(true)} />
+
+      {/* Free Sparring Session Waiting Pop-Up Modal */}
+      <AnimatePresence>
+        {showSparPopup && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowSparPopup(false)}
+              className="fixed inset-0 bg-black/85 backdrop-blur-md"
+            />
+
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="relative w-full max-w-md bg-gradient-to-b from-[#1c2214] via-[#0f120c] to-[#080a06] border-2 border-primary/60 rounded-[32px] p-5 sm:p-6 shadow-[0_0_50px_rgba(226,255,59,0.35)] z-10 overflow-hidden"
+            >
+              <div className="absolute top-0 right-0 w-44 h-44 bg-primary/20 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute bottom-0 left-0 w-44 h-44 bg-yellow-400/10 rounded-full blur-3xl pointer-events-none" />
+
+              <button
+                onClick={() => setShowSparPopup(false)}
+                className="absolute top-3.5 right-3.5 w-8 h-8 rounded-full border border-white/10 bg-white/5 flex items-center justify-center text-white/50 hover:text-white transition-all z-20"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              <div className="flex items-center gap-2 mb-3">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-primary/40 bg-primary/10 text-primary text-[9px] font-black tracking-widest uppercase shadow-[0_0_10px_rgba(226,255,59,0.3)]">
+                  <Sparkles className="w-3 h-3 animate-spin" />
+                  FREE SESSION READY
+                </div>
+              </div>
+
+              <div className="mb-4">
+                <h2 className="text-2xl sm:text-3xl font-black italic uppercase leading-[0.95] text-white tracking-wide">
+                  YOUR FREE <span className="text-primary drop-shadow-[0_0_12px_rgba(226,255,59,0.8)]">SPARRING ROUND</span> IS WAITING!
+                </h2>
+                <p className="text-xs sm:text-sm font-semibold text-white/70 mt-2 leading-relaxed">
+                  No subscription needed to get into the action right now. Step directly into the ring, test your reaction and combinations!
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-black/40 border border-white/10 flex items-center gap-3 mb-5">
+                <div className="w-10 h-10 rounded-xl bg-primary/20 border border-primary/30 flex items-center justify-center text-primary shrink-0">
+                  <Swords className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="text-xs font-black text-white uppercase">100% Free Live Match</div>
+                  <div className="text-[9px] text-primary font-bold uppercase tracking-wider">Zero Payment Required Today</div>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2.5">
+                <NeonButton
+                  onClick={() => {
+                    setShowSparPopup(false);
+                    router.push('/spar');
+                  }}
+                  className="w-full h-14 text-sm font-black italic tracking-widest text-black uppercase flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(226,255,59,0.4)]"
+                >
+                  ENTER FREE SPARRING ARENA <Swords className="w-4 h-4 ml-1" />
+                </NeonButton>
+
+                <button
+                  onClick={() => setShowSparPopup(false)}
+                  className="text-[10px] font-black text-white/40 hover:text-white uppercase tracking-widest text-center py-1 mt-1"
+                >
+                  I'll Explore Plans First
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <header className="flex items-center gap-4 mb-6">
         <button
