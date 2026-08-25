@@ -75,6 +75,10 @@ export function generateSparCommandSequence(seed?: number): SparCommand[] {
   return seq;
 }
 
+export function shouldGateResultReveal(isActiveEntitlement: boolean): boolean {
+  return !isActiveEntitlement;
+}
+
 /**
  * Builds the API response for a completed spar match.
  *
