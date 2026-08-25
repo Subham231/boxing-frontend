@@ -42,6 +42,7 @@ export default function SparMatchClient() {
   const resultsRef = useRef<CmdResult[]>([]);
   const spokenRef = useRef<Set<number>>(new Set());
   const submittedRef = useRef(false);
+  const exitHandledRef = useRef(false);
 
   const [match, setMatch] = useState<MatchInfo | null>(null);
   const [phase, setPhase] = useState<'setup' | 'live' | 'submitting' | 'done'>('setup');
@@ -71,7 +72,7 @@ export default function SparMatchClient() {
 
   const cleanup = useCallback(() => {
     try {
-      if (channelRef.current && matchId) {
+      if (channelRef.current && matchId && !exitHandledRef.current) {
         channelRef.current.send({
           type: 'broadcast',
           event: 'peer-left',
@@ -86,6 +87,23 @@ export default function SparMatchClient() {
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
     localStreamRef.current = null;
   }, [match?.role, matchId]);
+
+  const handleOpponentExit = useCallback(async (reason: string) => {
+    if (!match || exitHandledRef.current) return;
+    exitHandledRef.current = true;
+    setOpponentLeft(true);
+    setOpponentLeftReason(reason);
+    setStatusLine('Opponent left');
+
+    try {
+      const headers = await authHeaders();
+      await fetch(`/api/spar/match/${match.matchId}/exit`, { method: 'POST', headers });
+    } catch {
+      /* ignore */
+    }
+
+    cleanup();
+  }, [authHeaders, cleanup, match]);
 
   useEffect(() => () => cleanup(), [cleanup]);
 
@@ -206,9 +224,7 @@ export default function SparMatchClient() {
 
         pc.onconnectionstatechange = () => {
           if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
-            setOpponentLeft(true);
-            setOpponentLeftReason('Connection lost. Your opponent left the match.');
-            setStatusLine('Connection lost');
+            handleOpponentExit('Connection lost. Your opponent left the match.');
           }
           if (pc.connectionState === 'connected') {
             setStatusLine('Opponent connected');
@@ -268,10 +284,7 @@ export default function SparMatchClient() {
 
         channel.on('broadcast', { event: 'peer-left' }, ({ payload }) => {
           if (!payload || payload.matchId !== match.matchId) return;
-          setOpponentLeft(true);
-          setOpponentLeftReason('Your opponent left the match.');
-          setStatusLine('Opponent left');
-          cleanup();
+          handleOpponentExit('Your opponent left the match.');
         });
 
         await new Promise<void>((resolve) => {
@@ -305,7 +318,7 @@ export default function SparMatchClient() {
     return () => {
       cancelled = true;
     };
-  }, [match, authHeaders]);
+  }, [match, authHeaders, handleOpponentExit]);
 
   useEffect(() => {
     if (phase !== 'live' || !match) return;
