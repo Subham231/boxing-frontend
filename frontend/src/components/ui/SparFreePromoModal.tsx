@@ -96,13 +96,15 @@ export function SparFreePromoModal() {
                 <div className="absolute inset-4 rounded-[16px] border border-primary/20 opacity-40" />
 
                 {/* Center sparkle */}
+                <div className="absolute inset-0 flex items-center justify-center">
                 <motion.div
-                  className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-primary/20 border-2 border-primary/50 flex items-center justify-center"
+                  className="relative w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-primary/20 border-2 border-primary/50 flex items-center justify-center"
                   animate={{ scale: [1, 1.1, 1], rotate: [0, 5, 0, -5, 0] }}
                   transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
                 >
                   <Swords className="w-7 h-7 sm:w-10 sm:h-10 text-primary drop-shadow-[0_0_16px_rgba(226,255,59,0.8)]" />
                 </motion.div>
+                </div>
 
                 {/* Corner posts with glow */}
                 {['tl', 'tr', 'bl', 'br'].map((corner) => (
