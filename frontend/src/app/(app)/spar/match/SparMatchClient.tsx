@@ -50,6 +50,8 @@ export default function SparMatchClient() {
   const [misses, setMisses] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [statusLine, setStatusLine] = useState('Connecting…');
+  const [opponentLeft, setOpponentLeft] = useState(false);
+  const [opponentLeftReason, setOpponentLeftReason] = useState('Opponent left the match.');
 
   const authHeaders = useCallback(async () => {
     const user = firebaseAuth.currentUser;
@@ -68,13 +70,22 @@ export default function SparMatchClient() {
   };
 
   const cleanup = useCallback(() => {
+    try {
+      if (channelRef.current && matchId) {
+        channelRef.current.send({
+          type: 'broadcast',
+          event: 'peer-left',
+          payload: { matchId, from: match?.role || 'unknown' },
+        });
+      }
+    } catch { /* ignore */ }
     try { channelRef.current?.unsubscribe(); } catch { /* ignore */ }
     channelRef.current = null;
     try { pcRef.current?.close(); } catch { /* ignore */ }
     pcRef.current = null;
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
     localStreamRef.current = null;
-  }, []);
+  }, [match?.role, matchId]);
 
   useEffect(() => () => cleanup(), [cleanup]);
 
@@ -193,12 +204,26 @@ export default function SparMatchClient() {
         pcRef.current = pc;
         stream.getTracks().forEach((t) => pc.addTrack(t, stream));
 
-        pc.ontrack = (ev) => {
-          if (remoteVideoRef.current) {
-            remoteVideoRef.current.srcObject = ev.streams[0];
-            remoteVideoRef.current.play().catch(() => {});
+        pc.onconnectionstatechange = () => {
+          if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
+            setOpponentLeft(true);
+            setOpponentLeftReason('Connection lost. Your opponent left the match.');
+            setStatusLine('Connection lost');
           }
-          setStatusLine('Opponent connected');
+          if (pc.connectionState === 'connected') {
+            setStatusLine('Opponent connected');
+            setOpponentLeft(false);
+          }
+        };
+
+        pc.ontrack = (ev) => {
+          const remoteStream = ev.streams?.[0];
+          if (remoteStream && remoteVideoRef.current) {
+            remoteVideoRef.current.srcObject = remoteStream;
+            remoteVideoRef.current.play().catch(() => {});
+            setStatusLine('Opponent connected');
+            setOpponentLeft(false);
+          }
         };
 
         const channel = client.channel(match.signalingChannel, {
@@ -239,6 +264,14 @@ export default function SparMatchClient() {
           } catch {
             /* ignore */
           }
+        });
+
+        channel.on('broadcast', { event: 'peer-left' }, ({ payload }) => {
+          if (!payload || payload.matchId !== match.matchId) return;
+          setOpponentLeft(true);
+          setOpponentLeftReason('Your opponent left the match.');
+          setStatusLine('Opponent left');
+          cleanup();
         });
 
         await new Promise<void>((resolve) => {
@@ -382,6 +415,20 @@ export default function SparMatchClient() {
 
       {error && (
         <GlassCard className="p-4 mb-4 border-red-500/30 text-[11px] text-red-400 font-semibold">{error}</GlassCard>
+      )}
+
+      {opponentLeft && (
+        <GlassCard className="p-4 mb-4 border-orange-500/30 bg-orange-500/10 text-[11px] text-orange-200 font-semibold">
+          {opponentLeftReason}
+          <div className="mt-3 flex gap-2">
+            <button
+              onClick={() => router.push('/spar')}
+              className="flex-1 rounded-xl bg-primary text-black px-3 py-2 font-black uppercase tracking-widest text-[10px]"
+            >
+              Exit to lobby
+            </button>
+          </div>
+        </GlassCard>
       )}
 
       <div className="grid grid-cols-2 gap-2 mb-4">
