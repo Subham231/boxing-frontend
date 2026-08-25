@@ -11,8 +11,16 @@ export default function ReferralCard({ uid }: { uid: string }) {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    getUserProfile(uid).then(setProfile);
+    let mounted = true;
+    getUserProfile(uid).then((data) => {
+      if (mounted) setProfile(data);
+    });
+    return () => {
+      mounted = false;
+    };
   }, [uid]);
+
+  const activeProfile = profile ?? { referral_code: 'LOADING', referral_count: 0, has_claimed_referral_bonus: false, created_at: new Date().toISOString() };
 
   if (!profile) return null;
 

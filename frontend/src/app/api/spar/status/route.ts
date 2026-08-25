@@ -38,11 +38,11 @@ export async function GET(req: NextRequest) {
     active: false,
     planName: null,
     sparDailyLimit: 1,
-    sparDailyUsed: entitlement.freeSparAvailable ? 0 : 1,
+    sparDailyUsed: entitlement.sparDailyUsed || 0,
     remaining: entitlement.freeSparAvailable ? 1 : 0,
     canSpar: entitlement.freeSparAvailable,
     freeSparAvailable: entitlement.freeSparAvailable,
-    freeSparUnlocked: entitlement.freeSparAvailable,
+    freeSparUnlocked: entitlement.freeSparUnlocked,
     needsAd: false,
   });
 }

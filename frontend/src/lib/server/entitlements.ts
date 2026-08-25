@@ -186,7 +186,7 @@ export async function getEntitlement(uid: string): Promise<Entitlement> {
   const sparUsed = row.daily_spar_date === today ? (row.daily_spar_count || 0) : 0;
   const freeSparUsedToday = row.free_spar_ad_date === today;
   const freeSparUnlocked = row.free_spar_unlocked_date === today && !freeSparUsedToday;
-  const freeSparAvailable = !freeSparUsedToday;
+  const freeSparAvailable = !freeSparUsedToday && (!row.daily_spar_date || row.daily_spar_date !== today || (row.daily_spar_count || 0) < 1);
 
   const referralExpiry = row.plan_expires_at ? new Date(row.plan_expires_at).getTime() : 0;
   if (row.plan === 'referral_reward' && referralExpiry > now) {
