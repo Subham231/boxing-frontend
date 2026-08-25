@@ -12,11 +12,11 @@ const WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
 // Cleanup old entries periodically
 setInterval(() => {
   const now = Date.now();
-  for (const [ip, data] of ipUsageStore.entries()) {
+  ipUsageStore.forEach((data, ip) => {
     if (data.resetTime < now) {
       ipUsageStore.delete(ip);
     }
-  }
+  });
 }, 60 * 60 * 1000); // Run cleanup every hour
 
 export function getClientIP(req: NextRequest): string {
