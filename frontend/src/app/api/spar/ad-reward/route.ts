@@ -43,7 +43,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ unlocked: !!data, provider: 'dev', mode: 'dev' });
   }
 
-  const verification = verifyGoogleAdManagerReward(url, req.headers);
+  const body = await req.json().catch(() => ({}));
+  const verification = verifyGoogleAdManagerReward(url, req.headers, body);
 
   if (!verification.ok || !verification.uid) {
     return NextResponse.json(
