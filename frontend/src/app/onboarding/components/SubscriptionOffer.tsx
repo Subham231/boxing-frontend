@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, Crown, Gift, Ticket } from 'lucide-react';
 import { useOnboarding } from '@/context/OnboardingContext';
@@ -52,7 +52,14 @@ const SubscriptionOffer: React.FC = () => {
   const [referralLoading, setReferralLoading] = useState(false);
   const [referralError, setReferralError] = useState<string | null>(null);
   const [referralSuccess, setReferralSuccess] = useState(false);
-  const uid = firebaseAuth.currentUser?.uid;
+  const [uid, setUid] = useState<string | null>(null);
+
+  useEffect(() => {
+    const unsub = firebaseAuth.onAuthStateChanged((user) => {
+      setUid(user?.uid ?? null);
+    });
+    return () => unsub();
+  }, []);
 
   const handleContinue = () => {
     if (typeof window !== 'undefined') {
@@ -98,10 +105,10 @@ const SubscriptionOffer: React.FC = () => {
       <header className="text-left mb-5">
         <StepBadge />
         <h1 className="text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
-          Claim Your <span className="text-primary">30-Day Free Trial</span>
+          Choose your <span className="text-primary">edge</span>
         </h1>
         <p className="text-white/50 mt-3 text-sm leading-relaxed font-semibold">
-          Use a valid referral code to unlock full SparAI access for 30 days — no charge.
+          Use your referral code to unlock the first 30 days, or pick a plan and set up your training stack.
         </p>
       </header>
 
@@ -182,7 +189,7 @@ const SubscriptionOffer: React.FC = () => {
 
       <footer className="mt-8 flex flex-col gap-4">
         <button onClick={handleContinue} className="btn-primary w-full h-16 flex items-center justify-center gap-2">
-          Claim My 30-Day Trial
+          Set up my plan
         </button>
 
         <div className="bg-black/80 border border-white/10 rounded-2xl py-3 px-4 flex flex-wrap justify-center items-center gap-x-3 gap-y-1.5 text-white/50 text-[9px] font-bold uppercase tracking-widest text-center mt-2 shadow-[0_4px_12px_rgba(0,0,0,0.5)]">
