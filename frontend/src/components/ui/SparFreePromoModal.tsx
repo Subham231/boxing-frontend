@@ -56,7 +56,7 @@ export function SparFreePromoModal() {
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
@@ -72,7 +72,7 @@ export function SparFreePromoModal() {
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.92, opacity: 0, y: 30 }}
             transition={{ type: 'spring', damping: 22, stiffness: 280 }}
-            className="relative w-full max-w-lg max-h-[90dvh] overflow-y-auto bg-gradient-to-b from-[#1a1f14] via-[#0e1109] to-[#070806] border-2 border-primary/60 rounded-[32px] p-6 sm:p-8 shadow-[0_0_60px_rgba(226,255,59,0.35)] z-10 custom-scrollbar"
+            className="relative w-full max-w-lg max-h-[calc(100dvh-1rem)] overflow-y-auto bg-gradient-to-b from-[#1a1f14] via-[#0e1109] to-[#070806] border-2 border-primary/60 rounded-[24px] sm:rounded-[32px] p-4 sm:p-8 shadow-[0_0_60px_rgba(226,255,59,0.35)] z-10 custom-scrollbar"
           >
             {/* Background Glow - more prominent */}
             <div className="absolute top-0 right-0 w-64 h-64 bg-primary/20 rounded-full blur-3xl pointer-events-none" />
@@ -87,9 +87,9 @@ export function SparFreePromoModal() {
             </button>
 
             {/* Main Visual - Large central graphic */}
-            <div className="relative mb-6 flex items-center justify-center">
+            <div className="relative mb-3 sm:mb-6 flex items-center justify-center">
               {/* Boxing ring visual */}
-              <div className="relative w-48 h-48 sm:w-56 sm:h-56">
+              <div className="relative w-36 h-36 sm:w-56 sm:h-56">
                 {/* Outer ring ropes */}
                 <div className="absolute inset-0 rounded-[20px] border-4 border-primary/40 opacity-80" />
                 <div className="absolute inset-2 rounded-[18px] border-2 border-primary/30 opacity-60" />
@@ -97,18 +97,18 @@ export function SparFreePromoModal() {
 
                 {/* Center sparkle */}
                 <motion.div
-                  className="absolute inset-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-primary/20 border-2 border-primary/50 flex items-center justify-center"
+                  className="absolute inset-1/2 -translate-x-1/2 -translate-y-1/2 w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-primary/20 border-2 border-primary/50 flex items-center justify-center"
                   animate={{ scale: [1, 1.1, 1], rotate: [0, 5, 0, -5, 0] }}
                   transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
                 >
-                  <Swords className="w-8 h-8 sm:w-10 sm:h-10 text-primary drop-shadow-[0_0_16px_rgba(226,255,59,0.8)]" />
+                  <Swords className="w-7 h-7 sm:w-10 sm:h-10 text-primary drop-shadow-[0_0_16px_rgba(226,255,59,0.8)]" />
                 </motion.div>
 
                 {/* Corner posts with glow */}
                 {['tl', 'tr', 'bl', 'br'].map((corner) => (
                   <motion.div
                     key={corner}
-                    className={`absolute w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-primary/50 shadow-[0_0_8px_rgba(226,255,59,0.6)] ${
+                    className={`absolute w-2.5 h-2.5 sm:w-4 sm:h-4 rounded-full bg-primary/50 shadow-[0_0_8px_rgba(226,255,59,0.6)] ${
                       corner === 'tl' ? 'top-1 left-1' :
                       corner === 'tr' ? 'top-1 right-1' :
                       corner === 'bl' ? 'bottom-1 left-1' : 'bottom-1 right-1'
@@ -122,12 +122,12 @@ export function SparFreePromoModal() {
             </div>
 
             {/* Title - Large, impactful, minimal text */}
-            <div className="text-center mb-4">
+            <div className="text-center mb-3 sm:mb-4">
               <motion.h2
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1, duration: 0.4 }}
-                className="text-2xl sm:text-3xl font-black italic uppercase leading-tight text-white tracking-wide"
+                className="text-xl sm:text-3xl font-black italic uppercase leading-tight text-white tracking-wide"
               >
                 SPARRING IS
                 <br />
@@ -137,7 +137,7 @@ export function SparFreePromoModal() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2, duration: 0.4 }}
-                className="text-sm sm:text-base font-medium text-white/70 mt-2 leading-relaxed max-w-xs mx-auto"
+                className="text-[11px] sm:text-base font-medium text-white/70 mt-1 sm:mt-2 leading-relaxed max-w-xs mx-auto"
               >
                 Live 1v1 matches. Real-time AI coach. Zero subscription.
               </motion.p>
@@ -148,49 +148,49 @@ export function SparFreePromoModal() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3, duration: 0.5 }}
-              className="grid grid-cols-2 gap-3 mb-6"
+              className="grid grid-cols-2 gap-2 sm:gap-3 mb-4 sm:mb-6"
             >
               {/* Feature 1: Live Spar */}
-              <div className="group relative p-4 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-primary/40 hover:bg-primary/5 transition-all duration-300">
-                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-primary/15 border border-primary/30 flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
-                  <Swords className="w-6 h-6 sm:w-7 sm:h-7 text-primary" />
+              <div className="group relative p-3 sm:p-4 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-primary/40 hover:bg-primary/5 transition-all duration-300">
+                <div className="w-9 h-9 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-primary/15 border border-primary/30 flex items-center justify-center mx-auto mb-2 sm:mb-3 group-hover:scale-110 transition-transform">
+                  <Swords className="w-5 h-5 sm:w-7 sm:h-7 text-primary" />
                 </div>
                 <div className="text-center">
-                  <div className="text-sm font-black text-white uppercase tracking-wide">Live 1v1</div>
-                  <div className="text-[10px] text-white/50 font-bold uppercase mt-0.5">Realtime PvP</div>
+                  <div className="text-[11px] sm:text-sm font-black text-white uppercase tracking-wide">Live 1v1</div>
+                  <div className="text-[8px] sm:text-[10px] text-white/50 font-bold uppercase mt-0.5">Realtime PvP</div>
                 </div>
               </div>
 
               {/* Feature 2: AI Coach */}
-              <div className="group relative p-4 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-cyan-400/40 hover:bg-cyan-400/5 transition-all duration-300">
-                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-cyan-400/15 border border-cyan-400/30 flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
-                  <Zap className="w-6 h-6 sm:w-7 sm:h-7 text-cyan-400" />
+              <div className="group relative p-3 sm:p-4 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-cyan-400/40 hover:bg-cyan-400/5 transition-all duration-300">
+                <div className="w-9 h-9 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-cyan-400/15 border border-cyan-400/30 flex items-center justify-center mx-auto mb-2 sm:mb-3 group-hover:scale-110 transition-transform">
+                  <Zap className="w-5 h-5 sm:w-7 sm:h-7 text-cyan-400" />
                 </div>
                 <div className="text-center">
-                  <div className="text-sm font-black text-white uppercase tracking-wide">AI Coach</div>
-                  <div className="text-[10px] text-white/50 font-bold uppercase mt-0.5">40–70 Calls</div>
+                  <div className="text-[11px] sm:text-sm font-black text-white uppercase tracking-wide">AI Coach</div>
+                  <div className="text-[8px] sm:text-[10px] text-white/50 font-bold uppercase mt-0.5">40–70 Calls</div>
                 </div>
               </div>
 
               {/* Feature 3: Leaderboard */}
-              <div className="group relative p-4 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-amber-400/40 hover:bg-amber-400/5 transition-all duration-300">
-                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-amber-400/15 border border-amber-400/30 flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
-                  <Trophy className="w-6 h-6 sm:w-7 sm:h-7 text-amber-400" />
+              <div className="group relative p-3 sm:p-4 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-amber-400/40 hover:bg-amber-400/5 transition-all duration-300">
+                <div className="w-9 h-9 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-amber-400/15 border border-amber-400/30 flex items-center justify-center mx-auto mb-2 sm:mb-3 group-hover:scale-110 transition-transform">
+                  <Trophy className="w-5 h-5 sm:w-7 sm:h-7 text-amber-400" />
                 </div>
                 <div className="text-center">
-                  <div className="text-sm font-black text-white uppercase tracking-wide">Rankings</div>
-                  <div className="text-[10px] text-white/50 font-bold uppercase mt-0.5">Weekly Seasons</div>
+                  <div className="text-[11px] sm:text-sm font-black text-white uppercase tracking-wide">Rankings</div>
+                  <div className="text-[8px] sm:text-[10px] text-white/50 font-bold uppercase mt-0.5">Weekly Seasons</div>
                 </div>
               </div>
 
               {/* Feature 4: Deals */}
-              <div className="group relative p-4 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-purple-400/40 hover:bg-purple-400/5 transition-all duration-300">
-                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-purple-400/15 border border-purple-400/30 flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
-                  <Crown className="w-6 h-6 sm:w-7 sm:h-7 text-purple-400" />
+              <div className="group relative p-3 sm:p-4 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-purple-400/40 hover:bg-purple-400/5 transition-all duration-300">
+                <div className="w-9 h-9 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-purple-400/15 border border-purple-400/30 flex items-center justify-center mx-auto mb-2 sm:mb-3 group-hover:scale-110 transition-transform">
+                  <Crown className="w-5 h-5 sm:w-7 sm:h-7 text-purple-400" />
                 </div>
                 <div className="text-center">
-                  <div className="text-sm font-black text-white uppercase tracking-wide">Deals</div>
-                  <div className="text-[10px] text-white/50 font-bold uppercase mt-0.5">Up to 40% Off</div>
+                  <div className="text-[11px] sm:text-sm font-black text-white uppercase tracking-wide">Deals</div>
+                  <div className="text-[8px] sm:text-[10px] text-white/50 font-bold uppercase mt-0.5">Up to 40% Off</div>
                 </div>
               </div>
             </motion.div>
@@ -200,12 +200,12 @@ export function SparFreePromoModal() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4, duration: 0.5 }}
-              className="flex flex-col gap-3"
+              className="flex flex-col gap-2 sm:gap-3"
             >
               {/* Primary CTA - Enter Sparring */}
               <NeonButton
                 onClick={handleEnterSpar}
-                className="w-full h-14 text-sm font-black italic tracking-widest text-black uppercase flex items-center justify-center gap-2.5 shadow-[0_0_30px_rgba(226,255,59,0.5)]"
+                className="w-full h-12 sm:h-14 text-xs sm:text-sm font-black italic tracking-widest text-black uppercase flex items-center justify-center gap-2.5 shadow-[0_0_30px_rgba(226,255,59,0.5)]"
               >
                 <Play className="w-5 h-5" />
                 ENTER SPARRING ARENA
@@ -215,7 +215,7 @@ export function SparFreePromoModal() {
               {/* Secondary CTA - View Deals */}
               <button
                 onClick={handleViewDeals}
-                className="w-full h-12 rounded-xl border-2 border-primary/30 bg-primary/10 text-primary text-sm font-black uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-primary/20 transition-all"
+                className="w-full h-10 sm:h-12 rounded-xl border-2 border-primary/30 bg-primary/10 text-xs sm:text-sm font-black uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-primary/20 transition-all"
               >
                 <Crown className="w-5 h-5" />
                 VIEW DEALS & FREE TRIALS
