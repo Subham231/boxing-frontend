@@ -1,0 +1,21 @@
+# Dockerignore for Next.js app
+node_modules
+.next
+.out
+.cache
+.env.local
+.env.development
+.env.test
+.env.production
+npm-debug.log
+Dockerfile
+.dockerignore
+.git
+.gitignore
+LICENSE
+README.md
+**/__tests__
+**/__mocks__
+**/*.test.*
+**/*.spec.*
+TSBuildInfo
