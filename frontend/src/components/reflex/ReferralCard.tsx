@@ -20,9 +20,19 @@ export default function ReferralCard({ uid }: { uid: string }) {
     };
   }, [uid]);
 
-  const activeProfile = profile ?? { referral_code: 'LOADING', referral_count: 0, has_claimed_referral_bonus: false, created_at: new Date().toISOString() };
-
-  if (!profile) return null;
+  if (!profile) {
+    return (
+      <GlassCard className="p-5 border-primary/20 bg-primary/[0.03] flex flex-col gap-4">
+        <div className="flex items-center gap-2">
+          <Gift className="w-4 h-4 text-primary" />
+          <span className="text-[10px] font-black text-primary uppercase tracking-widest">Loading referral code…</span>
+        </div>
+        <div className="flex items-center justify-between bg-black/40 border border-white/10 rounded-2xl px-4 py-3">
+          <span className="text-lg font-black text-white tracking-[4px]">••••••</span>
+        </div>
+      </GlassCard>
+    );
+  }
 
   // One-time reward: exactly 5 referrals, granted once ever — not a
   // repeating every-5 cycle. Progress caps at 5/5 and stays there.
