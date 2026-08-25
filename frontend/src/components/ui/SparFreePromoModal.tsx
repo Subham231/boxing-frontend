@@ -97,7 +97,7 @@ export function SparFreePromoModal() {
 
                 {/* Center sparkle */}
                 <motion.div
-                  className="absolute inset-1/2 -translate-x-1/2 -translate-y-1/2 w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-primary/20 border-2 border-primary/50 flex items-center justify-center"
+                  className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-primary/20 border-2 border-primary/50 flex items-center justify-center"
                   animate={{ scale: [1, 1.1, 1], rotate: [0, 5, 0, -5, 0] }}
                   transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
                 >
