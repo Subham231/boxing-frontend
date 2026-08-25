@@ -1,17 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
-import crypto from 'crypto';
 import { supabaseAdmin } from '@/lib/server/supabase-admin';
 import { isDevSkipAllowed } from '@/lib/server/env';
+import { verifyGoogleAdManagerReward } from '@/lib/server/ad-manager';
 
 export const runtime = 'nodejs';
 
 /**
- * AdMob / rewarded-ad Server-Side Verification callback.
- * Must NOT be treated as a client "I watched the ad" claim.
+ * Google Ad Manager / rewarded ad verification hook.
  *
- * Set AD_NETWORK_SSV_SECRET to enable signature checks.
- * Dev-only unlock: POST { uid } with Authorization bearer of that user
- * when SPAR_AD_DEV_UNLOCK=true and not production (isDevSkipAllowed path).
+ * This is intentionally structured so the app can accept a real GAM callback
+ * when the ad account is ready, while still letting local/dev testing unlock
+ * the free spar flow without the production provider credentials.
+ *
+ * Planned prod integration:
+ * - GAM SSV callback -> /api/spar/ad-reward
+ * - custom_data / user_id -> Firebase uid
+ * - optional signature validation with GAM_SSV_SECRET
+ * - provider-specific metadata hooks can be added in @/lib/server/ad-manager.ts
  */
 export async function POST(req: NextRequest) {
   if (!supabaseAdmin) {
@@ -25,50 +30,42 @@ export async function POST(req: NextRequest) {
   if (isDevSkipAllowed() && process.env.SPAR_AD_DEV_UNLOCK === 'true' && contentType.includes('application/json')) {
     const body = await req.json().catch(() => ({}));
     const uid = typeof body.uid === 'string' ? body.uid : '';
-    if (!uid) return NextResponse.json({ error: 'Missing uid' }, { status: 400 });
+    if (!uid) {
+      return NextResponse.json({ error: 'Missing uid' }, { status: 400 });
+    }
+
     const { data, error } = await supabaseAdmin.rpc('unlock_free_spar_ad', { p_uid: uid });
     if (error) {
       console.error('[spar/ad-reward] unlock rpc', error);
-      return NextResponse.json({ error: 'Unlock failed. Run reflex-schema-v14.sql.' }, { status: 500 });
+      return NextResponse.json({ error: 'Unlock failed. Run the free-spar SQL migration.' }, { status: 500 });
     }
-    return NextResponse.json({ unlocked: !!data });
+
+    return NextResponse.json({ unlocked: !!data, provider: 'dev', mode: 'dev' });
   }
 
-  // --- SSV query-style callback (AdMob custom data = uid) ---
-  const secret = process.env.AD_NETWORK_SSV_SECRET || '';
-  const signature = url.searchParams.get('signature') || req.headers.get('x-admob-signature') || '';
-  const customData = url.searchParams.get('custom_data') || url.searchParams.get('user_id') || '';
-  const keyId = url.searchParams.get('key_id') || '';
+  const verification = verifyGoogleAdManagerReward(url, req.headers);
 
-  if (!secret) {
+  if (!verification.ok || !verification.uid) {
     return NextResponse.json(
-      { error: 'Ad SSV not configured. Set AD_NETWORK_SSV_SECRET or use SPAR_AD_DEV_UNLOCK in non-production.' },
-      { status: 503 },
+      {
+        error: verification.reason || 'Reward verification failed.',
+        provider: verification.provider,
+        metadata: verification.metadata,
+      },
+      { status: verification.reason?.includes('not configured') ? 503 : 401 },
     );
   }
 
-  // Minimal HMAC check over the raw query string without signature itself.
-  // Replace with the network's exact SSV docs when the ad account is ready.
-  const payload = url.searchParams.toString().replace(/&?signature=[^&]*/g, '');
-  const expected = crypto.createHmac('sha256', secret).update(payload).digest('base64');
-  const ok =
-    signature &&
-    expected.length === signature.length &&
-    crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
-
-  if (!ok && process.env.AD_NETWORK_SSV_STRICT !== 'false') {
-    // If provider uses asymmetric keys, set AD_NETWORK_SSV_STRICT=false until wired.
-    console.warn('[spar/ad-reward] signature mismatch', { keyId });
-    return NextResponse.json({ error: 'Invalid SSV signature.' }, { status: 401 });
-  }
-
-  const uid = customData;
-  if (!uid) return NextResponse.json({ error: 'Missing custom_data uid.' }, { status: 400 });
-
+  const uid = verification.uid;
   const { data, error } = await supabaseAdmin.rpc('unlock_free_spar_ad', { p_uid: uid });
   if (error) {
     console.error('[spar/ad-reward] unlock rpc', error);
-    return NextResponse.json({ error: 'Unlock failed' }, { status: 500 });
+    return NextResponse.json({ error: 'Unlock failed', provider: verification.provider }, { status: 500 });
   }
-  return NextResponse.json({ unlocked: !!data });
+
+  return NextResponse.json({
+    unlocked: !!data,
+    provider: verification.provider,
+    metadata: verification.metadata,
+  });
 }
