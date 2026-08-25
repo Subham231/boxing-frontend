@@ -333,6 +333,7 @@ export default function FreestyleAnalysis(): JSX.Element {
 
       const stream = await navigator.mediaDevices.getUserMedia({ video:{facingMode:'user',width:{ideal:640},height:{ideal:480}}, audio:false });
       streamRef.current = stream;
+      setStage('recording');
       // Wait for video element to mount
       let videoEl: HTMLVideoElement|null = null;
       const deadline = Date.now()+2000;
@@ -370,7 +371,6 @@ export default function FreestyleAnalysis(): JSX.Element {
       };
       rafRef.current = requestAnimationFrame(loop);
 
-      setStage('recording');
       setTracking(false);
       setCalibText('SEARCHING FOR YOU...');
 

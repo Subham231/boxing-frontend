@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
   if (consumeErr) {
     console.error('[spar/queue/join] consume', consumeErr);
     return NextResponse.json(
-      { error: 'Could not consume spar credit. Run reflex-schema-v14.sql in Supabase.' },
+      { error: 'Could not consume spar credit. Run reflex-schema-v18.sql in Supabase.' },
       { status: 500 },
     );
   }
