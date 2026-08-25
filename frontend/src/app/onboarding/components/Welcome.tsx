@@ -85,7 +85,7 @@ const Welcome: React.FC = () => {
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.6, duration: 0.6 }}
-                className="relative z-10 mt-10"
+                className="relative z-10 mt-10 pb-28"
             >
                 <div className="flex flex-col gap-3">
                     <button

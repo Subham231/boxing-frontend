@@ -3,6 +3,7 @@ import { requireFirebaseUid } from '@/lib/server/require-firebase';
 import { getEntitlement } from '@/lib/server/entitlements';
 import { supabaseAdmin } from '@/lib/server/supabase-admin';
 import { generateSparCommandSequence } from '@/lib/server/spar';
+import { getClientIP, rateLimitMiddleware, FREE_SPARRING_LIMITER } from '@/lib/server/ip-rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -24,6 +25,19 @@ export async function POST(req: NextRequest) {
   }
 
   const uid = auth.uid;
+
+  // Check if user is on free tier (not paid)
+  const entitlement = await getEntitlement(uid);
+  const isPaid = entitlement.active;
+
+  // Apply IP-based rate limiting for free tier users
+  if (!isPaid) {
+    const rateLimitResponse = rateLimitMiddleware(req, FREE_SPARRING_LIMITER);
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
+  }
+
   await purgeOldIncompleteMatches();
 
   // Clear stale queue rows older than 3 minutes
@@ -78,52 +92,32 @@ export async function POST(req: NextRequest) {
     status: 'searching',
   });
 
-  // Check-on-read matching (no background timer)
-  const { data: waiting } = await supabaseAdmin
-    .from('spar_queue')
-    .select('uid, is_paid')
-    .eq('status', 'searching')
-    .neq('uid', uid)
-    .order('joined_at', { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  // Use PostgreSQL advisory lock to prevent race condition in match creation
+  // Lock key based on the two uids (sorted to be consistent)
+  const lockKey = uid.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
 
-  if (!waiting) {
-    return NextResponse.json({ status: 'searching' });
-  }
+  const { data: matchResult, error: matchErr } = await supabaseAdmin.rpc('try_create_spar_match', {
+    p_uid: uid,
+    p_is_paid: isPaid,
+    p_lock_key: lockKey,
+  });
 
-  const opponentUid = waiting.uid as string;
-  const isPaidMatch = isPaid && !!waiting.is_paid;
-  const commandSequence = generateSparCommandSequence();
-  const playerA = uid < opponentUid ? uid : opponentUid;
-  const playerB = uid < opponentUid ? opponentUid : uid;
-
-  const { data: match, error: matchErr } = await supabaseAdmin
-    .from('spar_matches')
-    .insert({
-      player_a_uid: playerA,
-      player_b_uid: playerB,
-      is_paid_match: isPaidMatch,
-      command_sequence: commandSequence,
-      status: 'pending',
-    })
-    .select('id')
-    .single();
-
-  if (matchErr || !match) {
+  if (matchErr) {
     console.error('[spar/queue/join] match create', matchErr);
     return NextResponse.json({ error: 'Failed to create match.' }, { status: 500 });
   }
 
-  await supabaseAdmin.from('spar_queue').update({ status: 'matched' }).in('uid', [uid, opponentUid]);
+  if (!matchResult || matchResult.status === 'searching') {
+    return NextResponse.json({ status: 'searching' });
+  }
 
   return NextResponse.json({
     status: 'matched',
-    matchId: match.id,
-    opponentUid,
-    commandSequence,
-    signalingChannel: `spar-${match.id}`,
-    isPaidMatch,
-    role: uid === playerA ? 'offer' : 'answer',
+    matchId: matchResult.match_id,
+    opponentUid: matchResult.opponent_uid,
+    commandSequence: matchResult.command_sequence,
+    signalingChannel: `spar-${matchResult.match_id}`,
+    isPaidMatch: matchResult.is_paid_match,
+    role: matchResult.role,
   });
 }

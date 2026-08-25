@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronRight, Play, RefreshCw, Lock, Zap, Flame, Activity } from 'lucide-react';
+import { ChevronRight, Play, RefreshCw, Lock, Zap, Flame, Activity, SkipForward, X } from 'lucide-react';
 import { useOnboarding } from '@/context/OnboardingContext';
 import StepBadge from './StepBadge';
 
@@ -353,11 +353,18 @@ export default function FreestyleAnalysis(): JSX.Element {
 
     } catch (err: any) {
       cleanup();
-      const n = err?.name||'';
-      if (n==='NotAllowedError'||n==='PermissionDeniedError') setCameraError('Camera permission denied. Allow camera access in your browser settings.');
-      else if (n==='NotFoundError') setCameraError('No camera found on this device.');
-      else if (err?.message==='mp-timeout') setCameraError('AI model took too long to load. Check your connection and try again.');
-      else setCameraError('Could not start camera. Try again or skip this step.');
+      const n = err?.name || '';
+      if (n === 'NotAllowedError' || n === 'PermissionDeniedError') {
+        setCameraError('Camera permission denied. Please allow camera access in your browser settings and try again.');
+      } else if (n === 'NotFoundError' || n === 'OverconstrainedError') {
+        setCameraError('No camera found or camera not accessible. Please check your device has a working camera.');
+      } else if (err?.message === 'mp-timeout' || err?.message === 'mp-load') {
+        setCameraError('AI model failed to load. Check your internet connection and try again.');
+      } else if (err?.message === 'video-mount') {
+        setCameraError('Camera initialization failed. Please refresh the page and try again.');
+      } else {
+        setCameraError('Could not start camera. Please try again or skip this step.');
+      }
       setStage('setup');
     }
   };
@@ -468,6 +475,12 @@ export default function FreestyleAnalysis(): JSX.Element {
               >
                 I'M READY — SET UP CAMERA <Play className="w-4 h-4 fill-current" />
               </button>
+              <button
+                onClick={() => { nextStep(); }}
+                className="w-full h-12 flex items-center justify-center gap-2 text-sm font-black italic tracking-wider border border-white/10 bg-white/5 text-white/60 hover:text-white hover:border-white/20 transition-colors"
+              >
+                <SkipForward className="w-4 h-4" /> SKIP ANALYSIS
+              </button>
               <button onClick={prevStep} className="text-[10px] font-black text-white/40 hover:text-white uppercase tracking-widest py-1 mx-auto">Back</button>
             </div>
           </motion.div>
@@ -525,6 +538,12 @@ export default function FreestyleAnalysis(): JSX.Element {
                 className="btn-primary w-full h-14 flex items-center justify-center gap-2 text-sm font-black italic tracking-wider shadow-[0_0_25px_rgba(226,255,59,0.35)]"
               >
                 START 30s ANALYSIS <Play className="w-4 h-4 fill-current" />
+              </button>
+              <button
+                onClick={() => { nextStep(); }}
+                className="w-full h-12 flex items-center justify-center gap-2 text-sm font-black italic tracking-wider border border-white/10 bg-white/5 text-white/60 hover:text-white hover:border-white/20 transition-colors"
+              >
+                <SkipForward className="w-4 h-4" /> SKIP ANALYSIS
               </button>
               <button onClick={() => setStage('instructions')} className="text-[10px] font-black text-white/40 hover:text-white uppercase tracking-widest py-1 mx-auto flex items-center gap-1">
                 ← Back to Instructions

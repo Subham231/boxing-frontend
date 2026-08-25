@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Trophy, Swords } from 'lucide-react';
+import { ArrowLeft, Trophy, Swords, Lock, Zap, Flame, Activity, Shield } from 'lucide-react';
 import { firebaseAuth } from '@/lib/firebase';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
@@ -83,6 +83,63 @@ function SparResultsInner() {
             <div className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-2">AI Score</div>
             <div className="text-5xl font-black text-primary tracking-tight">
               {result.yourResult?.score ?? '—'}
+            </div>
+          </GlassCard>
+
+          {/* Advanced metrics - blurred with subscribe overlay */}
+          <GlassCard className="p-6 border-white/5 bg-black/40 relative overflow-hidden">
+            <div className="flex items-center justify-between mb-4">
+              <div className="text-[9px] font-black text-white/40 uppercase tracking-widest">ADVANCED METRICS</div>
+              <span className="text-[7px] font-black text-primary/70 uppercase">PRO SUITE</span>
+            </div>
+
+            {/* Blurred content */}
+            <div className="filter blur-[4px] select-none pointer-events-none opacity-30 grid grid-cols-2 gap-3">
+              <div className="p-3 rounded-xl bg-white/5 border border-white/5">
+                <span className="text-[7px] text-white/40 uppercase block">STRIKE ACCURACY</span>
+                <span className="text-lg font-black text-white">{result.yourResult?.strikeAccuracy ?? '91.4%'}%</span>
+              </div>
+              <div className="p-3 rounded-xl bg-white/5 border border-white/5">
+                <span className="text-[7px] text-white/40 uppercase block">KINETIC POWER</span>
+                <span className="text-lg font-black text-white">{result.yourResult?.kineticPower ?? '482'} PSI</span>
+              </div>
+              <div className="p-3 rounded-xl bg-white/5 border border-white/5">
+                <span className="text-[7px] text-white/40 uppercase block">REFLEX SCORE</span>
+                <span className="text-lg font-black text-white">{result.yourResult?.reflexScore ?? '87'}/100</span>
+              </div>
+              <div className="p-3 rounded-xl bg-white/5 border border-white/5">
+                <span className="text-[7px] text-white/40 uppercase block">STAMINA DECAY</span>
+                <span className="text-lg font-black text-white">-{result.yourResult?.staminaDecay ?? '4.2'}%</span>
+              </div>
+              <div className="p-3 rounded-xl bg-white/5 border border-white/5">
+                <span className="text-[7px] text-white/40 uppercase block">COUNTER TIMING</span>
+                <span className="text-lg font-black text-white">{result.yourResult?.counterTiming ?? '156'} ms</span>
+              </div>
+              <div className="p-3 rounded-xl bg-white/5 border border-white/5">
+                <span className="text-[7px] text-white/40 uppercase block">COMBO DENSITY</span>
+                <span className="text-lg font-black text-white">{result.yourResult?.comboDensity ?? '4.8'}/seq</span>
+              </div>
+            </div>
+
+            {/* Lock overlay */}
+            <div className="absolute inset-0 bg-gradient-to-b from-black/75 via-black/85 to-black/95 backdrop-blur-[3px] flex flex-col items-center justify-center p-4 text-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-primary/20 border border-primary/50 flex items-center justify-center shadow-[0_0_20px_rgba(226,255,59,0.3)]">
+                <Lock className="w-6 h-6 text-primary" />
+              </div>
+              <span className="text-sm font-black uppercase tracking-wide text-white leading-tight">
+                FULL BREAKDOWN LOCKED
+              </span>
+              <p className="text-[10px] font-semibold text-white/60 max-w-[260px] leading-snug">
+                Subscribe to unlock your complete combat analytics: strike accuracy, kinetic power, reflex score, stamina decay, counter timing, combo density & AI tactical tips.
+              </p>
+              <div className="flex items-center gap-2 flex-wrap justify-center">
+                {['ACCURACY','POWER','REFLEXES','STAMINA','TIMING','COMBOS','AI TIPS'].map(t => (
+                  <span key={t} className="text-[6px] font-black uppercase px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-white/40">{t}</span>
+                ))}
+              </div>
+              <NeonButton className="w-full max-w-[260px] h-12 mt-2" onClick={() => router.push('/subscription')}>
+                <Shield className="w-3.5 h-3.5 mr-1.5" /> SUBSCRIBE TO UNLOCK
+              </NeonButton>
             </div>
           </GlassCard>
 

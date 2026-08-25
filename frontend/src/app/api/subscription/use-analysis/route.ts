@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyFirebaseIdToken } from '@/lib/server/firebase-admin';
 import { supabaseAdmin } from '@/lib/server/supabase-admin';
 import { getEntitlement, todayDateStr } from '@/lib/server/entitlements';
+import { getClientIP, rateLimitMiddleware, BOXING_ANALYSIS_LIMITER } from '@/lib/server/ip-rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -14,10 +15,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Database service is not configured.' }, { status: 500 });
   }
 
+  // Check for auth token
   const authHeader = req.headers.get('authorization') || '';
   const idToken = authHeader.replace('Bearer ', '');
+
+  // For anonymous users (no auth), apply IP-based rate limiting
   if (!idToken) {
-    return NextResponse.json({ error: 'Missing auth token.' }, { status: 401 });
+    const rateLimitResponse = rateLimitMiddleware(req, BOXING_ANALYSIS_LIMITER);
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
+    // Anonymous users get one free analysis per day
+    return NextResponse.json({
+      allowed: true,
+      anonymous: true,
+      message: 'Anonymous access granted. Sign up for unlimited access.'
+    });
   }
 
   let decoded;

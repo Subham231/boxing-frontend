@@ -30,14 +30,35 @@ export async function POST(
     await supabaseAdmin.from('spar_matches').update({ status: 'active' }).eq('id', params.matchId);
   }
 
-  const iceServers: Array<{ urls: string; username?: string; credential?: string }> = [
+  // Build ICE servers array with multiple STUN servers for better NAT traversal
+  const iceServers: Array<{ urls: string | string[]; username?: string; credential?: string }> = [
+    // Google STUN servers
     { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
   ];
+
+  // Add TURN server if configured (for symmetric NAT traversal)
+  // Set these in your environment variables:
+  // TURN_SERVER_URL=turn:your-turn-server.com:3478
+  // TURN_USERNAME=your-username
+  // TURN_CREDENTIAL=your-password
   if (process.env.TURN_SERVER_URL) {
     iceServers.push({
       urls: process.env.TURN_SERVER_URL,
-      username: process.env.TURN_USERNAME || undefined,
-      credential: process.env.TURN_CREDENTIAL || undefined,
+      username: process.env.TURN_USERNAME,
+      credential: process.env.TURN_CREDENTIAL,
+    });
+  }
+
+  // Also support TURNS (TLS) for stricter firewalls
+  if (process.env.TURNS_SERVER_URL) {
+    iceServers.push({
+      urls: process.env.TURNS_SERVER_URL,
+      username: process.env.TURNS_USERNAME,
+      credential: process.env.TURNS_CREDENTIAL,
     });
   }
 

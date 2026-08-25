@@ -75,9 +75,10 @@ export function generateSparCommandSequence(seed?: number): SparCommand[] {
   return seq;
 }
 
-export function shouldGateResultReveal(_entitlementActive: boolean): boolean {
-  // Today: everyone sees who won. Flip to `return !_entitlementActive` later.
-  return false;
+export function shouldGateResultReveal(entitlementActive: boolean): boolean {
+  // Free tier users should not see winner/loser immediately - results are gated
+  // Paid users see results immediately
+  return !entitlementActive;
 }
 
 const MIN_REACTION_MS = 100;

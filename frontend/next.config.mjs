@@ -5,6 +5,15 @@ const nextConfig = {
   },
   poweredByHeader: false,
   productionBrowserSourceMaps: false,
+  // Allow TURN server env vars to be accessed at runtime
+  env: {
+    TURN_SERVER_URL: process.env.TURN_SERVER_URL,
+    TURN_USERNAME: process.env.TURN_USERNAME,
+    TURN_CREDENTIAL: process.env.TURN_CREDENTIAL,
+    TURNS_SERVER_URL: process.env.TURNS_SERVER_URL,
+    TURNS_USERNAME: process.env.TURNS_USERNAME,
+    TURNS_CREDENTIAL: process.env.TURNS_CREDENTIAL,
+  },
   async headers() {
     return [
       {

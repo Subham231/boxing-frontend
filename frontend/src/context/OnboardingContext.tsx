@@ -106,10 +106,27 @@ function serializeOnboarding(data: OnboardingData): Record<string, unknown> {
 
 const OnboardingContext = createContext<OnboardingContextType | undefined>(undefined);
 
+const TOTAL_STEPS = 26;
+
 export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [currentStep, setCurrentStep] = useState(1);
     const [data, setData] = useState<OnboardingData>(defaultData);
     const [isLoaded, setIsLoaded] = useState(false);
+
+    // Load current step from localStorage on initial load
+    useEffect(() => {
+        try {
+            const storedStep = localStorage.getItem('boxing_onboarding_step');
+            if (storedStep) {
+                const step = parseInt(storedStep, 10);
+                if (!isNaN(step) && step >= 1 && step <= TOTAL_STEPS) {
+                    setCurrentStep(step);
+                }
+            }
+        } catch (e) {
+            console.error('Failed to load onboarding step:', e);
+        }
+    }, []);
 
     async function getFirebaseIdToken(): Promise<string | null> {
         try {
@@ -156,7 +173,7 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         }
     }, []);
 
-    const totalSteps = 26;
+    const totalSteps = TOTAL_STEPS;
 
     const updateData = (newData: Partial<OnboardingData>) => {
         setData(prev => {
@@ -177,10 +194,22 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     const nextStep = () => {
         persistProgress();
-        setCurrentStep(prev => Math.min(prev + 1, totalSteps + 1));
+        setCurrentStep(prev => {
+            const next = Math.min(prev + 1, totalSteps + 1);
+            if (typeof window !== 'undefined') {
+                localStorage.setItem('boxing_onboarding_step', String(next));
+            }
+            return next;
+        });
     };
 
-    const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1));
+    const prevStep = () => setCurrentStep(prev => {
+        const next = Math.max(prev - 1, 1);
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('boxing_onboarding_step', String(next));
+        }
+        return next;
+    });
 
     // Used by the "Already have an account? Login" shortcut on the Welcome
     // screen — jumps straight to the OTP verification step (which already
@@ -188,7 +217,13 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     // running a second, separate auth implementation.
     const goToStep = (step: number) => {
         persistProgress();
-        setCurrentStep(Math.max(1, Math.min(step, totalSteps + 1)));
+        setCurrentStep(prev => {
+            const next = Math.max(1, Math.min(step, totalSteps + 1));
+            if (typeof window !== 'undefined') {
+                localStorage.setItem('boxing_onboarding_step', String(next));
+            }
+            return next;
+        });
     };
 
     const syncToSupabase = async () => {
