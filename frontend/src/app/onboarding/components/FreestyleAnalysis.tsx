@@ -63,10 +63,12 @@ export interface MiniAnalysisResult {
 
 export default function FreestyleAnalysis(): JSX.Element {
   const { nextStep, prevStep } = useOnboarding();
+  const ONBOARDING_ANALYSIS_KEY = 'boxing_onboarding_analysis_used';
   const [stage, setStage] = useState<Stage>('instructions');
   const [timeLeft, setTimeLeft] = useState(30);
   const [punchCount, setPunchCount] = useState(0);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [permissionNotice, setPermissionNotice] = useState<string | null>(null);
   const [calibDone, setCalibDone] = useState(false);
   const [calibText, setCalibText] = useState('SEARCHING FOR YOU...');
   const [tracking, setTracking] = useState(false);
@@ -116,6 +118,21 @@ export default function FreestyleAnalysis(): JSX.Element {
   const lastSwR        = useRef(0.2);
 
   useEffect(() => { stageR.current = stage; }, [stage]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const used = localStorage.getItem(ONBOARDING_ANALYSIS_KEY) === 'true';
+      if (used) {
+        setPermissionNotice('This onboarding analysis can only be used once. Continue to the next step.');
+      }
+    }
+  }, [ONBOARDING_ANALYSIS_KEY]);
+
+  const markOnboardingAnalysisUsed = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(ONBOARDING_ANALYSIS_KEY, 'true');
+    }
+  }, [ONBOARDING_ANALYSIS_KEY]);
 
   /* ── cleanup ─────────────────────────────────────────────── */
   const cleanup = useCallback(() => {
@@ -277,7 +294,13 @@ export default function FreestyleAnalysis(): JSX.Element {
 
   /* ── start camera + MediaPipe ──────────────────────────────── */
   const startCamera = async () => {
+    if (typeof window !== 'undefined' && localStorage.getItem(ONBOARDING_ANALYSIS_KEY) === 'true') {
+      setPermissionNotice('This onboarding analysis has already been used once. Continue without repeating it.');
+      return;
+    }
+
     setCameraError(null);
+    setPermissionNotice(null);
     setCalibDone(false); calibDoneR.current=false;
     punchesR.current=0; setPunchCount(0);
     repLogR.current=[]; trackSampR.current=[]; peakAvR.current=0;
@@ -289,6 +312,7 @@ export default function FreestyleAnalysis(): JSX.Element {
     try {
       // Secure context required for getUserMedia
       if (!navigator.mediaDevices || !window.isSecureContext) {
+        setPermissionNotice('Camera access needs a secure connection. Please switch to HTTPS or continue without analysis.');
         setCameraError('Camera requires a secure (HTTPS) connection. Please ensure you are using HTTPS and try again.');
         setStage('setup');
         return;
@@ -298,6 +322,7 @@ export default function FreestyleAnalysis(): JSX.Element {
       try {
         const perm = await navigator.permissions.query({ name: 'camera' as PermissionName });
         if (perm.state === 'denied') {
+          setPermissionNotice('Camera is blocked. Turn it on in the browser popup or permissions settings.');
           setCameraError('Camera access was denied. Please enable camera permissions in your browser settings, then refresh the page.');
           setStage('setup');
           return;
@@ -374,14 +399,19 @@ export default function FreestyleAnalysis(): JSX.Element {
       cleanup();
       const n = err?.name || '';
       if (n === 'NotAllowedError' || n === 'PermissionDeniedError') {
+        setPermissionNotice('Camera and mic permission is required. Turn on the browser popup to continue.');
         setCameraError('Camera permission denied. Please allow camera access in your browser settings and try again.');
       } else if (n === 'NotFoundError' || n === 'OverconstrainedError') {
+        setPermissionNotice('No usable camera was detected. Try another device or continue without camera analysis.');
         setCameraError('No camera found or camera not accessible. Please check your device has a working camera.');
       } else if (err?.message === 'mp-timeout' || err?.message === 'mp-load') {
+        setPermissionNotice('AI model failed to load. Please retry or continue without analysis.');
         setCameraError('AI model failed to load. Check your internet connection and try again.');
       } else if (err?.message === 'video-mount') {
+        setPermissionNotice('Camera did not initialize. Try again or continue without the analysis step.');
         setCameraError('Camera initialization failed. Please refresh the page and try again.');
       } else {
+        setPermissionNotice('Could not start camera. Please try again or skip this step.');
         setCameraError('Could not start camera. Please try again or skip this step.');
       }
       setStage('setup');
@@ -405,6 +435,7 @@ export default function FreestyleAnalysis(): JSX.Element {
   /* ── compute results (same formula as main vision page) ──────── */
   const finishSession = () => {
     cleanup();
+    markOnboardingAnalysisUsed();
     setStage('analyzing');
     setTimeout(() => {
       const log = repLogR.current;
@@ -440,6 +471,19 @@ export default function FreestyleAnalysis(): JSX.Element {
   ───────────────────────────────────────────────────────────── */
   return (
     <div className="flex flex-col min-h-[85vh] justify-between py-2">
+      <AnimatePresence>
+        {permissionNotice && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-sm rounded-2xl border border-primary/30 bg-[#101010]/95 px-3 py-2 text-center shadow-[0_0_25px_rgba(226,255,59,0.15)]"
+          >
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-primary">Permission needed</p>
+            <p className="mt-1 text-[11px] font-semibold text-white/80 leading-snug">{permissionNotice}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <AnimatePresence mode="wait">
 
         {/* ── INSTRUCTIONS ─────────────────────────────────── */}

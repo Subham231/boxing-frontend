@@ -90,16 +90,12 @@ export default function SparLobbyPage() {
     setError(null);
     if (!status) return;
 
-    if (status.mode === 'free' && status.needsAd) {
-      router.push('/spar/watch-ad');
+    if (status.mode === 'free' && !status.freeSparAvailable) {
+      setError('Daily free spar has already been used. Come back tomorrow.');
       return;
     }
     if (!status.canSpar && status.mode === 'paid') {
       setError('Daily spar limit reached. Come back tomorrow or upgrade.');
-      return;
-    }
-    if (status.mode === 'free' && !status.freeSparUnlocked) {
-      router.push('/spar/watch-ad');
       return;
     }
 
@@ -109,10 +105,6 @@ export default function SparLobbyPage() {
       const joinRes = await fetch('/api/spar/queue/join', { method: 'POST', headers });
       const joinData = await joinRes.json();
       if (!joinRes.ok) {
-        if (joinData.needsAd || joinData.reason === 'needs_ad') {
-          router.push('/spar/watch-ad');
-          return;
-        }
         throw new Error(joinData.error || 'Could not join queue.');
       }
 
@@ -178,7 +170,7 @@ export default function SparLobbyPage() {
               <Swords className="w-6 h-6 text-primary" />
               <div>
                 <div className="text-sm font-black uppercase">
-                  {status?.mode === 'paid' ? status.planName : 'Free Spar (Ad-gated)'}
+                  {status?.mode === 'paid' ? status.planName : 'Free Spar (Daily)'}
                 </div>
                 <div className="text-[10px] text-white/50 font-bold uppercase tracking-wide">
                   {status?.mode === 'paid'
@@ -186,9 +178,7 @@ export default function SparLobbyPage() {
                       ? 'Unlimited spars today'
                       : `${status.sparDailyUsed}/${status.sparDailyLimit} used today`
                     : status?.freeSparAvailable
-                      ? status.freeSparUnlocked
-                        ? 'Ad unlocked — ready to spar'
-                        : 'Watch an ad to unlock 1 free spar today'
+                      ? '1 free spar available today'
                       : 'Free spar used — come back tomorrow or subscribe'}
                 </div>
               </div>
@@ -215,11 +205,7 @@ export default function SparLobbyPage() {
               </div>
             ) : (
               <NeonButton className="w-full h-14" onClick={startSearch}>
-                {status?.needsAd ? (
-                  <>
-                    WATCH AD TO SPAR <Play className="w-4 h-4 ml-1 fill-black" />
-                  </>
-                ) : (
+                {(
                   <>
                     FIND OPPONENT <Swords className="w-4 h-4 ml-1" />
                   </>

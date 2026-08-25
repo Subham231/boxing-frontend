@@ -40,9 +40,9 @@ export async function GET(req: NextRequest) {
     sparDailyLimit: 1,
     sparDailyUsed: entitlement.freeSparAvailable ? 0 : 1,
     remaining: entitlement.freeSparAvailable ? 1 : 0,
-    canSpar: entitlement.freeSparUnlocked,
+    canSpar: entitlement.freeSparAvailable,
     freeSparAvailable: entitlement.freeSparAvailable,
-    freeSparUnlocked: entitlement.freeSparUnlocked,
-    needsAd: entitlement.freeSparAvailable && !entitlement.freeSparUnlocked,
+    freeSparUnlocked: entitlement.freeSparAvailable,
+    needsAd: false,
   });
 }

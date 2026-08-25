@@ -72,9 +72,9 @@ export async function POST(req: NextRequest) {
     if (!isPaid) {
       return NextResponse.json(
         {
-          error: 'Watch an ad to spar today.',
-          reason: 'needs_ad',
-          needsAd: true,
+          error: 'Daily free spar limit reached. Come back tomorrow.',
+          reason: 'daily_limit_reached',
+          needsAd: false,
         },
         { status: 403 },
       );
