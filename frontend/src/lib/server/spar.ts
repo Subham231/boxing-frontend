@@ -75,8 +75,11 @@ export function generateSparCommandSequence(seed?: number): SparCommand[] {
   return seq;
 }
 
-export function shouldGateResultReveal(isActiveEntitlement: boolean): boolean {
-  return !isActiveEntitlement;
+export function shouldGateResultReveal(_isActiveEntitlement: boolean): boolean {
+  // Temporary business rule: keep the free-result workflow open while the product is
+  // being tuned. Once the paid gating is re-enabled, switch this back to:
+  // return !isActiveEntitlement;
+  return false;
 }
 
 /**

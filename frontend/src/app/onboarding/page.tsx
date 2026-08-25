@@ -172,14 +172,14 @@ const OnboardingFlow: React.FC = () => {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -20 }}
                     transition={{ duration: 0.35, ease: 'easeOut' }}
-                    className="w-full max-w-lg h-full overflow-y-auto overflow-x-hidden scrollbar-hide flex flex-col justify-between pb-24"
+                    className="w-full max-w-lg h-full overflow-y-auto overflow-x-hidden scrollbar-hide flex flex-col justify-between pb-28"
                 >
                     {screens[currentStep - 1] || <FinalPromise />}
                 </motion.div>
             </AnimatePresence>
 
-            {/* Bottom Progression Bar — z-20 so it sits above content but below any modals */}
-            <div className="fixed bottom-3 sm:bottom-4 left-0 right-0 max-w-lg mx-auto px-6 sm:px-8 z-20 pointer-events-none flex flex-col gap-1.5">
+            {/* Bottom Progression Bar - kept low enough not to cover CTA buttons */}
+            <div className="fixed bottom-3 sm:bottom-4 left-0 right-0 max-w-lg mx-auto px-6 sm:px-8 z-10 pointer-events-none flex flex-col gap-1.5">
                 {/* Milestone Toast Tag */}
                 <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-widest text-white/50">
                     <AnimatePresence mode="wait">

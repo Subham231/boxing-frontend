@@ -7,6 +7,7 @@
  */
 
 const ANON_SESSION_KEY = 'sparai_anon_session';
+const ANON_FEATURE_KEY = 'sparai_anon_feature_usage';
 
 export function getAnonSessionId(): string {
   if (typeof window === 'undefined') return 'ssr';
@@ -21,5 +22,43 @@ export function getAnonSessionId(): string {
     return id;
   } catch {
     return 'storage-denied';
+  }
+}
+
+export type AnonFeature = 'boxing_analysis' | 'free_spar';
+
+export function canUseAnonFeature(feature: AnonFeature, limitPerDay = 1): boolean {
+  if (typeof window === 'undefined') return true;
+
+  try {
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const raw = localStorage.getItem(ANON_FEATURE_KEY);
+    const current = raw ? JSON.parse(raw) : {} as Record<string, Record<string, number>>;
+    const featureState = current[feature] || {};
+    const usedToday = Number(featureState[todayKey] || 0);
+
+    if (usedToday >= limitPerDay) {
+      return false;
+    }
+
+    featureState[todayKey] = usedToday + 1;
+    current[feature] = featureState;
+    localStorage.setItem(ANON_FEATURE_KEY, JSON.stringify(current));
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+export function hadAnonFeatureUse(feature: AnonFeature): boolean {
+  if (typeof window === 'undefined') return false;
+
+  try {
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const raw = localStorage.getItem(ANON_FEATURE_KEY);
+    const current = raw ? JSON.parse(raw) : {} as Record<string, Record<string, number>>;
+    return Number(current?.[feature]?.[todayKey] || 0) > 0;
+  } catch {
+    return false;
   }
 }

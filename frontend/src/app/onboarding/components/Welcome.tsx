@@ -14,7 +14,7 @@ const Welcome: React.FC = () => {
     const OTP_STEP = totalSteps - 2;
 
     return (
-        <div className="relative flex flex-col min-h-[85vh] justify-between py-4 overflow-hidden">
+        <div className="relative flex flex-col min-h-[85vh] justify-between py-4 overflow-hidden pb-20">
             {/* Ambient particles */}
             <div className="absolute inset-0 pointer-events-none">
                 {Array.from({ length: 18 }).map((_, i) => (
@@ -85,7 +85,7 @@ const Welcome: React.FC = () => {
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.6, duration: 0.6 }}
-                className="relative z-30 mt-10 pb-4"
+                className="relative z-30 mt-10 pb-6 mb-8"
             >
                 <div className="flex flex-col gap-3">
                     <button
