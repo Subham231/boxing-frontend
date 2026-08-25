@@ -67,19 +67,24 @@ const OtpVerification: React.FC = () => {
       }).catch(() => {});
 
       if (isNew) {
+        localStorage.setItem('boxing_onboarding_done', 'false');
+        localStorage.removeItem('boxing_onboarding_step');
         nextStep();
         return;
       }
 
       cacheProfileLocally(profile);
       try {
-        localStorage.setItem('boxing_onboarding_done', 'true');
         const existingRaw = localStorage.getItem('boxing_onboarding_data');
         const existing = existingRaw ? JSON.parse(existingRaw) : {};
-        localStorage.setItem(
-          'boxing_onboarding_data',
-          JSON.stringify({ ...existing, onboarding_completed: true })
-        );
+        const merged = {
+          ...existing,
+          phone_number: trimmedPhone,
+          onboarding_completed: true,
+        };
+        localStorage.setItem('boxing_onboarding_done', 'true');
+        localStorage.setItem('boxing_onboarding_data', JSON.stringify(merged));
+        localStorage.removeItem('boxing_onboarding_step');
       } catch { }
       router.replace('/dashboard');
     } catch (e) {
