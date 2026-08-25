@@ -146,42 +146,42 @@ const DEEP_DIVE_TABS = [
 // description, rendered one after another below the two previews above.
 const FEATURE_SHOWCASE = [
   {
-    id: 'analysis', icon: Video, title: 'AI Video Analysis',
+    id: 'analysis', icon: Video, image: '/images/promos/vision_hud.jpg', title: 'AI Video Analysis',
     description: 'Record a round on your phone and Sparai breaks down your form — punch accuracy, technique score, and exactly what to fix, with your score tracked session over session.',
     stat: { label: 'Last Session', value: '87/100', sub: '+6% technique' },
   },
   {
-    id: 'planner', icon: CalendarDays, title: 'Tactical Planner',
+    id: 'planner', icon: CalendarDays, image: '/images/promos/guru_tactics.jpg', title: 'Tactical Planner',
     description: "A weekly training protocol built around your goals and experience level — today's workout, this week's roadmap, and recovery days all mapped out for you.",
     stat: { label: 'This Week', value: 'Day 4 of 6', sub: 'Week 3 · Intermediate' },
   },
   {
-    id: 'grind', icon: Flame, title: 'Daily Grind',
+    id: 'grind', icon: Flame, image: '/images/promos/vision_hud.jpg', title: 'Daily Grind',
     description: "Every exercise for today broken into sets, reps, and rest time — check them off as you go and watch your completion bar fill in real time.",
     stat: { label: 'Today', value: '2 of 6 done', sub: '32 min estimated' },
   },
   {
-    id: 'guru', icon: GraduationCap, title: 'Guru Skill Lessons',
+    id: 'guru', icon: GraduationCap, image: '/images/promos/guru_tactics.jpg', title: 'Guru Skill Lessons',
     description: 'Bite-sized technique lessons — slips, counters, footwork, body shots — that unlock as you progress, with a clear path from beginner fundamentals to advanced combos.',
     stat: { label: 'Current Skill', value: '64% complete', sub: 'Slip & Counter' },
   },
   {
-    id: 'reflex', icon: Activity, title: 'Reflex Enhancer',
+    id: 'reflex', icon: Activity, image: '/images/promos/spar_arena.jpg', title: 'Reflex Enhancer',
     description: 'Fast-paced reaction drills that sharpen how quickly you see and respond — your best time, weekly average, and rank against other fighters are all tracked automatically.',
     stat: { label: 'Personal Best', value: '198 ms', sub: 'Rank #12 this week' },
   },
   {
-    id: 'leaderboard', icon: Trophy, title: 'Leaderboards',
+    id: 'leaderboard', icon: Trophy, image: '/images/promos/spar_arena.jpg', title: 'Leaderboards',
     description: 'Separate rankings for overall training, reflex speed, and combo mastery, updated live each week — see exactly where you stand and who to chase.',
     stat: { label: 'Fighter Rank', value: '#47', sub: 'Season 4' },
   },
   {
-    id: 'analytics', icon: BarChart3, title: 'Performance Analytics',
+    id: 'analytics', icon: BarChart3, image: '/images/promos/vision_hud.jpg', title: 'Performance Analytics',
     description: "Weekly and monthly graphs of your training time, streaks, and analysis scores — so improvement isn't just a feeling, it's a number you can see move.",
     stat: { label: 'Performance Score', value: '87/100', sub: '+14% this week' },
   },
   {
-    id: 'subscription-feature', icon: Crown, title: 'Elite Subscription',
+    id: 'subscription-feature', icon: Crown, image: '/images/promos/guru_tactics.jpg', title: 'Elite Subscription',
     description: 'Unlock unlimited AI analyses, unlimited weekly planner regenerations, and premium Guru skills with an Elite membership — cancel anytime.',
     stat: { label: 'Elite Plan', value: 'Unlimited usage', sub: '18 days remaining' },
   },
@@ -379,13 +379,17 @@ function FeatureRow({ feature, reversed }: { feature: typeof FEATURE_SHOWCASE[nu
     >
       {/* Visual */}
       <div className="w-full sm:w-[220px] shrink-0">
-        <div className="rounded-[22px] p-6 bg-white/[0.04] border border-white/10 flex flex-col items-center text-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-            <Icon className="w-6 h-6 text-primary" />
+        <div className="relative overflow-hidden rounded-[22px] bg-white/[0.04] border border-white/10">
+          <Image src={feature.image} alt="" width={440} height={280} className="h-32 w-full object-cover opacity-70" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent" />
+          <div className="relative -mt-10 p-4 flex flex-col items-center text-center gap-2">
+            <div className="w-11 h-11 rounded-2xl bg-black/80 border border-primary/30 flex items-center justify-center">
+              <Icon className="w-5 h-5 text-primary" />
+            </div>
+            <p className="text-2xl font-black text-primary leading-none">{feature.stat.value}</p>
+            <p className="text-[9px] font-bold uppercase tracking-widest text-white/50">{feature.stat.label}</p>
+            <p className="text-[10px] font-semibold text-white/60">{feature.stat.sub}</p>
           </div>
-          <p className="text-2xl font-black text-primary leading-none">{feature.stat.value}</p>
-          <p className="text-[9px] font-bold uppercase tracking-widest text-white/40">{feature.stat.label}</p>
-          <p className="text-[10px] font-semibold text-white/50">{feature.stat.sub}</p>
         </div>
       </div>
       {/* Text */}
@@ -691,37 +695,50 @@ export default function HomeContent() {
           animate="show"
           variants={fadeUp}
           transition={{ duration: 0.6, ease: 'easeOut' }}
-          className="py-10 sm:py-16 flex flex-col items-start gap-5"
+          className="py-8 sm:py-14 grid lg:grid-cols-[1.05fr_0.95fr] items-center gap-8 lg:gap-12"
         >
-          <span className="text-[10px] font-black tracking-[3px] text-primary uppercase flex items-center gap-1.5">
-            <Star className="w-3 h-3" /> AI-Powered Boxing Coach
-          </span>
-          <h1 className="text-3xl sm:text-5xl md:text-6xl font-black italic uppercase leading-[0.95] tracking-tighter">
-            The future of boxing<br />training <span className="text-primary">starts here.</span>
-          </h1>
-          <p className="text-white/60 text-sm sm:text-base md:text-lg leading-relaxed max-w-2xl font-medium">
-            <strong className="text-white">Sparai</strong> is your personal AI boxing coach — it analyzes
-            every punch, tracks your progress, builds a training plan around your goals, and helps
-            you become a smarter, faster, stronger fighter. All through your phone.
-          </p>
-          <div className="w-full sm:w-auto flex flex-col sm:flex-row items-start sm:items-center gap-3">
-            <HomeCta />
-            <Link
-              href="/spar"
-              className="w-full sm:w-auto text-center h-12 px-6 rounded-full border border-primary/40 bg-primary/10 text-primary text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-primary/20 transition-colors"
-            >
-              <Swords className="w-3.5 h-3.5" /> Spar Now
+          <div className="flex flex-col items-start gap-5">
+            <span className="text-[10px] font-black tracking-[3px] text-primary uppercase flex items-center gap-1.5">
+              <Star className="w-3 h-3" /> AI-Powered Boxing Coach
+            </span>
+            <h1 className="text-3xl sm:text-5xl md:text-6xl font-black italic uppercase leading-[0.95] tracking-tighter">
+              Train like a fighter.<br /><span className="text-primary">Think like one too.</span>
+            </h1>
+            <p className="text-white/60 text-sm sm:text-base md:text-lg leading-relaxed max-w-2xl font-medium">
+              <strong className="text-white">Sparai</strong> analyzes your movement, builds your training plan, and gives you a clear next round to work on, all through your phone.
+            </p>
+            <div className="w-full sm:w-auto flex flex-col sm:flex-row items-start sm:items-center gap-3">
+              <HomeCta />
+              <Link href="/spar" className="w-full sm:w-auto text-center h-12 px-6 rounded-full border border-primary/40 bg-primary/10 text-primary text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-primary/20 transition-colors">
+                <Swords className="w-3.5 h-3.5" /> Spar Now
+              </Link>
+              <a href="#explore" className="w-full sm:w-auto text-center h-12 px-6 rounded-full border border-white/15 text-white/70 text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:border-primary/40 hover:text-white transition-colors">
+                <Play className="w-3.5 h-3.5 fill-current" /> See How It Works
+              </a>
+            </div>
+            <Link href="/legal/privacy" className="text-[11px] font-bold text-white/40 hover:text-white/70 underline underline-offset-2 transition-colors">
+              Read our Privacy Policy
             </Link>
-            <a
-              href="#explore"
-              className="w-full sm:w-auto text-center h-12 px-6 rounded-full border border-white/15 text-white/70 text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:border-primary/40 hover:text-white transition-colors"
-            >
-              <Play className="w-3.5 h-3.5 fill-current" /> See How It Works
-            </a>
           </div>
-          <Link href="/legal/privacy" className="text-[11px] font-bold text-white/40 hover:text-white/70 underline underline-offset-2 transition-colors">
-            Read our Privacy Policy
-          </Link>
+
+          <div className="relative min-h-[330px] sm:min-h-[390px] w-full max-w-xl mx-auto lg:mx-0">
+            <div className="absolute right-0 top-3 w-[76%] overflow-hidden rounded-[28px] border border-primary/30 bg-black shadow-[0_24px_70px_rgba(0,0,0,0.55)] rotate-3">
+              <Image src="/images/promos/vision_hud.jpg" alt="Sparai AI movement analysis" width={900} height={600} className="h-64 sm:h-80 w-full object-cover" priority />
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/80 to-transparent p-4 pt-14">
+                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-primary">AI VISION</p>
+                <p className="mt-1 text-sm font-black uppercase">Every punch has a signal.</p>
+              </div>
+            </div>
+            <div className="absolute left-0 bottom-3 w-[54%] overflow-hidden rounded-[24px] border border-orange-400/30 bg-black shadow-[0_18px_55px_rgba(0,0,0,0.5)] -rotate-6">
+              <Image src="/images/promos/spar_arena.jpg" alt="Sparai live sparring arena" width={700} height={500} className="h-44 sm:h-56 w-full object-cover" />
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black to-transparent p-3 pt-10">
+                <p className="text-[8px] font-black uppercase tracking-[0.18em] text-orange-300">LIVE SPAR</p>
+              </div>
+            </div>
+            <div className="absolute right-2 bottom-0 rounded-full border border-primary/30 bg-black/90 px-3 py-2 text-[9px] font-black uppercase tracking-widest text-primary shadow-lg">
+              33 landmarks / frame
+            </div>
+          </div>
         </motion.section>
 
         {/* Why Sparai exists */}
