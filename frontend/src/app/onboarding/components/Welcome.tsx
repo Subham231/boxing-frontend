@@ -63,7 +63,7 @@ const Welcome: React.FC = () => {
                 <div className="w-9 h-9 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
                     <Zap className="w-4 h-4 text-primary" />
                 </div>
-                <span className="text-[10px] font-black tracking-[3px] text-primary uppercase">AI Boxing Protocol</span>
+                <span className="text-[10px] font-black tracking-[3px] text-primary uppercase">Your AI Boxing Coach</span>
             </motion.div>
 
             <motion.header
@@ -72,12 +72,12 @@ const Welcome: React.FC = () => {
                 transition={{ delay: 0.35, duration: 0.7, ease: 'easeOut' }}
                 className="relative z-10 text-left mt-10"
             >
-                <h1 className="text-5xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
-                    Become the <br /> <span className="text-primary">boxer</span> you've <br /> always wanted <br /> to be.
+                <h1 className="text-4xl sm:text-5xl font-black italic uppercase leading-[0.92] tracking-tighter text-white max-w-xl">
+                    Build your <span className="text-primary">fight.</span><br />
+                    Sharpen your <span className="text-primary">edge.</span>
                 </h1>
-                <p className="text-white/50 mt-6 text-sm leading-relaxed pr-6 font-semibold">
-                    Train smarter with personalized boxing programs, structured progression, and performance
-                    tracking designed to help you improve consistently.
+                <p className="text-white/60 mt-5 text-sm leading-relaxed pr-6 font-semibold max-w-md">
+                    Personal training plans, AI form feedback, and daily progress tracking built around the way you fight.
                 </p>
             </motion.header>
 
@@ -90,13 +90,13 @@ const Welcome: React.FC = () => {
                 <div className="flex flex-col gap-3">
                     <button
                         onClick={nextStep}
-                        className="w-full h-16 flex items-center justify-center gap-2 rounded-2xl bg-[#E2FF3B] hover:bg-[#cdea2a] text-black font-black uppercase tracking-widest text-sm shadow-[0_10px_40px_rgba(226,255,59,0.35)] transition-colors"
+                        className="w-full h-14 flex items-center justify-center gap-2 rounded-2xl bg-primary hover:bg-[#d4f52e] text-[#10130a] font-black uppercase tracking-[0.16em] text-sm shadow-[0_10px_40px_rgba(226,255,59,0.28)] transition-all hover:-translate-y-0.5"
                     >
                         SIGN UP <ChevronRight size={20} />
                     </button>
                     <button
                         onClick={() => goToStep(OTP_STEP)}
-                        className="w-full h-14 flex items-center justify-center gap-2 rounded-2xl border-2 border-[#E2FF3B]/40 bg-[#E2FF3B]/10 text-[#E2FF3B] hover:bg-[#E2FF3B]/20 font-black uppercase tracking-widest text-sm transition-colors"
+                        className="w-full h-12 flex items-center justify-center gap-2 rounded-2xl border border-cyan-300/35 bg-cyan-300/[0.06] text-cyan-200 hover:bg-cyan-300/[0.12] hover:border-cyan-200/60 font-black uppercase tracking-[0.12em] text-[11px] transition-all"
                     >
                         ALREADY HAVE AN ACCOUNT — LOG IN <ChevronRight size={18} />
                     </button>
