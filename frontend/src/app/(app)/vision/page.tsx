@@ -73,9 +73,9 @@ const REACTION_WINDOW_PAD_MS = 250;
 // (GUARD -> STRIKE -> GUARD), not a single frame threshold. This is what
 // prevents false positives from idle movement, camera shake, or slowly
 // raising an arm to scratch your face.
-const ELBOW_EXTEND_THRESHOLD = 165;   // deg — arm must reach this to register STRIKE
-const ELBOW_RETRACT_THRESHOLD = 130;  // deg — must drop back below this to re-arm (hysteresis band kills flicker/vibration double-counts)
-const MIN_PUNCH_ANGULAR_VELOCITY = 380; // deg/sec — real punches are fast; slow drift never passes this
+const ELBOW_EXTEND_THRESHOLD = 155;   // deg — webcam pose landmarks rarely reach a perfect 165° extension
+const ELBOW_RETRACT_THRESHOLD = 135;  // deg — must drop back below this to re-arm (hysteresis band kills flicker/vibration double-counts)
+const MIN_PUNCH_ANGULAR_VELOCITY = 180; // deg/sec — tolerate 30fps landmark smoothing without accepting slow arm raises
 const SMOOTHING_ALPHA = 0.45; // exponential smoothing factor for elbow angle, reduces landmark jitter
 const MIN_ROTATION_FOR_FULL_SCORE = 22; // deg of shoulder-line rotation for a "fully rotated" hook/cross
 const FULL_KNEE_DRIVE_DEG = 18;         // deg of knee-angle change (push-off/extension) for a full drive score
@@ -85,7 +85,7 @@ const FULL_FOOT_PIVOT_DEG = 20;         // deg of rear-foot rotation for a full 
 // fast — angular velocity alone can be tripped by a shoulder shrug or a
 // twitch near full extension. Requiring BOTH signals to agree is a much
 // stronger check than either alone.
-const MIN_WRIST_SPEED = 1.1; // shoulder-widths per second
+const MIN_WRIST_SPEED = 0.35; // shoulder-widths per second; normalized webcam motion is usually below 1.0
 // After retracting to guard, the arm must stay there briefly before the
 // next strike can be evaluated — without this, noise flickering right
 // across the hysteresis band can register as several strikes in a row.

@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronRight, Play, RefreshCw, Lock, Zap, Flame, Activity, SkipForward, X } from 'lucide-react';
+import { ChevronRight, Play, Lock, Zap, Flame, Activity, SkipForward, X } from 'lucide-react';
 import { useOnboarding } from '@/context/OnboardingContext';
 import StepBadge from './StepBadge';
 
@@ -17,11 +17,11 @@ const CORE = [11,12,23,24];
    Biomechanical constants (mirrors main vision page exactly)
 ───────────────────────────────────────────────────────────── */
 const V_THR  = 0.6;   // visibility threshold
-const EXT    = 165;   // deg — arm must reach to register STRIKE
-const RET    = 130;   // deg — must drop back below this to re-arm
-const MIN_AV = 380;   // deg/sec minimum angular velocity
+const EXT    = 155;   // deg — webcam pose landmarks rarely reach a perfect 165° extension
+const RET    = 135;   // deg — must drop back below this to re-arm
+const MIN_AV = 180;   // deg/sec; tolerate 30fps landmark smoothing without slow arm raises
 const ALPHA  = 0.45;  // exponential smoothing factor
-const MIN_WS = 1.1;   // shoulder-widths/sec minimum wrist speed
+const MIN_WS = 0.35;  // shoulder-widths/sec minimum wrist speed
 const REARM  = 70;    // ms dwell in guard before re-arming
 const PREF_V = 900;   // reference velocity for power 0-100
 
@@ -64,6 +64,7 @@ export interface MiniAnalysisResult {
 export default function FreestyleAnalysis(): JSX.Element {
   const { nextStep, prevStep } = useOnboarding();
   const ONBOARDING_ANALYSIS_KEY = 'boxing_onboarding_analysis_used';
+  const analysisDay = () => new Date().toISOString().slice(0, 10);
   const [stage, setStage] = useState<Stage>('instructions');
   const [timeLeft, setTimeLeft] = useState(30);
   const [punchCount, setPunchCount] = useState(0);
@@ -121,7 +122,7 @@ export default function FreestyleAnalysis(): JSX.Element {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const used = localStorage.getItem(ONBOARDING_ANALYSIS_KEY) === 'true';
+      const used = localStorage.getItem(ONBOARDING_ANALYSIS_KEY) === analysisDay();
       if (used) {
         setPermissionNotice('This onboarding analysis can only be used once. Continue to the next step.');
       }
@@ -130,7 +131,7 @@ export default function FreestyleAnalysis(): JSX.Element {
 
   const markOnboardingAnalysisUsed = useCallback(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem(ONBOARDING_ANALYSIS_KEY, 'true');
+      localStorage.setItem(ONBOARDING_ANALYSIS_KEY, analysisDay());
     }
   }, [ONBOARDING_ANALYSIS_KEY]);
 
@@ -294,7 +295,7 @@ export default function FreestyleAnalysis(): JSX.Element {
 
   /* ── start camera + MediaPipe ──────────────────────────────── */
   const startCamera = async () => {
-    if (typeof window !== 'undefined' && localStorage.getItem(ONBOARDING_ANALYSIS_KEY) === 'true') {
+    if (typeof window !== 'undefined' && localStorage.getItem(ONBOARDING_ANALYSIS_KEY) === analysisDay()) {
       setPermissionNotice('This onboarding analysis has already been used once. Continue without repeating it.');
       return;
     }
@@ -700,7 +701,7 @@ export default function FreestyleAnalysis(): JSX.Element {
               </h1>
               <p className="text-white/50 mt-1 text-[10px] font-semibold leading-relaxed">
                 {result.punchCount < 3
-                  ? 'Not enough punches detected. Try again for a full score.'
+                  ? 'Not enough punches were detected for a full score.'
                   : 'Real AI-measured biomechanical score from your 30-second freestyle round.'}
               </p>
             </header>
@@ -783,12 +784,6 @@ export default function FreestyleAnalysis(): JSX.Element {
                 className="btn-primary w-full h-14 flex items-center justify-center gap-2 text-sm font-black italic tracking-wider shadow-[0_0_25px_rgba(226,255,59,0.3)]"
               >
                 CONTINUE ONBOARDING <ChevronRight size={18} />
-              </button>
-              <button
-                onClick={() => { setStage('instructions'); setPunchCount(0); setResult(null); }}
-                className="text-[10px] font-black text-white/40 hover:text-white uppercase tracking-widest py-1 mx-auto flex items-center gap-1"
-              >
-                <RefreshCw className="w-3 h-3" /> Redo 30s Analysis
               </button>
             </div>
           </motion.div>
