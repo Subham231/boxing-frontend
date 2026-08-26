@@ -13,6 +13,7 @@ const PUNCH_EXTEND_DEG = 155;
 const PUNCH_RETRACT_DEG = 135;
 const MIN_PUNCH_ANGULAR_VELOCITY = 180;
 const MIN_PUNCH_WRIST_SPEED = 0.35;
+const MOTION_MEMORY_MS = 350;
 type MatchInfo = {
   matchId: string;
   opponentUid: string;
@@ -57,6 +58,7 @@ export default function SparMatchClient() {
   const wristSpeedRef = useRef(0);
   const elbowStateRef = useRef<'guard' | 'strike'>('guard');
   const guardEnteredAtRef = useRef(0);
+  const lastPunchMotionAtRef = useRef(0);
 
   const [match, setMatch] = useState<MatchInfo | null>(null);
   const [phase, setPhase] = useState<'setup' | 'live' | 'submitting' | 'done'>('setup');
@@ -404,8 +406,10 @@ export default function SparMatchClient() {
 
           const current = currentCmdRef.current;
           const motionDetected = angularVelocity >= MIN_PUNCH_ANGULAR_VELOCITY || wristSpeedRef.current >= MIN_PUNCH_WRIST_SPEED;
+          if (motionDetected) lastPunchMotionAtRef.current = now;
           const rearmed = now - guardEnteredAtRef.current >= 70;
-          if (elbowStateRef.current === 'guard' && rearmed && smoothed > PUNCH_EXTEND_DEG && motionDetected) {
+          const recentMotion = now - lastPunchMotionAtRef.current <= MOTION_MEMORY_MS;
+          if (elbowStateRef.current === 'guard' && rearmed && smoothed > PUNCH_EXTEND_DEG && recentMotion) {
             elbowStateRef.current = 'strike';
             if (current?.cmd.kind === 'punch' && !resultsRef.current.some((result) => result.index === current.index)) {
               registerHitRef.current?.();

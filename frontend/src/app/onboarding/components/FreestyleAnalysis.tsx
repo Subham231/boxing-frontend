@@ -22,6 +22,7 @@ const RET    = 135;   // deg — must drop back below this to re-arm
 const MIN_AV = 180;   // deg/sec; tolerate 30fps landmark smoothing without slow arm raises
 const ALPHA  = 0.45;  // exponential smoothing factor
 const MIN_WS = 0.35;  // shoulder-widths/sec minimum wrist speed
+const MOTION_MEMORY_MS = 350;
 const REARM  = 70;    // ms dwell in guard before re-arming
 const PREF_V = 900;   // reference velocity for power 0-100
 
@@ -104,6 +105,7 @@ export default function FreestyleAnalysis(): JSX.Element {
   const elbowStateR    = useRef<'guard'|'strike'>('guard');
   const guardAtR       = useRef(0);
   const wristSpeedR    = useRef(0);
+  const lastPunchMotionR = useRef(0);
   const prevWristR     = useRef<{x:number;y:number}|null>(null);
   const repPeakVR      = useRef(0);
   const angHistR       = useRef<number[]>([]);
@@ -257,8 +259,9 @@ export default function FreestyleAnalysis(): JSX.Element {
 
     // State machine GUARD→STRIKE→GUARD
     const dwell = now-guardAtR.current >= REARM;
+    if (av>=MIN_AV || wristSpeedR.current>=MIN_WS) lastPunchMotionR.current=now;
     if (elbowStateR.current==='guard' && dwell && sa>EXT) {
-      const motionDetected = av>=MIN_AV || wristSpeedR.current>=MIN_WS;
+      const motionDetected = now-lastPunchMotionR.current <= MOTION_MEMORY_MS;
       if (motionDetected) {
         elbowStateR.current='strike';
         // Validated punch — log it
@@ -310,7 +313,7 @@ export default function FreestyleAnalysis(): JSX.Element {
     repLogR.current=[]; trackSampR.current=[]; peakAvR.current=0;
     elbowStateR.current='guard'; smoothAngR.current=0; prevAngR.current=0;
     prevAngTsR.current=null; guardAtR.current=0; wristSpeedR.current=0;
-    prevWristR.current=null; repPeakVR.current=0; angHistR.current=[];
+    prevWristR.current=null; repPeakVR.current=0; angHistR.current=[]; lastPunchMotionR.current=0;
     goodHoldR.current=0; badHoldR.current=0; lastTsR.current=null;
 
     try {

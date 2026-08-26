@@ -86,6 +86,7 @@ const FULL_FOOT_PIVOT_DEG = 20;         // deg of rear-foot rotation for a full 
 // twitch near full extension. Requiring BOTH signals to agree is a much
 // stronger check than either alone.
 const MIN_WRIST_SPEED = 0.35; // shoulder-widths per second; normalized webcam motion is usually below 1.0
+const MOTION_MEMORY_MS = 350;
 // After retracting to guard, the arm must stay there briefly before the
 // next strike can be evaluated — without this, noise flickering right
 // across the hysteresis band can register as several strikes in a row.
@@ -353,6 +354,7 @@ export default function VisionPage() {
   const guardEnteredAtRef = useRef(0); // timestamp guard was (re)entered, for GUARD_REARM_MS debounce
   const prevWristPosRef = useRef<{ x: number; y: number } | null>(null);
   const wristSpeedRef = useRef(0); // shoulder-widths/sec, cross-validates angular velocity
+  const lastPunchMotionAtRef = useRef(0);
   // Shoulder-line angle while in guard — the rotation baseline a strike is
   // measured against, so we can score real torso rotation (hooks/crosses)
   // vs an arm-only flail.
@@ -680,6 +682,7 @@ export default function VisionPage() {
     guardEnteredAtRef.current = 0;
     prevWristPosRef.current = null;
     wristSpeedRef.current = 0;
+    lastPunchMotionAtRef.current = 0;
     smoothedElbowAngleRef.current = 0;
     prevMaxElbowAngleRef.current = 0;
     prevAngleTsRef.current = null;
@@ -1132,8 +1135,11 @@ export default function VisionPage() {
     // flickering right across the hysteresis band from double-counting.
     let punchValidated = false;
     const dwelledInGuard = now - guardEnteredAtRef.current >= GUARD_REARM_MS;
+    if (angularVel >= MIN_PUNCH_ANGULAR_VELOCITY || wristSpeedRef.current >= MIN_WRIST_SPEED) {
+      lastPunchMotionAtRef.current = now;
+    }
     if (elbowStateRef.current === 'guard' && dwelledInGuard && smoothedAngle > ELBOW_EXTEND_THRESHOLD) {
-      const motionDetected = angularVel >= MIN_PUNCH_ANGULAR_VELOCITY || wristSpeedRef.current >= MIN_WRIST_SPEED;
+      const motionDetected = now - lastPunchMotionAtRef.current <= MOTION_MEMORY_MS;
       if (motionDetected) {
         elbowStateRef.current = 'strike';
         punchValidated = true;
