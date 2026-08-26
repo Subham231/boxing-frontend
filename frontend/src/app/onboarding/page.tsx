@@ -1,9 +1,11 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { OnboardingProvider, useOnboarding } from '@/context/OnboardingContext';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
+import { useFirebaseUser } from '@/lib/useFirebaseUser';
 
 import Welcome from './components/Welcome';
 import TrainingProblem from './components/TrainingProblem';
@@ -229,6 +231,21 @@ const OnboardingFlow: React.FC = () => {
 };
 
 export default function OnboardingPage() {
+    const router = useRouter();
+    const { user, loading } = useFirebaseUser();
+
+    useEffect(() => {
+        if (!loading && user) router.replace('/dashboard');
+    }, [loading, router, user]);
+
+    if (loading || user) {
+        return (
+            <div className="flex min-h-screen items-center justify-center bg-bg-dark">
+                <Loader2 className="h-10 w-10 animate-spin text-primary" />
+            </div>
+        );
+    }
+
     return (
         <OnboardingProvider>
             <OnboardingFlow />

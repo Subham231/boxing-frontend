@@ -96,7 +96,7 @@ const Welcome: React.FC = () => {
                     </button>
                     <button
                         onClick={() => goToStep(OTP_STEP)}
-                        className="w-full h-12 flex items-center justify-center gap-2 rounded-2xl border border-cyan-300/35 bg-cyan-300/[0.06] text-cyan-200 hover:bg-cyan-300/[0.12] hover:border-cyan-200/60 font-black uppercase tracking-[0.12em] text-[11px] transition-all"
+                        className="w-full h-12 flex items-center justify-center gap-2 rounded-2xl border border-primary/50 bg-primary/[0.08] text-primary hover:bg-primary/[0.16] hover:border-primary font-black uppercase tracking-[0.12em] text-[11px] transition-all"
                     >
                         ALREADY HAVE AN ACCOUNT — LOG IN <ChevronRight size={18} />
                     </button>
