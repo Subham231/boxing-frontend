@@ -52,14 +52,6 @@ export default function ProtectedLayout({
       return;
     }
 
-    // Fast local cache check for instant navigation
-    const cached = localStorage.getItem('sparai_sub_active');
-    if (cached === 'false') {
-      setAllowed(false);
-      router.replace('/subscription');
-      return;
-    }
-
     let cancelled = false;
 
     const verifySubscription = async () => {
