@@ -9,6 +9,10 @@ import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
 
 type SparCommand = { command: string; kind: 'punch' | 'defense'; callAtMs: number };
+const PUNCH_EXTEND_DEG = 155;
+const PUNCH_RETRACT_DEG = 135;
+const MIN_PUNCH_ANGULAR_VELOCITY = 180;
+const MIN_PUNCH_WRIST_SPEED = 0.35;
 type MatchInfo = {
   matchId: string;
   opponentUid: string;
@@ -43,6 +47,16 @@ export default function SparMatchClient() {
   const spokenRef = useRef<Set<number>>(new Set());
   const submittedRef = useRef(false);
   const exitHandledRef = useRef(false);
+  const poseRef = useRef<any>(null);
+  const poseRafRef = useRef<number | null>(null);
+  const registerHitRef = useRef<(() => void) | null>(null);
+  const smoothElbowRef = useRef(0);
+  const previousElbowRef = useRef(0);
+  const previousPoseTimeRef = useRef<number | null>(null);
+  const previousWristRef = useRef<{ x: number; y: number } | null>(null);
+  const wristSpeedRef = useRef(0);
+  const elbowStateRef = useRef<'guard' | 'strike'>('guard');
+  const guardEnteredAtRef = useRef(0);
 
   const [match, setMatch] = useState<MatchInfo | null>(null);
   const [phase, setPhase] = useState<'setup' | 'live' | 'submitting' | 'done'>('setup');
@@ -84,6 +98,10 @@ export default function SparMatchClient() {
     channelRef.current = null;
     try { pcRef.current?.close(); } catch { /* ignore */ }
     pcRef.current = null;
+    if (poseRafRef.current !== null) cancelAnimationFrame(poseRafRef.current);
+    poseRafRef.current = null;
+    try { poseRef.current?.close(); } catch { /* ignore */ }
+    poseRef.current = null;
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
     localStreamRef.current = null;
   }, [match?.role, matchId]);
@@ -287,9 +305,16 @@ export default function SparMatchClient() {
           handleOpponentExit('Your opponent left the match.');
         });
 
-        await new Promise<void>((resolve) => {
+        await new Promise<void>((resolve, reject) => {
+          const timeout = window.setTimeout(() => reject(new Error('Spar connection timed out.')), 10000);
           channel.subscribe((status) => {
-            if (status === 'SUBSCRIBED') resolve();
+            if (status === 'SUBSCRIBED') {
+              window.clearTimeout(timeout);
+              resolve();
+            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+              window.clearTimeout(timeout);
+              reject(new Error('Could not connect to the spar signaling service.'));
+            }
           });
         });
 
@@ -319,6 +344,101 @@ export default function SparMatchClient() {
       cancelled = true;
     };
   }, [match, authHeaders, handleOpponentExit]);
+
+  useEffect(() => {
+    if (phase !== 'live' || !match || typeof window === 'undefined') return;
+    let cancelled = false;
+
+    const startPunchTracking = async () => {
+      try {
+        if (!(window as any).Pose) {
+          await new Promise<void>((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js';
+            script.crossOrigin = 'anonymous';
+            script.async = true;
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error('Camera punch tracking unavailable.'));
+            document.head.appendChild(script);
+          });
+        }
+        if (cancelled || !(window as any).Pose) return;
+
+        const pose = new (window as any).Pose({
+          locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`,
+        });
+        pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, enableSegmentation: false, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+        pose.onResults((results: any) => {
+          const landmarks = results.poseLandmarks;
+          if (!landmarks || landmarks.length < 17 || phase !== 'live') return;
+          const leftShoulder = landmarks[11], rightShoulder = landmarks[12];
+          const leftElbow = landmarks[13], rightElbow = landmarks[14];
+          const leftWrist = landmarks[15], rightWrist = landmarks[16];
+          if (!leftShoulder || !rightShoulder || !leftElbow || !rightElbow || !leftWrist || !rightWrist) return;
+
+          const angle = (a: any, b: any, c: any) => {
+            const abx = a.x - b.x, aby = a.y - b.y;
+            const cbx = c.x - b.x, cby = c.y - b.y;
+            const denominator = Math.hypot(abx, aby) * Math.hypot(cbx, cby);
+            if (!denominator) return 0;
+            return Math.acos(Math.min(1, Math.max(-1, (abx * cbx + aby * cby) / denominator))) * 180 / Math.PI;
+          };
+
+          const leftAngle = angle(leftShoulder, leftElbow, leftWrist);
+          const rightAngle = angle(rightShoulder, rightElbow, rightWrist);
+          const rawAngle = Math.max(leftAngle, rightAngle);
+          const now = performance.now();
+          const previousTime = previousPoseTimeRef.current;
+          const seconds = previousTime === null ? 0.033 : Math.max(0.001, (now - previousTime) / 1000);
+          const smoothed = smoothElbowRef.current === 0 ? rawAngle : smoothElbowRef.current + 0.45 * (rawAngle - smoothElbowRef.current);
+          const angularVelocity = previousTime === null ? 0 : Math.abs(smoothed - previousElbowRef.current) / seconds;
+          const wrist = leftAngle >= rightAngle ? leftWrist : rightWrist;
+          const shoulderWidth = Math.max(0.001, Math.hypot(leftShoulder.x - rightShoulder.x, leftShoulder.y - rightShoulder.y));
+          if (previousWristRef.current && previousTime !== null) {
+            wristSpeedRef.current = Math.hypot(wrist.x - previousWristRef.current.x, wrist.y - previousWristRef.current.y) / shoulderWidth / seconds;
+          }
+          previousWristRef.current = { x: wrist.x, y: wrist.y };
+          previousPoseTimeRef.current = now;
+          previousElbowRef.current = smoothed;
+          smoothElbowRef.current = smoothed;
+
+          const current = currentCmdRef.current;
+          const motionDetected = angularVelocity >= MIN_PUNCH_ANGULAR_VELOCITY || wristSpeedRef.current >= MIN_PUNCH_WRIST_SPEED;
+          const rearmed = now - guardEnteredAtRef.current >= 70;
+          if (elbowStateRef.current === 'guard' && rearmed && smoothed > PUNCH_EXTEND_DEG && motionDetected) {
+            elbowStateRef.current = 'strike';
+            if (current?.cmd.kind === 'punch' && !resultsRef.current.some((result) => result.index === current.index)) {
+              registerHitRef.current?.();
+            }
+          } else if (elbowStateRef.current === 'strike' && smoothed < PUNCH_RETRACT_DEG) {
+            elbowStateRef.current = 'guard';
+            guardEnteredAtRef.current = now;
+          }
+        });
+        poseRef.current = pose;
+
+        const loop = async () => {
+          const video = localVideoRef.current;
+          if (video && video.readyState >= 2 && poseRef.current) {
+            try { await poseRef.current.send({ image: video }); } catch { /* retry next frame */ }
+          }
+          if (!cancelled && poseRef.current) poseRafRef.current = requestAnimationFrame(loop);
+        };
+        poseRafRef.current = requestAnimationFrame(loop);
+      } catch (trackingError: any) {
+        if (!cancelled) setStatusLine(trackingError.message || 'Manual controls active');
+      }
+    };
+
+    startPunchTracking();
+    return () => {
+      cancelled = true;
+      if (poseRafRef.current !== null) cancelAnimationFrame(poseRafRef.current);
+      poseRafRef.current = null;
+      try { poseRef.current?.close(); } catch { /* ignore */ }
+      poseRef.current = null;
+    };
+  }, [match, phase]);
 
   useEffect(() => {
     if (phase !== 'live' || !match) return;
@@ -389,6 +509,8 @@ export default function SparMatchClient() {
     setCurrentCommand(`${cur.cmd.command} ✓`);
     currentCmdRef.current = null;
   };
+
+  registerHitRef.current = registerHit;
 
   const forfeit = async () => {
     if (!match) return;
