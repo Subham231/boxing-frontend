@@ -30,7 +30,7 @@ export default function TrainingPage() {
     try {
       const storedProgress = localStorage.getItem(progressKey);
       if (storedProgress) {
-        const completed = JSON.parse(storedProgress).map(Number);
+        const completed = JSON.parse(storedProgress).map(Number).filter((index: number) => index !== 99);
         setCompletedIndices(completed);
 
         // Update streak if session completed count > 0

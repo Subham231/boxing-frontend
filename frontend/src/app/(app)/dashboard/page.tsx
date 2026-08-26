@@ -106,7 +106,7 @@ export default function DashboardPage() {
     try {
       const storedProgress = localStorage.getItem(progressKey);
       if (storedProgress) {
-        setCompletedIndices(JSON.parse(storedProgress).map(Number));
+        setCompletedIndices(JSON.parse(storedProgress).map(Number).filter((index: number) => index !== 99));
       }
       setVisionComplete(localStorage.getItem('vision_progress_' + new Date().toDateString()) === 'true');
     } catch (e) {

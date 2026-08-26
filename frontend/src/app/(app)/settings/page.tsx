@@ -584,6 +584,20 @@ export default function SettingsPage() {
             </div>
             <ChevronRight className="w-4 h-4 text-white/20" />
           </a>
+          <a href="/legal/refund" className="glass-card p-4 rounded-3xl border border-white/5 bg-black/40 flex justify-between items-center hover:border-white/10">
+            <div className="flex items-center gap-4">
+              <FileText className="w-4 h-4 text-white/40" />
+              <span className="text-xs font-black uppercase text-white">REFUND POLICY</span>
+            </div>
+            <ChevronRight className="w-4 h-4 text-white/20" />
+          </a>
+          <a href="/legal/contact" className="glass-card p-4 rounded-3xl border border-white/5 bg-black/40 flex justify-between items-center hover:border-white/10">
+            <div className="flex items-center gap-4">
+              <FileText className="w-4 h-4 text-white/40" />
+              <span className="text-xs font-black uppercase text-white">CONTACT</span>
+            </div>
+            <ChevronRight className="w-4 h-4 text-white/20" />
+          </a>
         </div>
       </div>
 
