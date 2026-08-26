@@ -66,17 +66,15 @@ export default function ReferralCard({ uid }: { uid: string }) {
         </button>
       </div>
 
-      {!rewardClaimed && (
-        <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1.5">
           <div className="flex justify-between text-[9px] font-black uppercase text-white/40">
-            <span>{progress} / 5 Referrals</span>
+            <span>{progress} / 5 Friends referred</span>
             <span>{profile.referral_count} Total</span>
           </div>
           <div className="h-2 rounded-full bg-white/5 overflow-hidden">
             <div className="h-full bg-primary rounded-full transition-all duration-700" style={{ width: `${(progress / 5) * 100}%` }} />
           </div>
-        </div>
-      )}
+      </div>
 
       {rewardStillActive && (
         <div className="text-[10px] font-black text-primary uppercase text-center bg-primary/10 border border-primary/20 rounded-xl py-2">

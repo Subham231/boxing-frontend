@@ -645,6 +645,14 @@ export default function FreestyleAnalysis(): JSX.Element {
                   </div>
                 </div>
               )}
+
+              <button
+                type="button"
+                onClick={finishSession}
+                className="absolute top-14 right-3 z-10 flex items-center gap-1.5 rounded-xl border border-red-400/50 bg-black/80 px-3 py-2 text-[9px] font-black uppercase tracking-widest text-red-300 backdrop-blur-md"
+              >
+                <X className="w-3 h-3" /> Stop
+              </button>
             </div>
 
             <p className="text-center text-[9px] text-white/40 font-bold uppercase tracking-wider">

@@ -2,52 +2,16 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, Crown, Gift, Ticket } from 'lucide-react';
+import { Gift, Ticket } from 'lucide-react';
 import { useOnboarding } from '@/context/OnboardingContext';
 import StepBadge from './StepBadge';
 import { firebaseAuth } from '@/lib/firebase';
 import { applyReferralCode } from '@/lib/firebase-auth';
 import ReferralCard from '@/components/reflex/ReferralCard';
 
-const PLANS = [
-  {
-    id: 'monthly',
-    name: 'SparAI Monthly',
-    price: '₹629',
-    period: '/mo',
-    features: ['1 AI Video Analysis / day', '1 Planner Generation / week'],
-  },
-  {
-    id: 'monthly_pro',
-    name: 'SparAI Pro ⭐',
-    price: '₹729',
-    period: '/mo',
-    features: ['2 AI Video Analyses / day', '2 Planner Generations / week'],
-    highlight: true,
-  },
-  {
-    id: 'three_month',
-    name: 'SparAI Performance',
-    price: '₹1,629',
-    period: '/ 3 mos',
-    features: ['3 AI Video Analyses / day', '3 Planner Generations / week'],
-  },
-  {
-    id: 'yearly',
-    name: 'SparAI Elite 👑',
-    price: '₹6,290',
-    period: '/yr',
-    features: ['Unlimited AI Video Analyses', 'Unlimited Planner Generations', 'Premium Guru unlocked', 'Elite Member badge'],
-  },
-];
-
-type EarnTab = 'referral' | 'share';
-
 const SubscriptionOffer: React.FC = () => {
   const router = useRouter();
-  const { nextStep, prevStep } = useOnboarding();
-  const [selected, setSelected] = useState<string>('monthly_pro');
-  const [earnTab, setEarnTab] = useState<EarnTab>('referral');
+  const { prevStep } = useOnboarding();
   const [referralInput, setReferralInput] = useState('');
   const [referralLoading, setReferralLoading] = useState(false);
   const [referralError, setReferralError] = useState<string | null>(null);
@@ -62,19 +26,7 @@ const SubscriptionOffer: React.FC = () => {
   }, []);
 
   const handleContinue = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('boxing_selected_plan', selected);
-    }
-
-    if (selected === 'monthly_pro' || selected === 'yearly') {
-      // The legacy /checkout + /api/razorpay/* flow only ever wrote to the
-      // old `subscription_until` column and doesn't know about plans, daily/
-      // weekly limits, or Elite status — it's superseded by /subscription,
-      // which is what actually grants entitlement under the new system.
-      router.push('/subscription');
-    } else {
-      nextStep();
-    }
+    router.push('/subscription');
   };
 
   const handleApplyReferral = async () => {
@@ -189,7 +141,7 @@ const SubscriptionOffer: React.FC = () => {
 
       <footer className="mt-8 flex flex-col gap-4">
         <button onClick={handleContinue} className="btn-primary w-full h-16 flex items-center justify-center gap-2">
-          Set up my plan
+          Get my plan
         </button>
 
         <div className="bg-black/80 border border-white/10 rounded-2xl py-3 px-4 flex flex-wrap justify-center items-center gap-x-3 gap-y-1.5 text-white/50 text-[9px] font-bold uppercase tracking-widest text-center mt-2 shadow-[0_4px_12px_rgba(0,0,0,0.5)]">
