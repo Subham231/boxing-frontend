@@ -468,12 +468,24 @@ export default function VisionPage() {
     CROSS: 'Cross',
     HOOK: 'Hook',
     UPPERCUT: 'Upper cut',
+    'LEAD HOOK': 'Lead hook',
+    'REAR HOOK': 'Rear hook',
+    'LEAD UPPERCUT': 'Lead upper cut',
+    'REAR UPPERCUT': 'Rear upper cut',
+    'BODY HOOK': 'Body hook',
+    'OVERHAND RIGHT': 'Overhand right',
+    'DOUBLE JAB': 'Double jab',
+    '1-2 COMBO': 'One two combo',
+    '1-2-3 COMBO': 'One two three combo',
+    'BODY-HEAD COMBO': 'Body head combo',
     'SLIP LEFT': 'Slip left',
     'SLIP RIGHT': 'Slip right',
     'ROLL UNDER': 'Roll under',
   };
-  const normalizeForSpeech = (text: string) =>
-    SPEECH_TEXT[text] || (text.charAt(0) + text.slice(1).toLowerCase());
+  const normalizeForSpeech = (text: string) => {
+    const normalized = SPEECH_TEXT[text.toUpperCase()] || text;
+    return normalized.replace(/-/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+  };
 
   // Cache available voices (they load asynchronously in most browsers — the
   // old code called getVoices() fresh every time and often got an empty
@@ -504,6 +516,8 @@ export default function VisionPage() {
       if (profile === 'steel' && v.lang === 'en-GB') score += 2;
       if (profile === 'athena' && /female|zira|samantha|victoria|karen|aria/.test(name)) score += 5;
       if (profile === 'cyber' && /google|online|natural/.test(name)) score += 3;
+      const chosenByAnotherProfile = Object.entries(voiceForProfileRef.current).some(([key, selected]) => key !== profile && selected?.voiceURI === v.voiceURI);
+      if (chosenByAnotherProfile) score -= 20;
       return { v, score };
     }).sort((a, b) => b.score - a.score);
     const chosen = scored[0]?.v || pool[0];
@@ -533,8 +547,9 @@ export default function VisionPage() {
       
       // Maximum projection settings for long distance (10-15ft away)
       utterance.volume = 1.0; // 100% max hardware volume output
-      utterance.rate = difficultyRef.current === 'hard' ? 1.05 : difficultyRef.current === 'easy' ? 0.85 : 0.95; // Crisp, clear pacing
-      utterance.pitch = profile === 'steel' ? 1.05 : profile === 'athena' ? 1.15 : 1.0; // Slightly higher pitch cuts through ambient gym noise
+      const baseRate = difficultyRef.current === 'hard' ? 1.05 : difficultyRef.current === 'easy' ? 0.85 : 0.95;
+      utterance.rate = profile === 'steel' ? baseRate * 0.9 : profile === 'athena' ? baseRate * 1.08 : baseRate * 1.18;
+      utterance.pitch = profile === 'steel' ? 0.78 : profile === 'athena' ? 1.28 : 1.65;
 
       let fired = false;
       const fireStart = () => {

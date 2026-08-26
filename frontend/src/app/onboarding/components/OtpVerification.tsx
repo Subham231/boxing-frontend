@@ -6,7 +6,7 @@ import { ChevronRight, ShieldCheck, ArrowLeft } from 'lucide-react';
 import type { ConfirmationResult } from 'firebase/auth';
 import { useOnboarding } from '@/context/OnboardingContext';
 import StepBadge from './StepBadge';
-import { sendOtp, confirmOtp, checkOtpRateLimit, saveProfileDetails } from '@/lib/firebase-auth';
+import { sendOtp, confirmOtp, checkPhoneExists, checkOtpRateLimit, saveProfileDetails } from '@/lib/firebase-auth';
 import { cacheProfileLocally } from '@/lib/profile-client';
 
 const RECAPTCHA_CONTAINER_ID = 'onboarding-phone-recaptcha';
@@ -54,6 +54,10 @@ const OtpVerification: React.FC = () => {
     if (!confirmation) return;
     setLoading(true);
     try {
+      if (await checkPhoneExists(trimmedPhone)) {
+        setError('You already have an account. Please use the separate login page.');
+        return;
+      }
       const { user, isNew, profile } = await confirmOtp(confirmation, trimmedCode);
       updateData({ phone: trimmedPhone });
 

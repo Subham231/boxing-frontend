@@ -20,6 +20,7 @@ const Identity: React.FC = () => {
 
     const [signupError, setSignupError] = useState<string | null>(null);
     const [existingAccount, setExistingAccount] = useState(false);
+    const [checkingPhone, setCheckingPhone] = useState(false);
 
     const startCamera = async () => {
         try {
@@ -107,14 +108,19 @@ const Identity: React.FC = () => {
         }
 
         setExistingAccount(false);
-        if (await checkPhoneExists(phone)) {
-            setExistingAccount(true);
-            setSignupError('You already have an account. Try logging in.');
-            return;
-        }
+        setCheckingPhone(true);
+        try {
+            if (await checkPhoneExists(phone)) {
+                setExistingAccount(true);
+                setSignupError('You already have an account. Try logging in.');
+                return;
+            }
 
-        updateData({ ringName: name, phone });
-        nextStep();
+            updateData({ ringName: name, phone });
+            nextStep();
+        } finally {
+            setCheckingPhone(false);
+        }
     };
 
     return (
@@ -281,9 +287,10 @@ const Identity: React.FC = () => {
             <footer className="mt-4 flex flex-col gap-2.5">
                 <button
                     onClick={handleSignUp}
-                    className="btn-primary w-full h-14 flex items-center justify-center gap-2 text-sm"
+                    disabled={checkingPhone}
+                    className="btn-primary w-full h-14 flex items-center justify-center gap-2 text-sm disabled:opacity-50"
                 >
-                    CONTINUE <ChevronRight size={18} />
+                    {checkingPhone ? 'CHECKING NUMBER...' : 'CONTINUE'} <ChevronRight size={18} />
                 </button>
                 <button onClick={prevStep} className="text-[10px] font-black text-white/40 hover:text-white uppercase tracking-widest py-1 mx-auto">
                     Back

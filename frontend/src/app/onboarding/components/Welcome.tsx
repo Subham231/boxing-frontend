@@ -7,7 +7,7 @@ import { useOnboarding } from '@/context/OnboardingContext';
 import { useRouter } from 'next/navigation';
 
 const Welcome: React.FC = () => {
-    const { nextStep, goToStep, totalSteps } = useOnboarding();
+    const { nextStep } = useOnboarding();
     const router = useRouter();
 
     // Screen order (see onboarding/page.tsx): ... PromiseStep,
