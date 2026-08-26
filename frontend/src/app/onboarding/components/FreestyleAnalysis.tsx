@@ -318,29 +318,24 @@ export default function FreestyleAnalysis(): JSX.Element {
         return;
       }
 
-      // Preflight permission check (not supported in all browsers — safe to skip if unavailable)
-      try {
-        const perm = await navigator.permissions.query({ name: 'camera' as PermissionName });
-        if (perm.state === 'denied') {
-          setPermissionNotice('Camera is blocked. Turn it on in the browser popup or permissions settings.');
-          setCameraError('Camera access was denied. Please enable camera permissions in your browser settings, then refresh the page.');
-          setStage('setup');
-          return;
-        }
-      } catch {
-        // Permissions API not available — proceed and let getUserMedia handle it
-      }
-
       const stream = await navigator.mediaDevices.getUserMedia({ video:{facingMode:'user',width:{ideal:640},height:{ideal:480}}, audio:false });
       streamRef.current = stream;
       setStage('recording');
       // Wait for video element to mount
       let videoEl: HTMLVideoElement|null = null;
-      const deadline = Date.now()+2000;
+      const deadline = Date.now()+5000;
       while (Date.now()<deadline) { if (videoRef.current) { videoEl=videoRef.current; break; } await new Promise(r=>setTimeout(r,30)); }
       if (!videoEl) throw new Error('video-mount');
       videoEl.srcObject = stream;
-      await new Promise<void>(resolve => { videoEl!.onloadedmetadata = () => { if(canvasRef.current){canvasRef.current.width=videoEl!.videoWidth||640;canvasRef.current.height=videoEl!.videoHeight||480;} resolve(); }; });
+      if (videoEl.readyState < 1) {
+        await new Promise<void>((resolve) => {
+          videoEl!.onloadedmetadata = () => resolve();
+        });
+      }
+      if (canvasRef.current) {
+        canvasRef.current.width = videoEl.videoWidth || 640;
+        canvasRef.current.height = videoEl.videoHeight || 480;
+      }
       try { await videoEl.play(); } catch {}
 
       // Load MediaPipe
@@ -477,7 +472,7 @@ export default function FreestyleAnalysis(): JSX.Element {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-sm rounded-2xl border border-primary/30 bg-[#101010]/95 px-3 py-2 text-center shadow-[0_0_25px_rgba(226,255,59,0.15)]"
+            className="fixed top-4 left-2 right-2 z-50 mx-auto rounded-2xl border border-primary/30 bg-[#101010]/95 px-3 py-2 text-center shadow-[0_0_25px_rgba(226,255,59,0.15)] sm:left-1/2 sm:right-auto sm:w-[calc(100%-2rem)] sm:max-w-sm sm:-translate-x-1/2"
           >
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-primary">Permission needed</p>
             <p className="mt-1 text-[11px] font-semibold text-white/80 leading-snug">{permissionNotice}</p>
