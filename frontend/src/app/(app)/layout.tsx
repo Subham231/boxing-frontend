@@ -39,7 +39,12 @@ export default function ProtectedLayout({
       }
     };
 
-    if (!isOnboardingComplete() || !user) {
+    if (!user) {
+      window.location.replace('/onboarding?mode=login');
+      return;
+    }
+
+    if (!isOnboardingComplete()) {
       if (!isExempt) {
         window.location.replace('/onboarding');
       }
@@ -100,9 +105,12 @@ export default function ProtectedLayout({
     };
   }, [user, authLoading, pathname, isExempt, router]);
 
-  // If on non-exempt route and not allowed, don't show content
-  if (!isExempt && !allowed) {
-    return null;
+  if (authLoading || !user || (!isExempt && !allowed)) {
+    return (
+      <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    );
   }
 
   return <AppShell>{children}</AppShell>;

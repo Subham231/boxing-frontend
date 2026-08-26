@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { OnboardingProvider, useOnboarding } from '@/context/OnboardingContext';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
@@ -103,8 +103,9 @@ const MIDDLE_COMPONENTS: Record<MiddleScreenId, React.ReactNode> = {
 };
 
 const OnboardingFlow: React.FC = () => {
-    const { currentStep, totalSteps, isLoaded } = useOnboarding();
+    const { currentStep, totalSteps, isLoaded, goToStep } = useOnboarding();
     const [middleOrder, setMiddleOrder] = useState<MiddleScreenId[] | null>(null);
+    const loginModeHandled = useRef(false);
 
     useEffect(() => {
         const prev = document.body.style.overflow;
@@ -118,6 +119,14 @@ const OnboardingFlow: React.FC = () => {
         if (!isLoaded) return;
         setMiddleOrder(getOrCreateMiddleOrder());
     }, [isLoaded]);
+
+    useEffect(() => {
+        if (!isLoaded || !middleOrder || loginModeHandled.current) return;
+        if (new URLSearchParams(window.location.search).get('mode') === 'login') {
+            loginModeHandled.current = true;
+            goToStep(totalSteps - 3);
+        }
+    }, [goToStep, isLoaded, middleOrder, totalSteps]);
 
     const screens = useMemo(() => {
         if (!middleOrder) return [];

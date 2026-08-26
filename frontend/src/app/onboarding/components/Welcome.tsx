@@ -9,9 +9,9 @@ const Welcome: React.FC = () => {
     const { nextStep, goToStep, totalSteps } = useOnboarding();
 
     // Screen order (see onboarding/page.tsx): ... PromiseStep,
-    // OtpVerification, SubscriptionOffer, FinalPromise — OTP is always
-    // third from the end.
-    const OTP_STEP = totalSteps - 2;
+    // OtpVerification, SubscriptionOffer, FinalPromise — OTP is three steps
+    // from the end.
+    const OTP_STEP = totalSteps - 3;
 
     return (
         <div className="relative flex flex-col min-h-[85vh] justify-between py-4 overflow-hidden pb-20">
