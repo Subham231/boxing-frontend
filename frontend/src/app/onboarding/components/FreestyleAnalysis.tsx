@@ -95,6 +95,8 @@ export default function FreestyleAnalysis(): JSX.Element {
   const trackSampR     = useRef<number[]>([]);
   const peakAvR        = useRef(0);
 
+  // DO NOT replace this with a single-frame angle check. Straight arms at
+  // rest also measure near 180°, which would permanently block punch counts.
   // Elbow state machine refs
   const smoothAngR     = useRef(0);
   const prevAngR       = useRef(0);
@@ -256,8 +258,9 @@ export default function FreestyleAnalysis(): JSX.Element {
     // State machine GUARD→STRIKE→GUARD
     const dwell = now-guardAtR.current >= REARM;
     if (elbowStateR.current==='guard' && dwell && sa>EXT) {
-      elbowStateR.current='strike';
-      if (av>=MIN_AV && wristSpeedR.current>=MIN_WS) {
+      const motionDetected = av>=MIN_AV || wristSpeedR.current>=MIN_WS;
+      if (motionDetected) {
+        elbowStateR.current='strike';
         // Validated punch — log it
         const pv = Math.round(repPeakVR.current);
         const rScore = Math.round(Math.min(100,(peakRotR.current/22)*100));

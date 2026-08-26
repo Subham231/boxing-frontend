@@ -343,11 +343,11 @@ export default function VisionPage() {
   const repLogRef = useRef<RepLogEntry[]>([]);
   const activeCommandTextRef = useRef('');
 
-  // Punch state machine: 'guard' (arm folded/at rest) <-> 'strike' (arm
-  // extended). A hysteresis band between ELBOW_RETRACT_THRESHOLD and
-  // ELBOW_EXTEND_THRESHOLD means the arm must fully return to guard before
-  // the next strike can be evaluated — this is what stops a single punch
-  // (or arm vibrating near full extension) from being counted multiple times.
+  // DO NOT remove the motion gate below or change this state machine to a
+  // single-frame angle check. Straight arms at rest also measure near 180°;
+  // without the gate, the detector gets stuck in strike and stops counting.
+  // Punch state machine: guard -> strike -> guard, with hysteresis so one
+  // punch cannot be counted repeatedly while the arm is extended.
   const elbowStateRef = useRef<'guard' | 'strike'>('guard');
   const elbowAngleHistoryRef = useRef<number[]>([]); // last 3 raw readings, for median outlier rejection
   const guardEnteredAtRef = useRef(0); // timestamp guard was (re)entered, for GUARD_REARM_MS debounce
@@ -1133,8 +1133,9 @@ export default function VisionPage() {
     let punchValidated = false;
     const dwelledInGuard = now - guardEnteredAtRef.current >= GUARD_REARM_MS;
     if (elbowStateRef.current === 'guard' && dwelledInGuard && smoothedAngle > ELBOW_EXTEND_THRESHOLD) {
-      elbowStateRef.current = 'strike';
-      if (angularVel >= MIN_PUNCH_ANGULAR_VELOCITY && wristSpeedRef.current >= MIN_WRIST_SPEED) {
+      const motionDetected = angularVel >= MIN_PUNCH_ANGULAR_VELOCITY || wristSpeedRef.current >= MIN_WRIST_SPEED;
+      if (motionDetected) {
+        elbowStateRef.current = 'strike';
         punchValidated = true;
       }
     } else if (elbowStateRef.current === 'strike' && smoothedAngle < ELBOW_RETRACT_THRESHOLD) {
