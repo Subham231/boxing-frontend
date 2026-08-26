@@ -26,10 +26,10 @@ import {
 } from 'lucide-react';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
-import { API_BASE_URL } from '@/lib/api';
-import { supabase } from '@/lib/supabase';
 import { useMyProfile } from '@/lib/profile-client';
 import { signOutFirebase } from '@/lib/firebase-auth';
+import { firebaseAuth } from '@/lib/firebase';
+import { getVisionSessionHistory } from '@/lib/session-log';
 
 interface OnboardingData {
   ringName?: string;
@@ -55,6 +55,7 @@ export default function SettingsPage() {
   const [mounted, setMounted] = useState(false);
   const [profileData, setProfileData] = useState<OnboardingData>({});
   const { profile: liveProfile, updateProfile } = useMyProfile();
+  const [subscription, setSubscription] = useState<{ active: boolean; planName: string; plan: string | null; expiresAt: string | null }>({ active: false, planName: 'No subscription', plan: null, expiresAt: null });
 
   // App Settings
   const [notifications, setNotifications] = useState(true);
@@ -99,6 +100,23 @@ export default function SettingsPage() {
         document.body.classList.remove('stealth-active');
       }
     } catch (e) {}
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadSubscription = async () => {
+      const user = firebaseAuth.currentUser;
+      if (!user) return;
+      try {
+        const token = await user.getIdToken();
+        const response = await fetch('/api/subscription/status', { headers: { Authorization: `Bearer ${token}` } });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (!cancelled) setSubscription({ active: data.active === true, planName: data.planName || 'No subscription', plan: data.plan || null, expiresAt: data.expiresAt || null });
+      } catch { }
+    };
+    loadSubscription();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -188,6 +206,7 @@ export default function SettingsPage() {
     let daysActive = 0;
     let totalDrills = 0;
     const weeklySummary: string[] = [];
+    const visionSessions = getVisionSessionHistory().filter((session) => Date.now() - new Date(session.date).getTime() <= 7 * 24 * 60 * 60 * 1000);
 
     const today = new Date();
     for (let i = 0; i < 7; i++) {
@@ -207,44 +226,14 @@ export default function SettingsPage() {
 
     setDebriefDays(daysActive);
     setDebriefDrills(totalDrills);
-
     const name = profileData.ringName || profileData.ring_name || 'FIGHTER';
-    const primaryGoal = profileData.primary_goal || 'unbeatable speed';
-    const promiseVal = profileData.promise || profileData.promise_trigger || 'to never break the chain';
-
-    try {
-      const { data: sessionData } = supabase ? await supabase.auth.getSession() : { data: { session: null } };
-      const token = sessionData.session?.access_token;
-      if (!token) throw new Error('Not signed in');
-
-      const response = await fetch(`${API_BASE_URL}/api/weekly-debrief`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          name,
-          primaryGoal,
-          promiseVal,
-          daysActive,
-          totalDrills,
-          weeklySummary,
-        }),
-      });
-
-      if (!response.ok) throw new Error('Link Failed');
-      const { text } = await response.json();
-
-      setDebriefGenerating(false);
-      typeText(text);
-      speakDebrief(text);
-    } catch (err) {
-      setDebriefGenerating(false);
-      const failText = "AI COMLINK UNAVAILABLE. ENJOY YOUR REST, FIGHTER.";
-      setDebriefText(failText);
-      speakDebrief(failText);
-    }
+    const punches = visionSessions.reduce((sum, session) => sum + session.punches, 0);
+    const scores = visionSessions.map((session) => session.score).filter((score) => Number.isFinite(score));
+    const averageScore = scores.length ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : 0;
+    const recap = `${name}, you logged ${daysActive} active training day${daysActive === 1 ? '' : 's'} and ${totalDrills} completed drill${totalDrills === 1 ? '' : 's'} this week. ${visionSessions.length ? `Your ${visionSessions.length} vision session${visionSessions.length === 1 ? '' : 's'} tracked ${punches} punches with an average score of ${averageScore}/100.` : 'Complete an AI Vision session this week to establish a measurable punch baseline.'} Keep the chain alive and return sharper next session.`;
+    setDebriefGenerating(false);
+    typeText(recap);
+    speakDebrief(recap);
   };
 
   const typeText = (text: string) => {
@@ -479,20 +468,26 @@ export default function SettingsPage() {
           PREMIUM FEATURES
         </span>
 
-        <GlassCard className="p-4 border-white/5 bg-black/40 flex items-center justify-between">
+        <GlassCard
+          className={`p-4 border-white/5 bg-black/40 flex items-center justify-between ${!subscription.active ? 'cursor-pointer hover:border-primary/30' : ''}`}
+          onClick={!subscription.active ? () => router.push('/subscription') : undefined}
+        >
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
               <Crown className="w-4 h-4" />
             </div>
             <div>
               <h4 className="text-xs font-black uppercase text-white leading-none">
-                PRO SUBSCRIPTION
+                {subscription.active ? subscription.planName : 'NO ACTIVE PLAN'}
               </h4>
               <span className="text-[8px] font-black text-primary uppercase block mt-1">
-                ACTIVE • RENEWS OCT 20
+                {subscription.active && subscription.expiresAt
+                  ? `EXPIRES ${new Date(subscription.expiresAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                  : 'BUY A PLAN TO UNLOCK PREMIUM FEATURES'}
               </span>
             </div>
           </div>
+          {!subscription.active && <ChevronRight className="w-4 h-4 text-primary" />}
         </GlassCard>
 
         {/* Weekly AI Recap Button */}

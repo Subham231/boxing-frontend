@@ -11,6 +11,7 @@ import { GlassCard } from '@/components/ui/GlassCard';
 export default function TrainingPage() {
   const router = useRouter();
   const [completedIndices, setCompletedIndices] = useState<number[]>([]);
+  const [visionComplete, setVisionComplete] = useState(false);
   const [workout, setWorkout] = useState<any>(null);
   const [dayName, setDayName] = useState('TODAY');
 
@@ -38,6 +39,7 @@ export default function TrainingPage() {
           StreakManager.syncWithSupabase().catch(console.error);
         }
       }
+      setVisionComplete(localStorage.getItem('vision_progress_' + today.toDateString()) === 'true');
     } catch (e) {
       console.error('Failed to load workout progress:', e);
     }
@@ -45,10 +47,15 @@ export default function TrainingPage() {
 
   const completionPercent = useMemo(() => {
     if (!workout || !workout.drills.length) return 0;
-    return Math.round((completedIndices.length / workout.drills.length) * 100);
-  }, [workout, completedIndices]);
+    const completed = completedIndices.length + (visionComplete ? 1 : 0);
+    return Math.round((completed / workout.drills.length) * 100);
+  }, [workout, completedIndices, visionComplete]);
 
   const handleDrillClick = (index: number) => {
+    if (workout?.drills[index]?.isVision) {
+      router.push('/vision');
+      return;
+    }
     router.push(`/training/session?index=${index}`);
   };
 
@@ -130,7 +137,7 @@ export default function TrainingPage() {
       <div className="flex flex-col gap-3.5">
         {workout.drills.length > 0 ? (
           workout.drills.map((drill: any, index: number) => {
-            const isComplete = completedIndices.includes(index);
+            const isComplete = drill.isVision ? visionComplete : completedIndices.includes(index);
             return (
               <div 
                 key={index}

@@ -1592,13 +1592,8 @@ export default function VisionPage() {
 
   useEffect(() => {
     if (stage === 'results' && resultsData) {
-      const progressKey = 'workout_progress_' + new Date().toDateString();
       try {
-        const completed = JSON.parse(localStorage.getItem(progressKey) || '[]');
-        if (!completed.includes(99)) {
-          completed.push(99);
-          localStorage.setItem(progressKey, JSON.stringify(completed));
-        }
+        localStorage.setItem('vision_progress_' + new Date().toDateString(), 'true');
       } catch { }
 
       // Real session record for the Analytics page — every field here is
@@ -1629,13 +1624,8 @@ export default function VisionPage() {
       // already credited within the last 24 hours.
       completeSessionSecure().catch(console.error);
     } else if (stage === 'results' && insufficientData) {
-      const progressKey = 'workout_progress_' + new Date().toDateString();
       try {
-        const completed = JSON.parse(localStorage.getItem(progressKey) || '[]');
-        if (!completed.includes(99)) {
-          completed.push(99);
-          localStorage.setItem(progressKey, JSON.stringify(completed));
-        }
+        localStorage.setItem('vision_progress_' + new Date().toDateString(), 'true');
       } catch { }
     }
   }, [stage, resultsData, insufficientData]);

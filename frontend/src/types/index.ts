@@ -42,6 +42,7 @@ export interface Drill {
   instruction: string;
   focus?: string;
   type: 'timer' | 'reps';
+  isVision?: boolean;
   reps?: string;
   duration?: number;
   sets?: number;

@@ -188,6 +188,12 @@ export function getDailyWorkout(dateInput?: Date): Workout {
                     console.error("DATA_LINK_FAILURE: Could not parse tactical session.");
                 }
             }
+            plannerWorkout.drills.unshift({
+                name: 'AI Vision Analysis',
+                instruction: 'Complete one camera-based AI Vision session to track your punches and technique.',
+                type: 'timer',
+                isVision: true,
+            } as Drill);
             return plannerWorkout;
         }
     }
@@ -233,6 +239,13 @@ export function getDailyWorkout(dateInput?: Date): Workout {
             console.error("DATA_LINK_FAILURE: Could not parse tactical session.");
         }
     }
+
+    baseWorkout.drills.unshift({
+        name: 'AI Vision Analysis',
+        instruction: 'Complete one camera-based AI Vision session to track your punches and technique.',
+        type: 'timer',
+        isVision: true,
+    } as Drill);
 
     return baseWorkout;
 }

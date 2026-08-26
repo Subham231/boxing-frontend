@@ -57,6 +57,7 @@ export default function DashboardPage() {
   const streak = rankState?.current_streak ?? 0;
   const rankLevel = rankState?.rank_level ?? 0;
   const [completedIndices, setCompletedIndices] = useState<number[]>([]);
+  const [visionComplete, setVisionComplete] = useState(false);
   const [calendarDays, setCalendarDays] = useState<any[]>([]);
 
   // Onboarding metrics
@@ -107,6 +108,7 @@ export default function DashboardPage() {
       if (storedProgress) {
         setCompletedIndices(JSON.parse(storedProgress).map(Number));
       }
+      setVisionComplete(localStorage.getItem('vision_progress_' + new Date().toDateString()) === 'true');
     } catch (e) {
       console.error('Failed to load workout progress:', e);
     }
@@ -175,13 +177,14 @@ export default function DashboardPage() {
   // Compute completion percent
   const completionPercent = useMemo(() => {
     if (!todayWorkout.drills.length) return 0;
-    return Math.round((completedIndices.length / todayWorkout.drills.length) * 100);
-  }, [todayWorkout.drills, completedIndices]);
+    const completed = completedIndices.length + (visionComplete ? 1 : 0);
+    return Math.round((completed / todayWorkout.drills.length) * 100);
+  }, [todayWorkout.drills, completedIndices, visionComplete]);
 
   // Find next uncompleted drill
   const nextDrill = useMemo(() => {
-    return todayWorkout.drills.find((_, idx) => !completedIndices.includes(idx)) || null;
-  }, [todayWorkout.drills, completedIndices]);
+    return todayWorkout.drills.find((drill, idx) => drill.isVision ? !visionComplete : !completedIndices.includes(idx)) || null;
+  }, [todayWorkout.drills, completedIndices, visionComplete]);
 
   // Next drill value display helper
   const nextDrillValue = useMemo(() => {
