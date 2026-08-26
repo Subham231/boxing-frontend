@@ -4,15 +4,15 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { ChevronRight, Zap } from 'lucide-react';
 import { useOnboarding } from '@/context/OnboardingContext';
+import { useRouter } from 'next/navigation';
 
 const Welcome: React.FC = () => {
     const { nextStep, goToStep, totalSteps } = useOnboarding();
+    const router = useRouter();
 
     // Screen order (see onboarding/page.tsx): ... PromiseStep,
     // OtpVerification, SubscriptionOffer, FinalPromise — OTP is three steps
     // from the end.
-    const OTP_STEP = totalSteps - 3;
-
     return (
         <div className="relative flex flex-col min-h-[85vh] justify-between py-4 overflow-hidden pb-20">
             {/* Ambient particles */}
@@ -95,7 +95,7 @@ const Welcome: React.FC = () => {
                         SIGN UP <ChevronRight size={20} />
                     </button>
                     <button
-                        onClick={() => goToStep(OTP_STEP)}
+                        onClick={() => router.push('/login')}
                         className="w-full h-12 flex items-center justify-center gap-2 rounded-2xl border border-primary/50 bg-primary/[0.08] text-primary hover:bg-primary/[0.16] hover:border-primary font-black uppercase tracking-[0.12em] text-[11px] transition-all"
                     >
                         ALREADY HAVE AN ACCOUNT — LOG IN <ChevronRight size={18} />

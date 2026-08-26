@@ -3,6 +3,7 @@
 import React, { useState, useRef } from 'react';
 import { useOnboarding } from '@/context/OnboardingContext';
 import { Camera, Upload, ChevronRight, UserCircle2, Sparkles, Check } from 'lucide-react';
+import { checkPhoneExists } from '@/lib/firebase-auth';
 
 const RING_NAME_SUGGESTIONS = ['TITAN', 'SHADOW', 'VIPER', 'THUNDER', 'IRONCLAD', 'STRIKER'];
 const PROFESSION_SUGGESTIONS = ['Engineer', 'Student', 'Athlete', 'Entrepreneur', 'Doctor', 'Coach'];
@@ -18,6 +19,7 @@ const Identity: React.FC = () => {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [signupError, setSignupError] = useState<string | null>(null);
+    const [existingAccount, setExistingAccount] = useState(false);
 
     const startCamera = async () => {
         try {
@@ -104,6 +106,13 @@ const Identity: React.FC = () => {
             return;
         }
 
+        setExistingAccount(false);
+        if (await checkPhoneExists(phone)) {
+            setExistingAccount(true);
+            setSignupError('You already have an account. Try logging in.');
+            return;
+        }
+
         updateData({ ringName: name, phone });
         nextStep();
     };
@@ -184,6 +193,7 @@ const Identity: React.FC = () => {
                             value={data.ringName || ''}
                             onChange={(e) => {
                                 setSignupError(null);
+                                setExistingAccount(false);
                                 updateData({ ringName: e.target.value });
                             }}
                             className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2.5 text-base font-black text-white outline-none focus:border-primary transition-all tracking-wider"
@@ -259,7 +269,12 @@ const Identity: React.FC = () => {
                 </div>
 
                 {signupError && (
-                    <p className="text-[11px] font-bold text-red-400 text-center leading-relaxed">{signupError}</p>
+                    <p className={`text-[11px] font-bold text-center leading-relaxed ${existingAccount ? 'text-primary' : 'text-red-400'}`}>{signupError}</p>
+                )}
+                {existingAccount && (
+                    <button type="button" onClick={() => window.location.assign('/login')} className="btn-primary w-full h-12 flex items-center justify-center gap-2 text-sm">
+                        LOG IN TO EXISTING ACCOUNT <ChevronRight size={18} />
+                    </button>
                 )}
             </main>
 
