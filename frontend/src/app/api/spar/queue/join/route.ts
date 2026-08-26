@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireFirebaseUid } from '@/lib/server/require-firebase';
 import { getEntitlement } from '@/lib/server/entitlements';
 import { supabaseAdmin } from '@/lib/server/supabase-admin';
-import { generateSparCommandSequence } from '@/lib/server/spar';
 import { getClientIP, rateLimitMiddleware, FREE_SPARRING_LIMITER } from '@/lib/server/ip-rate-limit';
 
 export const runtime = 'nodejs';
@@ -27,6 +26,28 @@ export async function POST(req: NextRequest) {
   const uid = auth.uid;
 
   await purgeOldIncompleteMatches();
+
+  // A retry, tab refresh, or duplicate click must resume the existing match
+  // instead of consuming another daily credit or creating another pairing.
+  const { data: existingMatch } = await supabaseAdmin
+    .from('spar_matches')
+    .select('id, player_a_uid, player_b_uid, command_sequence, is_paid_match, status')
+    .or(`player_a_uid.eq.${uid},player_b_uid.eq.${uid}`)
+    .in('status', ['pending', 'active', 'awaiting_results'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (existingMatch) {
+    return NextResponse.json({
+      status: 'matched',
+      matchId: existingMatch.id,
+      opponentUid: existingMatch.player_a_uid === uid ? existingMatch.player_b_uid : existingMatch.player_a_uid,
+      commandSequence: existingMatch.command_sequence,
+      signalingChannel: `spar-${existingMatch.id}`,
+      isPaidMatch: existingMatch.is_paid_match,
+      role: existingMatch.player_a_uid === uid ? 'offer' : 'answer',
+    });
+  }
 
   // Clear stale queue rows older than 3 minutes
   const staleBefore = new Date(Date.now() - 3 * 60 * 1000).toISOString();
@@ -101,7 +122,12 @@ export async function POST(req: NextRequest) {
 
   if (matchErr) {
     console.error('[spar/queue/join] match create', matchErr);
-    return NextResponse.json({ error: 'Failed to create match.' }, { status: 500 });
+    return NextResponse.json({ error: 'Spar matchmaking is not configured. Apply supabase/reflex-schema-v19.sql.' }, { status: 500 });
+  }
+
+  if (matchResult?.error) {
+    console.error('[spar/queue/join] RPC error', matchResult.error);
+    return NextResponse.json({ error: 'Spar matchmaking needs the latest database migration. Apply supabase/reflex-schema-v19.sql.' }, { status: 500 });
   }
 
   if (!matchResult || matchResult.status === 'searching') {

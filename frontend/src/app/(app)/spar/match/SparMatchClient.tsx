@@ -266,6 +266,15 @@ export default function SparMatchClient() {
           config: { broadcast: { self: false } },
         });
         channelRef.current = channel;
+        const pendingIceCandidates: RTCIceCandidateInit[] = [];
+
+        const addIceCandidate = async (candidate: RTCIceCandidateInit) => {
+          if (!pc.remoteDescription) {
+            pendingIceCandidates.push(candidate);
+            return;
+          }
+          try { await pc.addIceCandidate(candidate); } catch { /* ignore stale candidates */ }
+        };
 
         pc.onicecandidate = (ev) => {
           if (ev.candidate) {
@@ -279,15 +288,17 @@ export default function SparMatchClient() {
 
         channel.on('broadcast', { event: 'ice' }, async ({ payload }) => {
           if (!payload?.candidate || payload.from === match.role) return;
-          try {
-            await pc.addIceCandidate(payload.candidate);
-          } catch { /* ignore */ }
+          await addIceCandidate(payload.candidate);
         });
 
         channel.on('broadcast', { event: 'sdp' }, async ({ payload }) => {
           if (!payload?.sdp || payload.from === match.role) return;
           try {
             await pc.setRemoteDescription(payload.sdp);
+            while (pendingIceCandidates.length) {
+              const candidate = pendingIceCandidates.shift();
+              if (candidate) await addIceCandidate(candidate);
+            }
             if (payload.sdp.type === 'offer') {
               const answer = await pc.createAnswer();
               await pc.setLocalDescription(answer);
