@@ -47,8 +47,8 @@ export default function ContactPage() {
               <p className="text-white/60 text-xs font-semibold">
                 For account assistance, billing questions, and general inquiries:
               </p>
-              <a href="mailto:sk.ish24@gmail.com" className="text-white text-base font-black tracking-tight hover:underline flex items-center gap-1.5 mt-2">
-                sk.ish24@gmail.com <ExternalLink className="w-4 h-4 text-primary" />
+              <a href="mailto:spar.ai.support@gmail.com" className="text-white text-base font-black tracking-tight hover:underline flex items-center gap-1.5 mt-2">
+                spar.ai.support@gmail.com <ExternalLink className="w-4 h-4 text-primary" />
               </a>
             </GlassCard>
 
@@ -61,8 +61,8 @@ export default function ContactPage() {
                 SparAI Operations Team:
               </p>
               <p className="text-white font-black text-sm uppercase tracking-wider mt-2 leading-relaxed">
-                SparAI, Inc.<br />
-                sk.ish24@gmail.com
+                SparAI Headquarters<br />
+                Greater Noida, India
               </p>
             </GlassCard>
           </div>

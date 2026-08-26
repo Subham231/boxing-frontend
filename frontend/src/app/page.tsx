@@ -48,7 +48,7 @@ export default function HomePage() {
             contactPoint: {
               '@type': 'ContactPoint',
               contactType: 'customer support',
-              email: 'sk.ish24@gmail.com',
+              email: 'spar.ai.support@gmail.com',
             },
           }),
         }}

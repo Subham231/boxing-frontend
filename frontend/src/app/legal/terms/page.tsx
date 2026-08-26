@@ -55,7 +55,7 @@ export default function TermsPage() {
               <strong>Cancellation:</strong> You may cancel auto-renewal at any time in the app. Cancellation stops future charges. Access continues until the end of the current paid period confirmed by Razorpay. No further access is granted after that date unless you subscribe again.
             </p>
             <p>
-              <strong>Refunds:</strong> Refund requests are handled in line with applicable Indian consumer protection rules and Razorpay&apos;s settlement process. Contact <span className="text-primary">sk.ish24@gmail.com</span> with your registered phone number and Razorpay payment ID. Approved refunds are processed to the original payment method. Usage already consumed in a billed period is not automatically extra-credited.
+              <strong>Refunds:</strong> Refund requests are handled in line with applicable Indian consumer protection rules and Razorpay&apos;s settlement process. Contact <span className="text-primary">spar.ai.support@gmail.com</span> with your registered phone number and Razorpay payment ID. Approved refunds are processed to the original payment method. Usage already consumed in a billed period is not automatically extra-credited.
             </p>
             <p>
               <strong>Invoices & GST:</strong> Payment receipts/invoices are issued through Razorpay. If you need a GST invoice, email the same address with your GSTIN and billing details. We will add our GSTIN to invoices once it is registered on this page.
@@ -84,7 +84,7 @@ export default function TermsPage() {
 
           <h2 className="text-lg font-black uppercase text-primary tracking-wider mt-4">7. Contact</h2>
           <p>
-            If you have any questions about these Terms & Conditions, please contact us at <span className="text-primary">sk.ish24@gmail.com</span>.
+            If you have any questions about these Terms & Conditions, please contact us at <span className="text-primary">spar.ai.support@gmail.com</span>.
           </p>
 
           <NeonButton onClick={() => router.back()} className="w-full h-14 mt-6 font-black uppercase text-xs tracking-widest">

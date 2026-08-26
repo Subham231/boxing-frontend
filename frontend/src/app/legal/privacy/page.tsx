@@ -73,7 +73,7 @@ export default function PrivacyPage() {
 
           <h2 className="text-lg font-black uppercase text-primary tracking-wider mt-4">6. Contact Us</h2>
           <p>
-            For any queries or concerns regarding this Privacy Policy, please reach out to us at <span className="text-primary">sk.ish24@gmail.com</span>.
+            For any queries or concerns regarding this Privacy Policy, please reach out to us at <span className="text-primary">spar.ai.support@gmail.com</span>.
           </p>
 
           <NeonButton onClick={() => router.back()} className="w-full h-14 mt-6 font-black uppercase text-xs tracking-widest">

@@ -71,7 +71,7 @@ export default function SecurityPage() {
           <h2 className="text-lg font-black uppercase text-primary tracking-wider mt-4">5. Reporting a Concern</h2>
           <p>
             If you believe you&apos;ve found a security issue or vulnerability, please email us
-            immediately at <span className="text-primary">sk.ish24@gmail.com</span> with details
+            immediately at <span className="text-primary">spar.ai.support@gmail.com</span> with details
             — we take these reports seriously and will respond promptly.
           </p>
 

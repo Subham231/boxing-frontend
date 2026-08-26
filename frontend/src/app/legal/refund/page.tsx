@@ -57,7 +57,7 @@ export default function RefundPage() {
               </li>
             </ul>
             <p>
-              In such cases, you must notify us at <span className="text-primary">sk.ish24@gmail.com</span> with details of your payment reference (such as the Razorpay payment ID) within <strong>7 days</strong> of the transaction.
+              In such cases, you must notify us at <span className="text-primary">spar.ai.support@gmail.com</span> with details of your payment reference (such as the Razorpay payment ID) within <strong>7 days</strong> of the transaction.
             </p>
           </div>
 
@@ -73,7 +73,7 @@ export default function RefundPage() {
 
           <h2 className="text-lg font-black uppercase text-primary tracking-wider mt-4">5. Contact Support</h2>
           <p>
-            If you believe you have been billed in error, please contact us promptly at <span className="text-primary">sk.ish24@gmail.com</span>.
+            If you believe you have been billed in error, please contact us promptly at <span className="text-primary">spar.ai.support@gmail.com</span>.
           </p>
 
           <NeonButton onClick={() => router.back()} className="w-full h-14 mt-6 font-black uppercase text-xs tracking-widest">
