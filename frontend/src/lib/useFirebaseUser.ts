@@ -3,9 +3,10 @@
 import { useEffect, useState } from 'react';
 import type { User } from 'firebase/auth';
 import { watchAuthState } from './firebase-auth';
+import { firebaseAuth } from './firebase';
 
 export function useFirebaseUser() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(firebaseAuth.currentUser);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

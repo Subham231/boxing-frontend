@@ -75,8 +75,16 @@ export default function ProtectedLayout({
 
         if (data.sessionValid === false) {
           localStorage.removeItem('sparai_session_token');
-          window.location.replace('/onboarding');
-          return;
+          const retry = await fetch('/api/subscription/status', {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const retryData = await retry.json().catch(() => ({}));
+          if (cancelled) return;
+          if (!retry.ok) {
+            setAllowed(false);
+            return;
+          }
+          Object.assign(data, retryData);
         }
 
         const isActive = data.active === true;
