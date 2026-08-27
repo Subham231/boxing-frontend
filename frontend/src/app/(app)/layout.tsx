@@ -60,7 +60,7 @@ export default function ProtectedLayout({
     };
 
     if (!user) {
-      window.location.replace('/onboarding?mode=login');
+      window.location.replace('/login');
       return;
     }
 

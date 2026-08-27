@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Bell, Check, Loader2, Zap } from 'lucide-react';
 import { getMessaging, getToken, isSupported } from 'firebase/messaging';
 import { firebaseApp, firebaseAuth } from '@/lib/firebase';
@@ -15,6 +16,7 @@ interface LaunchState {
 const pad = (value: number) => String(Math.max(0, value)).padStart(2, '0');
 
 export function ComingSoonGate() {
+  const router = useRouter();
   const [launch, setLaunch] = useState<LaunchState | null>(null);
   const [now, setNow] = useState(Date.now());
   const [notificationState, setNotificationState] = useState<'idle' | 'loading' | 'granted' | 'denied' | 'unsupported'>('idle');
@@ -53,8 +55,8 @@ export function ComingSoonGate() {
   }, [launch, now]);
 
   useEffect(() => {
-    if (launch?.launched) window.location.reload();
-  }, [launch?.launched]);
+    if (launch?.launched) router.replace('/dashboard');
+  }, [launch?.launched, router]);
 
   const enableNotifications = async () => {
     if (!('Notification' in window) || !('serviceWorker' in navigator)) {

@@ -10,7 +10,7 @@ const Launch: React.FC = () => {
     const handleLaunch = async () => {
         setIsLaunching(true);
         await syncToSupabase();
-        router.replace('/dashboard');
+        router.replace('/coming-soon');
     };
 
     const focusLabel = data.goals.length > 0 ? data.goals.join(' ??? ') : data.primary_goal;

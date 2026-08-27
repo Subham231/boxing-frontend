@@ -49,7 +49,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await confirmOtp(confirmation, code.trim());
-      router.replace('/dashboard');
+      router.replace('/coming-soon');
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : 'Invalid code. Try again.');
     } finally {

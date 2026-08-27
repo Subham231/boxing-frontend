@@ -15,7 +15,7 @@ const FinalPromise: React.FC = () => {
   const handleLaunch = async () => {
     setLaunching(true);
     await syncToSupabase();
-    router.replace('/dashboard');
+    router.replace('/coming-soon');
   };
 
   return (

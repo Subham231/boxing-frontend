@@ -257,7 +257,7 @@ export default function OnboardingPage() {
 
     useEffect(() => {
         if (!loading && onboardingStateLoaded && user && onboardingComplete) {
-            router.replace('/dashboard');
+            router.replace('/coming-soon');
         }
     }, [loading, onboardingComplete, onboardingStateLoaded, router, user]);
 
