@@ -1,4 +1,4 @@
-const DEFAULT_LAUNCH_AT = '2026-08-28T00:00:00+05:30';
+const DEFAULT_LAUNCH_AT = '2026-08-28T12:00:00+05:30';
 
 export function getLaunchAt(): Date {
   const configured = process.env.APP_LAUNCH_AT || DEFAULT_LAUNCH_AT;

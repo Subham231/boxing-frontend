@@ -335,7 +335,7 @@ For every future change:
 - `frontend/src/app/api/launch-status/route.ts` returns uncached launch state.
 - `frontend/src/components/ComingSoonGate.tsx` displays the countdown for authenticated users before launch.
 - `frontend/src/app/(app)/layout.tsx` applies the gate to protected app routes.
-- `APP_LAUNCH_AT` controls the launch time. The default is `2026-08-28T00:00:00+05:30` (`28 August 2026, 12:00 AM IST`, the start of tomorrow in India on 27 August).
+- `APP_LAUNCH_AT` controls the launch time. The default is `2026-08-28T12:00:00+05:30` (`28 August 2026, 12:00 PM IST`, tomorrow at noon in India on 27 August).
 - Subscription checkout, AI analysis usage, and planner usage routes reject requests before launch.
 - The Coming Soon countdown refreshes server time every 30 seconds and automatically reloads at launch; no manual release action is required.
 - `frontend/public/firebase-messaging-sw.js` is the browser service worker for launch notifications.
@@ -344,4 +344,4 @@ For every future change:
 - `frontend/src/app/api/notifications/subscribe/route.ts` stores a subscription after permission is granted.
 - Set `NEXT_PUBLIC_VAPID_PUBLIC_KEY` for Firebase Cloud Messaging token creation. Firebase Admin sends the launch notification from the scheduled route; `FIREBASE_SERVICE_ACCOUNT_KEY` and `CRON_SECRET` must be configured in Vercel.
 - Apply `supabase/launch-notifications.sql` manually in the hosted Supabase project before storing subscriptions.
-- `frontend/vercel.json` schedules `/api/cron/launch-notifications` at `18:30 UTC`, which is `00:00 IST`.
+- `frontend/vercel.json` schedules `/api/cron/launch-notifications` at `06:30 UTC`, which is `12:00 PM IST`.
