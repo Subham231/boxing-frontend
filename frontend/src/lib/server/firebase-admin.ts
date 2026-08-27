@@ -5,7 +5,7 @@ import { getAuth } from 'firebase-admin/auth';
 
 let adminApp: App;
 
-function getAdminApp(): App {
+export function getFirebaseAdminApp(): App {
   if (getApps().length) return getApps()[0];
 
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
@@ -26,6 +26,6 @@ function getAdminApp(): App {
 // <token> header) and returns the decoded claims, including uid and
 // phone_number. Throws if the token is invalid/expired/tampered with.
 export async function verifyFirebaseIdToken(idToken: string) {
-  const auth = getAuth(getAdminApp());
+  const auth = getAuth(getFirebaseAdminApp());
   return auth.verifyIdToken(idToken);
 }

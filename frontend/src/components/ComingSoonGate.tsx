@@ -13,12 +13,6 @@ interface LaunchState {
 
 const pad = (value: number) => String(Math.max(0, value)).padStart(2, '0');
 
-function urlBase64ToUint8Array(value: string): Uint8Array {
-  const padding = '='.repeat((4 - (value.length % 4)) % 4);
-  const base64 = (value + padding).replace(/-/g, '+').replace(/_/g, '/');
-  return Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
-}
-
 export function ComingSoonGate() {
   const [launch, setLaunch] = useState<LaunchState | null>(null);
   const [now, setNow] = useState(Date.now());
@@ -73,7 +67,7 @@ export function ComingSoonGate() {
         setNotificationState('denied');
         return;
       }
-      const registration = await navigator.serviceWorker.register('/launch-notifications.js');
+      const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
       const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
       const user = firebaseAuth.currentUser;
       if (!publicKey || !user || !(await isSupported())) throw new Error('Background push is not configured.');
