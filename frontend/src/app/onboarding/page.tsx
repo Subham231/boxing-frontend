@@ -110,10 +110,16 @@ const OnboardingFlow: React.FC = () => {
     const loginModeHandled = useRef(false);
 
     useEffect(() => {
-        const prev = document.body.style.overflow;
+        const previousHtmlOverflow = document.documentElement.style.overflow;
+        const previousBodyOverflow = document.body.style.overflow;
+        const previousBodyHeight = document.body.style.height;
+        document.documentElement.style.overflow = 'hidden';
         document.body.style.overflow = 'hidden';
+        document.body.style.height = '100dvh';
         return () => {
-            document.body.style.overflow = prev;
+            document.documentElement.style.overflow = previousHtmlOverflow;
+            document.body.style.overflow = previousBodyOverflow;
+            document.body.style.height = previousBodyHeight;
         };
     }, []);
 
@@ -167,7 +173,7 @@ const OnboardingFlow: React.FC = () => {
 
     if (!isLoaded || !middleOrder) {
         return (
-            <div className="flex-1 flex flex-col items-center justify-center p-6 min-h-screen bg-bg-dark gap-4 overflow-hidden scrollbar-hide">
+            <div className="fixed inset-0 flex h-[100dvh] w-screen flex-col items-center justify-center overflow-hidden bg-bg-dark p-6 gap-4 scrollbar-hide">
                 <Loader2 className="w-10 h-10 text-primary animate-spin" />
                 <p className="text-[10px] text-text-muted uppercase tracking-[3px]">Loading System...</p>
             </div>
@@ -175,7 +181,7 @@ const OnboardingFlow: React.FC = () => {
     }
 
     return (
-        <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 bg-[#0a0a0c] h-dvh max-h-dvh overflow-hidden scrollbar-hide">
+        <div className="fixed inset-0 flex h-[100dvh] w-screen flex-col items-center justify-center overflow-hidden bg-[#0a0a0c] p-4 sm:p-6 scrollbar-hide">
             <AnimatePresence mode="wait">
                 <motion.div
                     key={currentStep}
