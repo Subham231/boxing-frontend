@@ -114,6 +114,7 @@ export default function SparMatchClient() {
     setOpponentLeft(true);
     setOpponentLeftReason(reason);
     setStatusLine('Opponent left');
+    setPhase('done');
 
     try {
       const headers = await authHeaders();
@@ -529,6 +530,7 @@ export default function SparMatchClient() {
 
   const forfeit = async () => {
     if (!match) return;
+    if (!window.confirm('Forfeit this spar? Your opponent will be awarded the win.')) return;
     try {
       const headers = await authHeaders();
       await fetch(`/api/spar/match/${match.matchId}/forfeit`, { method: 'POST', headers });
@@ -540,7 +542,7 @@ export default function SparMatchClient() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-white p-4 pb-24 font-sans">
+    <div className="min-h-[100dvh] bg-[#0A0A0A] text-white p-4 pb-8 font-sans">
       <header className="flex items-center justify-between mb-4">
         <button
           onClick={() => router.push('/spar')}
@@ -550,7 +552,7 @@ export default function SparMatchClient() {
         </button>
         <div className="text-center">
           <div className="text-[9px] font-black text-primary uppercase tracking-widest flex items-center gap-1 justify-center">
-            <Swords className="w-3 h-3" /> LIVE SPAR
+            <Swords className="w-3 h-3" /> LIVE SPARRING
           </div>
           <div className="text-[10px] text-white/40 font-bold uppercase">{statusLine}</div>
         </div>
@@ -581,7 +583,7 @@ export default function SparMatchClient() {
         </GlassCard>
       )}
 
-      <div className="grid grid-cols-2 gap-2 mb-4">
+      <div className="grid grid-cols-2 gap-2 mb-3">
         <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-black border border-white/10">
           <video ref={localVideoRef} playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
           <span className="absolute bottom-2 left-2 text-[8px] font-black uppercase bg-black/60 px-2 py-0.5 rounded">You</span>
@@ -589,6 +591,21 @@ export default function SparMatchClient() {
         <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-black border border-primary/20">
           <video ref={remoteVideoRef} playsInline className="w-full h-full object-cover" />
           <span className="absolute bottom-2 left-2 text-[8px] font-black uppercase bg-black/60 px-2 py-0.5 rounded">Opponent</span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 mb-4">
+        <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-center">
+          <div className="text-[8px] font-black uppercase tracking-widest text-white/40">HITS</div>
+          <div className="mt-0.5 text-xl font-black text-primary">{hits}</div>
+        </div>
+        <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-center">
+          <div className="text-[8px] font-black uppercase tracking-widest text-white/40">MISSES</div>
+          <div className="mt-0.5 text-xl font-black text-red-300">{misses}</div>
+        </div>
+        <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-center">
+          <div className="text-[8px] font-black uppercase tracking-widest text-white/40">TOTAL</div>
+          <div className="mt-0.5 text-xl font-black text-white">{hits + misses}</div>
         </div>
       </div>
 
@@ -601,7 +618,7 @@ export default function SparMatchClient() {
 
       {phase === 'live' && (
         <NeonButton className="w-full h-16 text-base" onClick={registerHit}>
-          HIT / EXECUTE
+          CAMERA AUTO-DETECT <span className="text-[9px] opacity-60">MANUAL FALLBACK</span>
         </NeonButton>
       )}
 

@@ -111,7 +111,7 @@ export function BottomNav() {
                   </div>
                 </button>
 
-                {/* Card 2: Sparing */}
+                {/* Card 2: Sparring */}
                 <button
                   type="button"
                   onClick={() => go('/spar')}
@@ -125,7 +125,7 @@ export function BottomNav() {
                   <div className="flex items-center gap-2">
                     <BoxingGlovesIcon size={26} className="text-amber-400 shrink-0 drop-shadow-[0_0_8px_rgba(245,158,11,0.9)]" />
                     <span className="text-[11px] font-black text-white leading-tight uppercase tracking-tight">
-                      Sparing
+                      Sparring
                     </span>
                   </div>
                 </button>

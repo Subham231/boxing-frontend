@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Loader2, Swords, Trophy, Play, AlertCircle } from 'lucide-react';
@@ -41,6 +41,7 @@ export default function SparLobbyPage() {
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const searchGenerationRef = useRef(0);
 
   const authHeaders = useCallback(async () => {
     const user = firebaseAuth.currentUser;
@@ -87,6 +88,7 @@ export default function SparLobbyPage() {
   }, [leaderboardPeriod, loadLeaderboard]);
 
   const startSearch = async () => {
+    const generation = ++searchGenerationRef.current;
     setError(null);
     if (!status) return;
 
@@ -115,10 +117,12 @@ export default function SparLobbyPage() {
       }
 
       const started = Date.now();
-      while (Date.now() - started < 90000) {
+      while (Date.now() - started < 90000 && generation === searchGenerationRef.current) {
         await new Promise((r) => setTimeout(r, 1500));
+        if (generation !== searchGenerationRef.current) return;
         const stRes = await fetch('/api/spar/queue/status', { headers });
         const stData = await stRes.json();
+        if (generation !== searchGenerationRef.current) return;
         if (stData.status === 'matched') {
           sessionStorage.setItem('spar_match', JSON.stringify(stData));
           router.push(`/spar/match?id=${stData.matchId}`);
@@ -135,6 +139,7 @@ export default function SparLobbyPage() {
   };
 
   const cancelSearch = async () => {
+    searchGenerationRef.current += 1;
     try {
       const headers = await authHeaders();
       await fetch('/api/spar/queue/leave', { method: 'POST', headers });
@@ -143,6 +148,10 @@ export default function SparLobbyPage() {
     }
     setSearching(false);
   };
+
+  useEffect(() => () => {
+    searchGenerationRef.current += 1;
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-white p-6 pb-24 font-sans">
