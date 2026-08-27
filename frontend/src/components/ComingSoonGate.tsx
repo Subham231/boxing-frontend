@@ -2,6 +2,8 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { Bell, Check, Loader2, Zap } from 'lucide-react';
+import { getMessaging, getToken, isSupported } from 'firebase/messaging';
+import { firebaseApp, firebaseAuth } from '@/lib/firebase';
 
 interface LaunchState {
   launched: boolean;
@@ -73,18 +75,16 @@ export function ComingSoonGate() {
       }
       const registration = await navigator.serviceWorker.register('/launch-notifications.js');
       const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-      if (publicKey) {
-        const subscription = await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(publicKey),
-        });
-        const saved = await fetch('/api/notifications/subscribe', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(subscription),
-        });
-        if (!saved.ok) throw new Error('Could not save notification subscription.');
-      }
+      const user = firebaseAuth.currentUser;
+      if (!publicKey || !user || !(await isSupported())) throw new Error('Background push is not configured.');
+      const token = await getToken(getMessaging(firebaseApp), { vapidKey: publicKey, serviceWorkerRegistration: registration });
+      if (!token) throw new Error('Could not create notification token.');
+      const saved = await fetch('/api/notifications/fcm-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` },
+        body: JSON.stringify({ token }),
+      });
+      if (!saved.ok) throw new Error('Could not save notification subscription.');
       setNotificationState('granted');
     } catch {
       setNotificationState('denied');

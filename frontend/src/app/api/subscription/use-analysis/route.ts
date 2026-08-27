@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyFirebaseIdToken } from '@/lib/server/firebase-admin';
 import { supabaseAdmin } from '@/lib/server/supabase-admin';
 import { getEntitlement, todayDateStr } from '@/lib/server/entitlements';
+import { getLaunchStatus } from '@/lib/launch-status';
 
 export const runtime = 'nodejs';
 
@@ -22,6 +23,9 @@ function hashIP(req: NextRequest): string | null {
 // has quota left is irrelevant, this route is the only thing that can
 // actually grant a session.
 export async function POST(req: NextRequest) {
+  if (!getLaunchStatus().launched) {
+    return NextResponse.json({ allowed: false, reason: 'coming_soon', message: 'AI Video Analysis opens at launch.' }, { status: 403 });
+  }
   if (!supabaseAdmin) {
     return NextResponse.json({ error: 'Database service is not configured.' }, { status: 500 });
   }

@@ -328,3 +328,19 @@ For every future change:
 5. Run the relevant manual flow when hardware/network/auth is involved.
 6. Do not modify archived `sparai-patched-src/` files unless explicitly requested.
 7. Do not commit secrets, `.env` files, Firebase private keys, Supabase service-role keys, or Razorpay secrets.
+
+## 9. Automated Launch and Notifications
+
+- `frontend/src/lib/launch-status.ts` is the single server-time launch source.
+- `frontend/src/app/api/launch-status/route.ts` returns uncached launch state.
+- `frontend/src/components/ComingSoonGate.tsx` displays the countdown for authenticated users before launch.
+- `frontend/src/app/(app)/layout.tsx` applies the gate to protected app routes.
+- `APP_LAUNCH_AT` controls the launch time. The default is `2026-08-28T00:00:00+05:30`.
+- Subscription checkout, AI analysis usage, and planner usage routes reject requests before launch.
+- The Coming Soon countdown refreshes server time every 30 seconds and automatically reloads at launch; no manual release action is required.
+- `frontend/public/launch-notifications.js` is the browser service worker for launch notifications.
+- The permission button must be clicked by the user because browsers prohibit silent notification permission prompts.
+- `supabase/launch-notifications.sql` creates storage for authenticated browser push subscriptions.
+- `frontend/src/app/api/notifications/subscribe/route.ts` stores a subscription after permission is granted.
+- Set `NEXT_PUBLIC_VAPID_PUBLIC_KEY` and configure a server-side Web Push sender/cron before promising background notifications while the site is closed. The current code safely registers permission/service-worker state but does not fabricate delivery when sender credentials are absent.
+- Apply `supabase/launch-notifications.sql` manually in the hosted Supabase project before storing subscriptions.

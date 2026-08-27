@@ -2,12 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyFirebaseIdToken } from '@/lib/server/firebase-admin';
 import { supabaseAdmin } from '@/lib/server/supabase-admin';
 import { getEntitlement, currentIsoWeek } from '@/lib/server/entitlements';
+import { getLaunchStatus } from '@/lib/launch-status';
 
 export const runtime = 'nodejs';
 
 // Call this immediately before generating a new training plan. Same
 // enforcement pattern as use-analysis, on the weekly Planner limit.
 export async function POST(req: NextRequest) {
+  if (!getLaunchStatus().launched) {
+    return NextResponse.json({ allowed: false, reason: 'coming_soon', message: 'Planner opens at launch.' }, { status: 403 });
+  }
   if (!supabaseAdmin) {
     return NextResponse.json({ error: 'Database service is not configured.' }, { status: 500 });
   }
