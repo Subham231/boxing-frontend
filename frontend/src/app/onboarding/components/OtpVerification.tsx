@@ -1,19 +1,16 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { ChevronRight, ShieldCheck, ArrowLeft } from 'lucide-react';
 import type { ConfirmationResult } from 'firebase/auth';
 import { useOnboarding } from '@/context/OnboardingContext';
 import StepBadge from './StepBadge';
 import { sendOtp, confirmOtp, checkPhoneExists, checkOtpRateLimit, saveProfileDetails } from '@/lib/firebase-auth';
-import { cacheProfileLocally } from '@/lib/profile-client';
 
 const RECAPTCHA_CONTAINER_ID = 'onboarding-phone-recaptcha';
 
 const OtpVerification: React.FC = () => {
   const { data, updateData, nextStep, prevStep } = useOnboarding();
-  const router = useRouter();
   const [step, setStep] = useState<'phone' | 'otp'>('phone');
   const [phone, setPhone] = useState(data.phone?.startsWith('+') ? data.phone : '+91 ');
   const [code, setCode] = useState('');
@@ -58,11 +55,16 @@ const OtpVerification: React.FC = () => {
         setError('You already have an account. Please use the separate login page.');
         return;
       }
-      const { user, isNew, profile } = await confirmOtp(confirmation, trimmedCode);
+      const { user, isNew } = await confirmOtp(confirmation, trimmedCode);
+      if (!isNew) {
+        setError('You already have an account. Please use the separate login page.');
+        return;
+      }
       updateData({ phone: trimmedPhone });
 
       const avatar = typeof window !== 'undefined' ? localStorage.getItem('boxing_user_avatar') || undefined : undefined;
       await saveProfileDetails(user, {
+        phone: trimmedPhone,
         displayName: data.ringName,
         age: Number(data.age),
         profession: data.profession,
@@ -70,27 +72,9 @@ const OtpVerification: React.FC = () => {
         avatarUrl: avatar,
       }).catch(() => {});
 
-      if (isNew) {
-        localStorage.setItem('boxing_onboarding_done', 'false');
-        localStorage.removeItem('boxing_onboarding_step');
-        nextStep();
-        return;
-      }
-
-      cacheProfileLocally(profile);
-      try {
-        const existingRaw = localStorage.getItem('boxing_onboarding_data');
-        const existing = existingRaw ? JSON.parse(existingRaw) : {};
-        const merged = {
-          ...existing,
-          phone_number: trimmedPhone,
-          onboarding_completed: true,
-        };
-        localStorage.setItem('boxing_onboarding_done', 'true');
-        localStorage.setItem('boxing_onboarding_data', JSON.stringify(merged));
-        localStorage.removeItem('boxing_onboarding_step');
-      } catch { }
-      router.replace('/dashboard');
+      localStorage.setItem('boxing_onboarding_done', 'false');
+      localStorage.removeItem('boxing_onboarding_step');
+      nextStep();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Invalid code. Try again.');
     } finally {

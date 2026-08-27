@@ -48,7 +48,13 @@ export async function POST(req: NextRequest) {
       .eq('phone', phone)
       .maybeSingle();
     if (byPhone) {
-      await supabaseAdmin.from('reflex_profiles').update({ current_session_token: sessionToken }).eq('uid', byPhone.uid);
+      if (byPhone.uid !== uid) {
+        return NextResponse.json(
+          { error: 'This phone number is already linked to another account.', code: 'ACCOUNT_PHONE_CONFLICT' },
+          { status: 409 },
+        );
+      }
+      await supabaseAdmin.from('reflex_profiles').update({ current_session_token: sessionToken }).eq('uid', uid);
       return NextResponse.json({ profile: { ...byPhone, current_session_token: sessionToken }, sessionToken, isNew: false });
     }
   }

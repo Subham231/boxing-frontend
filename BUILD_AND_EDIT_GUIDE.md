@@ -32,6 +32,8 @@ Main stack:
 - `/login` is a dedicated login page and does not merge signup onboarding data into an existing profile.
 - Signup phone lookup before continuing, with an existing-account message and login action.
 - Signup checks the phone again before OTP confirmation to reduce account-overwrite races.
+- Onboarding saves the verified phone to `reflex_profiles.phone`; name, age, profession, promise, and avatar use dedicated profile columns, while the full onboarding payload is stored in `onboarding_data`.
+- Final onboarding completion is marked locally only after the server confirms the profile write succeeded.
 - Authenticated users visiting onboarding are redirected to `/dashboard`.
 - A persistent Firebase session is used immediately during hydration to avoid false login redirects.
 - Stale profile session tokens are recovered without sending an authenticated user back to login.
@@ -186,6 +188,7 @@ Do not use the signup `OtpVerification` component as the login flow. Signup and 
 - Signup may save onboarding fields only for a confirmed new account.
 - Login must verify the existing account and redirect to `/dashboard` without overwriting onboarding fields.
 - Do not remove the phone existence checks without replacing them with an equally strong server-side account distinction.
+- Do not move profile fields back into an unstructured client-only object; dedicated database columns are the canonical values used by profile and subscription features.
 - Do not treat a stale Supabase session token as proof that Firebase authentication is invalid.
 
 ### Subscription limits

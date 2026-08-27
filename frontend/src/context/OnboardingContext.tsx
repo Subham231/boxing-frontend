@@ -238,33 +238,33 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             onboarding_completed: true,
             init_timestamp: Date.now(),
         };
+        // Persist the full onboarding payload and individual fields to Supabase
+        const token = await getFirebaseIdToken();
+        if (!token) throw new Error('Authentication expired. Please log in again.');
+        const avatar = localStorage.getItem('boxing_user_avatar') || undefined;
+        const response = await fetch('/api/reflex/save-profile-details', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({
+                displayName: data.ringName,
+                phone: data.phone,
+                age: Number(data.age),
+                profession: data.profession,
+                promiseWord: data.promiseWord,
+                avatarUrl: avatar,
+                onboardingData: payload,
+            }),
+        });
+        if (!response.ok) {
+            const failure = await response.json().catch(() => ({}));
+            throw new Error(failure.error || 'Could not save your fighter profile.');
+        }
+
         localStorage.setItem('boxing_onboarding_data', JSON.stringify(payload));
         localStorage.setItem('boxing_onboarding_done', 'true');
         localStorage.removeItem('boxing_onboarding_screen_order');
         localStorage.removeItem('boxing_onboarding_step'); // clear saved step so re-entry starts fresh
         updateData({ hasCompletedOnboarding: true });
-
-        // Persist the full onboarding payload and individual fields to Supabase
-        try {
-            const token = await getFirebaseIdToken();
-            if (token) {
-                const avatar = localStorage.getItem('boxing_user_avatar') || undefined;
-                await fetch('/api/reflex/save-profile-details', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                    body: JSON.stringify({
-                        displayName: data.ringName,
-                        age: Number(data.age),
-                        profession: data.profession,
-                        promiseWord: data.promiseWord,
-                        avatarUrl: avatar,
-                        onboardingData: payload,
-                    }),
-                });
-            }
-        } catch {
-            // Non-fatal — local cache still has the data; next sync will retry.
-        }
     };
 
     return (

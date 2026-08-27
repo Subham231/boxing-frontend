@@ -11,11 +11,18 @@ const FinalPromise: React.FC = () => {
   const router = useRouter();
   const { data, prevStep, syncToSupabase } = useOnboarding();
   const [launching, setLaunching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleLaunch = async () => {
     setLaunching(true);
-    await syncToSupabase();
-    router.replace('/coming-soon');
+    setError(null);
+    try {
+      await syncToSupabase();
+      router.replace('/coming-soon');
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Could not save your fighter profile.');
+      setLaunching(false);
+    }
   };
 
   return (
@@ -69,6 +76,7 @@ const FinalPromise: React.FC = () => {
             </>
           )}
         </button>
+        {error && <p className="text-center text-[10px] font-bold text-red-400">{error}</p>}
         <button onClick={prevStep} disabled={launching} className="text-[10px] font-black text-white/40 hover:text-white uppercase tracking-widest py-1 mx-auto">
           Back
         </button>

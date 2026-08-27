@@ -26,12 +26,14 @@ export async function POST(req: NextRequest) {
   const onboardingData = body.onboardingData && typeof body.onboardingData === 'object' ? body.onboardingData : undefined;
   
   const rawDisplayName = body.displayName || onboardingData?.ring_name || onboardingData?.ringName;
+  const rawPhone = body.phone || onboardingData?.phone_number || onboardingData?.phone;
   const rawAge = body.age !== undefined ? body.age : onboardingData?.user_metrics?.age ?? onboardingData?.age;
   const rawProfession = body.profession || onboardingData?.profession;
   const rawPromiseWord = body.promiseWord || onboardingData?.promise || onboardingData?.promiseWord || onboardingData?.promise_trigger;
   const rawAvatarUrl = body.avatarUrl || onboardingData?.avatar_url || onboardingData?.avatarUrl;
 
   const displayName = typeof rawDisplayName === 'string' ? rawDisplayName.trim().slice(0, 60) : undefined;
+  const phone = typeof rawPhone === 'string' && /^\+[1-9]\d{7,14}$/.test(rawPhone.trim()) ? rawPhone.trim() : undefined;
   const age = Number.isFinite(Number(rawAge)) && Number(rawAge) > 0 ? Math.max(0, Math.min(120, Math.round(Number(rawAge)))) : undefined;
   const profession = typeof rawProfession === 'string' ? rawProfession.trim().slice(0, 100) : undefined;
   const promiseWord = typeof rawPromiseWord === 'string' ? rawPromiseWord.trim().slice(0, 200) : undefined;
@@ -39,6 +41,7 @@ export async function POST(req: NextRequest) {
 
   const update: Record<string, unknown> = {};
   if (displayName) update.display_name = displayName;
+  if (phone) update.phone = phone;
   if (age !== undefined) update.age = age;
   if (profession) update.profession = profession;
   if (promiseWord) update.promise_word = promiseWord;
