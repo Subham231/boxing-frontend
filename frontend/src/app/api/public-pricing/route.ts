@@ -13,6 +13,7 @@ export async function GET() {
     id,
     name: PLANS[id].name,
     price: `₹${(PLANS[id].priceInPaise / 100).toLocaleString('en-IN')}`,
+    originalPrice: '',
   }));
   return NextResponse.json({ plans }, { headers: { 'Cache-Control': 'no-store' } });
 }

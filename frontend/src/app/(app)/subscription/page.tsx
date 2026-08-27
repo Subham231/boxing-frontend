@@ -81,6 +81,7 @@ function SubscriptionContent() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [showSparPopup, setShowSparPopup] = useState(false);
+  const [livePrices, setLivePrices] = useState<Record<string, string>>({});
 
   useEffect(() => {
     // Show free sparring pop-up upon arriving at subscription page
@@ -92,6 +93,13 @@ function SubscriptionContent() {
       }, 500);
       return () => clearTimeout(timer);
     }
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/public-pricing', { cache: 'no-store' })
+      .then((response) => response.json())
+      .then((data) => setLivePrices(Object.fromEntries((data.plans || []).map((plan: { id: string; price: string }) => [plan.id, plan.price]))))
+      .catch(() => setLivePrices({}));
   }, []);
 
   const fetchStatus = async () => {
@@ -514,10 +522,10 @@ function SubscriptionContent() {
               <div className="text-right">
                 {plan.originalPrice && (
                   <span className="text-xs font-bold text-red-400/80 line-through block">
-                    {plan.originalPrice}
+                      {plan.originalPrice}
                   </span>
                 )}
-                <span className="text-xl font-black text-white">{plan.price}</span>
+                <span className="text-xl font-black text-white">{livePrices[plan.id] || '••••'}</span>
                 <span className="text-[9px] text-white/40 font-bold block">{plan.period}</span>
               </div>
             </div>
