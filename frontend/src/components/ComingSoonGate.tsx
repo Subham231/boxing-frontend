@@ -8,6 +8,7 @@ import { firebaseApp, firebaseAuth } from '@/lib/firebase';
 interface LaunchState {
   launched: boolean;
   launchAt: string;
+  launchLabel: string;
   serverNow: string;
 }
 
@@ -112,7 +113,7 @@ export function ComingSoonGate() {
             </div>
           ))}
         </div>
-        <p className="mt-5 text-[10px] font-bold uppercase tracking-widest text-white/35">Launches automatically at 12:00 AM IST</p>
+        <p className="mt-5 text-[10px] font-bold uppercase tracking-widest text-white/35">Launches automatically: {launch.launchLabel}</p>
         <button onClick={enableNotifications} disabled={notificationState === 'loading' || notificationState === 'granted'} className="mx-auto mt-8 flex h-12 items-center justify-center gap-2 rounded-2xl border border-primary/40 bg-primary/10 px-5 text-[10px] font-black uppercase tracking-widest text-primary transition hover:bg-primary/20 disabled:opacity-70">
           {notificationState === 'loading' ? <Loader2 className="h-4 w-4 animate-spin" /> : notificationState === 'granted' ? <Check className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
           {notificationState === 'granted' ? 'Launch notifications enabled' : notificationState === 'denied' ? 'Notifications blocked' : notificationState === 'unsupported' ? 'Notifications unavailable' : 'Notify me when SparAI goes live'}

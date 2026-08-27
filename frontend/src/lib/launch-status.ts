@@ -12,6 +12,15 @@ export function getLaunchStatus() {
   return {
     launched: now.getTime() >= launchAt.getTime(),
     launchAt: launchAt.toISOString(),
+    launchLabel: launchAt.toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    }) + ' IST',
     serverNow: now.toISOString(),
   };
 }

@@ -335,7 +335,7 @@ For every future change:
 - `frontend/src/app/api/launch-status/route.ts` returns uncached launch state.
 - `frontend/src/components/ComingSoonGate.tsx` displays the countdown for authenticated users before launch.
 - `frontend/src/app/(app)/layout.tsx` applies the gate to protected app routes.
-- `APP_LAUNCH_AT` controls the launch time. The default is `2026-08-28T00:00:00+05:30`.
+- `APP_LAUNCH_AT` controls the launch time. The default is `2026-08-28T00:00:00+05:30` (`28 August 2026, 12:00 AM IST`, the start of tomorrow in India on 27 August).
 - Subscription checkout, AI analysis usage, and planner usage routes reject requests before launch.
 - The Coming Soon countdown refreshes server time every 30 seconds and automatically reloads at launch; no manual release action is required.
 - `frontend/public/firebase-messaging-sw.js` is the browser service worker for launch notifications.
