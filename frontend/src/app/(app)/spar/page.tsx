@@ -103,7 +103,7 @@ export default function SparIntroPage() {
     return () => unsub();
   }, [refresh]);
 
-  const needsAd = false;
+  const needsAd = !!status && status.mode === 'free' && (status.needsAd || !status.freeSparUnlocked);
   const usedUp = !!status && status.mode === 'free' && !status.freeSparAvailable;
   const paidBlocked = !!status && status.mode === 'paid' && !status.canSpar;
 
@@ -114,6 +114,10 @@ export default function SparIntroPage() {
     }
     if (usedUp || paidBlocked) {
       router.push('/subscription');
+      return;
+    }
+    if (needsAd) {
+      router.push('/spar/watch-ad');
       return;
     }
     router.push('/spar/lobby');
@@ -159,7 +163,7 @@ export default function SparIntroPage() {
           <div>
             <p className="text-sm font-black uppercase tracking-wide text-white">Real-time opponent spar</p>
             <p className="text-[11px] text-white/60 font-semibold leading-relaxed mt-1">
-              Free fighters: 1 spar per day, no ad required. Subscribers get plan-based daily spar limits.
+              Free fighters get one daily spar after the required unlock step. Subscribers get plan-based daily spar limits.
             </p>
           </div>
         </motion.div>
@@ -236,8 +240,8 @@ export default function SparIntroPage() {
                   : usedUp
                     ? 'Free spar already used today'
                     : needsAd
-                      ? 'Free spar is available today'
-                      : 'Ad unlocked — ready to find an opponent'}
+                      ? 'Unlock today\'s free spar to find an opponent'
+                      : 'Free spar unlocked — ready to find an opponent'}
               </p>
             )}
 
@@ -248,7 +252,7 @@ export default function SparIntroPage() {
                 </>
               ) : (
                 <>
-                  START SPARRING <SwordsNeonIcon className="w-4 h-4 ml-1 text-black" glow={false} />
+                  {needsAd ? 'UNLOCK FREE SPAR' : 'START SPARRING'} <SwordsNeonIcon className="w-4 h-4 ml-1 text-black" glow={false} />
                 </>
               )}
             </NeonButton>

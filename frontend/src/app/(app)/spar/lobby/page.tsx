@@ -157,6 +157,7 @@ export default function SparLobbyPage() {
     <div className="min-h-screen bg-[#0A0A0A] text-white p-6 pb-24 font-sans">
       <header className="flex items-center gap-4 mb-6">
         <button
+          aria-label="Back to sparring"
           onClick={() => router.push('/spar')}
           className="w-10 h-10 rounded-full border border-white/10 bg-white/5 flex items-center justify-center text-white/60 hover:text-white transition-all"
         >
@@ -206,8 +207,9 @@ export default function SparLobbyPage() {
                   <Loader2 className="w-4 h-4 animate-spin" /> Searching for opponent…
                 </div>
                 <button
+                  type="button"
                   onClick={cancelSearch}
-                  className="text-[10px] font-black uppercase text-white/40 hover:text-white tracking-widest"
+                  className="text-[10px] font-black uppercase text-white/50 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-lg px-3 py-2 tracking-widest"
                 >
                   Cancel
                 </button>
@@ -247,7 +249,7 @@ export default function SparLobbyPage() {
                 <button
                   type="button"
                   onClick={() => setLeaderboardPeriod('weekly')}
-                  className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${
+                  className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                     leaderboardPeriod === 'weekly'
                       ? 'bg-primary text-black shadow-[0_0_10px_rgba(226,255,59,0.5)]'
                       : 'text-white/40 hover:text-white'
@@ -258,7 +260,7 @@ export default function SparLobbyPage() {
                 <button
                   type="button"
                   onClick={() => setLeaderboardPeriod('monthly')}
-                  className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${
+                  className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                     leaderboardPeriod === 'monthly'
                       ? 'bg-primary text-black shadow-[0_0_10px_rgba(226,255,59,0.5)]'
                       : 'text-white/40 hover:text-white'

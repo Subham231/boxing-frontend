@@ -13,20 +13,28 @@ function SparResultsInner() {
   const matchId = searchParams.get('id') || '';
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem('spar_result');
       if (raw) {
-        setResult(JSON.parse(raw));
-        return;
+        const stored = JSON.parse(raw);
+        if (stored.matchId === matchId || !stored.matchId) {
+          setResult(stored);
+          return;
+        }
+        sessionStorage.removeItem('spar_result');
       }
     } catch { /* ignore */ }
 
     (async () => {
       try {
         const user = firebaseAuth.currentUser;
-        if (!user || !matchId) return;
+        if (!user || !matchId) {
+          setError(!matchId ? 'Missing match ID.' : 'Please log in to view results.');
+          return;
+        }
         const token = await user.getIdToken();
         const res = await fetch(`/api/spar/match/${matchId}/result`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -38,13 +46,14 @@ function SparResultsInner() {
         setError(e.message || 'Could not load results.');
       }
     })();
-  }, [matchId]);
+  }, [matchId, retryKey]);
 
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-white p-6 pb-24 font-sans">
       <header className="flex items-center gap-4 mb-6">
         <button
-          onClick={() => router.push('/spar')}
+          aria-label="Back to sparring"
+          onClick={() => router.push('/spar/lobby')}
           className="w-10 h-10 rounded-full border border-white/10 bg-white/5 flex items-center justify-center text-white/60"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -55,7 +64,14 @@ function SparResultsInner() {
         </div>
       </header>
 
-      {error && <p className="text-red-400 text-sm font-semibold mb-4">{error}</p>}
+      {error && (
+        <div className="mb-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-center">
+          <p className="text-red-300 text-sm font-semibold">{error}</p>
+          <button type="button" onClick={() => { setError(null); setResult(null); setRetryKey((key) => key + 1); }} className="mt-3 rounded-xl border border-red-300/30 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+            Retry
+          </button>
+        </div>
+      )}
 
       {!result ? (
         <p className="text-white/40 text-sm">Loading…</p>
@@ -150,7 +166,7 @@ function SparResultsInner() {
             )}
           </GlassCard>
 
-          <NeonButton className="w-full h-14" onClick={() => router.push('/spar')}>
+          <NeonButton className="w-full h-14" onClick={() => router.push('/spar/lobby')}>
             <Swords className="w-4 h-4 mr-2" /> BACK TO LOBBY
           </NeonButton>
         </div>
