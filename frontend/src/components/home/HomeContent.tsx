@@ -1298,14 +1298,14 @@ export default function HomeContent() {
                     )}
                   </div>
                   <div className={!launchReady ? 'relative overflow-hidden' : undefined}>
-                    {plan.originalPrice && (
+                    {launchReady && plan.originalPrice && (
                       <span className={`text-[11px] font-bold text-red-400/80 line-through block ${!launchReady ? 'select-none blur-md' : ''}`}>
                         {plan.originalPrice}
                       </span>
                     )}
                     <div className="flex items-baseline gap-1">
-                      <span className={`text-xl font-black text-white ${!launchReady ? 'select-none blur-md' : ''}`}>{plan.price}</span>
-                      <span className="text-[10px] font-bold text-white/40">{plan.period}</span>
+                      <span className={`text-xl font-black text-white ${!launchReady ? 'tracking-[0.3em]' : ''}`}>{launchReady ? plan.price : '••••'}</span>
+                      {launchReady && <span className="text-[10px] font-bold text-white/40">{plan.period}</span>}
                     </div>
                   </div>
                   {!launchReady && <span className="mt-1 block text-[8px] font-black uppercase tracking-widest text-primary/80">Reveals at launch</span>}

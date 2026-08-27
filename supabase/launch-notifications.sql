@@ -8,6 +8,9 @@ create table if not exists public.notification_subscriptions (
   launch_notified_at timestamptz
 );
 
+alter table public.notification_subscriptions add column if not exists fcm_token text;
+alter table public.notification_subscriptions add column if not exists launch_notified_at timestamptz;
+
 alter table public.notification_subscriptions enable row level security;
 -- Service-role API routes are the only writer/reader.
 alter table public.notification_subscriptions alter column push_subscription drop not null;
