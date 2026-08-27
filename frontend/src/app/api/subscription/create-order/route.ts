@@ -3,10 +3,14 @@ import { verifyFirebaseIdToken } from '@/lib/server/firebase-admin';
 import { supabaseAdmin } from '@/lib/server/supabase-admin';
 import { PLANS, PlanId } from '@/lib/server/entitlements';
 import { publicRazorpayKeyId, razorpayAuthHeader, razorpayConfigured } from '@/lib/server/razorpay';
+import { getLaunchStatus } from '@/lib/launch-status';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
+  if (!getLaunchStatus().launched) {
+    return NextResponse.json({ error: 'Subscriptions open at launch.' }, { status: 403 });
+  }
   const authHeader = req.headers.get('authorization') || '';
   const idToken = authHeader.replace('Bearer ', '');
   if (!idToken) {

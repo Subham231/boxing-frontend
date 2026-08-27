@@ -6,6 +6,7 @@ import { AppShell } from '@/components/layout/AppShell';
 import { Loader2 } from 'lucide-react';
 import { useFirebaseUser } from '@/lib/useFirebaseUser';
 import { isExemptFromSubscriptionGate } from '@/lib/subscription';
+import { ComingSoonGate } from '@/components/ComingSoonGate';
 
 export default function ProtectedLayout({
   children,
@@ -21,10 +22,29 @@ export default function ProtectedLayout({
   // If on an exempt route (/settings, /spar, /subscription, /checkout), never block or show loader
   const [mounted, setMounted] = useState(false);
   const [allowed, setAllowed] = useState(true);
+  const [launchLoading, setLaunchLoading] = useState(true);
+  const [launched, setLaunched] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (authLoading) return;
+    let cancelled = false;
+    fetch('/api/launch-status', { cache: 'no-store' })
+      .then((response) => response.json())
+      .then((data) => {
+        if (!cancelled) setLaunched(data.launched === true);
+      })
+      .catch(() => {
+        if (!cancelled) setLaunched(false);
+      })
+      .finally(() => {
+        if (!cancelled) setLaunchLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [authLoading]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -50,6 +70,8 @@ export default function ProtectedLayout({
       }
       return;
     }
+
+    if (!launched) return;
 
     // Exempt routes don't require active plan check
     if (isExempt) {
@@ -111,15 +133,17 @@ export default function ProtectedLayout({
     return () => {
       cancelled = true;
     };
-  }, [user, authLoading, pathname, isExempt, router]);
+  }, [user, authLoading, pathname, isExempt, launched, router]);
 
-  if (authLoading || !user || (!isExempt && !allowed)) {
+  if (authLoading || !user || launchLoading || (!isExempt && !allowed)) {
     return (
       <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center">
         <Loader2 className="w-8 h-8 text-primary animate-spin" />
       </div>
     );
   }
+
+  if (!launched) return <ComingSoonGate />;
 
   return <AppShell>{children}</AppShell>;
 }
