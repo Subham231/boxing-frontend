@@ -187,21 +187,20 @@ const FEATURE_SHOWCASE = [
   },
 ];
 
-// Real plan data — mirrors app/(app)/subscription/page.tsx exactly, so the
-// public homepage never shows numbers that don't match the actual app.
+// Public plan metadata; prices are fetched only after the server reports launch.
 const PRICING_PLANS = [
   { 
     name: 'SparAI Monthly', 
-    price: '₹629', 
-    originalPrice: '₹1,299',
+    price: '', 
+    originalPrice: '',
     discountTag: '51% OFF',
     period: '/ month', 
     features: ['1 AI Video Analysis / day', '1 Planner Generation / week', '1 Live Spar / day'] 
   },
   { 
     name: 'SparAI Pro', 
-    price: '₹729', 
-    originalPrice: '₹1,599',
+    price: '', 
+    originalPrice: '',
     discountTag: '54% OFF',
     period: '/ month', 
     features: ['2 AI Video Analyses / day', '2 Planner Generations / week', '2 Live Spars / day'], 
@@ -209,16 +208,16 @@ const PRICING_PLANS = [
   },
   { 
     name: 'SparAI Performance', 
-    price: '₹1,629', 
-    originalPrice: '₹3,999',
+    price: '', 
+    originalPrice: '',
     discountTag: '59% OFF',
     period: '/ 3 months', 
     features: ['3 AI Video Analyses / day', '3 Planner Generations / week', '3 Live Spars / day'] 
   },
   {
     name: 'SparAI Elite 👑', 
-    price: '₹6,290', 
-    originalPrice: '₹15,499',
+    price: '', 
+    originalPrice: '',
     discountTag: '60% OFF',
     period: '/ year', 
     highlight: true,
@@ -543,12 +542,17 @@ function FaqAccordion() {
 
 export default function HomeContent() {
   const [launchReady, setLaunchReady] = useState(false);
+  const [livePrices, setLivePrices] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetch('/api/launch-status', { cache: 'no-store' })
       .then((response) => response.json())
       .then((data) => setLaunchReady(data.launched === true))
       .catch(() => setLaunchReady(false));
+    fetch('/api/public-pricing', { cache: 'no-store' })
+      .then((response) => response.json())
+      .then((data) => setLivePrices(Object.fromEntries((data.plans || []).map((plan: { name: string; price: string }) => [plan.name, plan.price]))))
+      .catch(() => setLivePrices({}));
   }, []);
   const router = useRouter();
   const { user, loading } = useFirebaseUser();
@@ -1304,7 +1308,7 @@ export default function HomeContent() {
                       </span>
                     )}
                     <div className="flex items-baseline gap-1">
-                      <span className={`text-xl font-black text-white ${!launchReady ? 'tracking-[0.3em]' : ''}`}>{launchReady ? plan.price : '••••'}</span>
+                      <span className="text-xl font-black text-white">{launchReady ? (livePrices[plan.name] || plan.price) : '••••'}</span>
                       {launchReady && <span className="text-[10px] font-bold text-white/40">{plan.period}</span>}
                     </div>
                   </div>
