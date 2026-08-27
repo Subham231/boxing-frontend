@@ -71,6 +71,7 @@ export default function FreestyleAnalysis(): JSX.Element {
   const [punchCount, setPunchCount] = useState(0);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [permissionNotice, setPermissionNotice] = useState<string | null>(null);
+  const [startingCamera, setStartingCamera] = useState(false);
   const [calibDone, setCalibDone] = useState(false);
   const [calibText, setCalibText] = useState('SEARCHING FOR YOU...');
   const [tracking, setTracking] = useState(false);
@@ -303,9 +304,12 @@ export default function FreestyleAnalysis(): JSX.Element {
   const startCamera = async () => {
     if (typeof window !== 'undefined' && localStorage.getItem(ONBOARDING_ANALYSIS_KEY) === analysisDay()) {
       setPermissionNotice('This onboarding analysis has already been used once. Continue without repeating it.');
+      setCameraError('Your daily onboarding analysis is already complete. Continue onboarding to keep going.');
       return;
     }
+    if (startingCamera) return;
 
+    setStartingCamera(true);
     setCameraError(null);
     setPermissionNotice(null);
     setCalibDone(false); calibDoneR.current=false;
@@ -335,8 +339,12 @@ export default function FreestyleAnalysis(): JSX.Element {
       if (!videoEl) throw new Error('video-mount');
       videoEl.srcObject = stream;
       if (videoEl.readyState < 1) {
-        await new Promise<void>((resolve) => {
-          videoEl!.onloadedmetadata = () => resolve();
+        await new Promise<void>((resolve, reject) => {
+          const timeout = window.setTimeout(() => reject(new Error('video-metadata-timeout')), 5000);
+          videoEl!.onloadedmetadata = () => {
+            window.clearTimeout(timeout);
+            resolve();
+          };
         });
       }
       if (canvasRef.current) {
@@ -409,7 +417,7 @@ export default function FreestyleAnalysis(): JSX.Element {
       } else if (err?.message === 'mp-timeout' || err?.message === 'mp-load') {
         setPermissionNotice('AI model failed to load. Please retry or continue without analysis.');
         setCameraError('AI model failed to load. Check your internet connection and try again.');
-      } else if (err?.message === 'video-mount') {
+      } else if (err?.message === 'video-mount' || err?.message === 'video-metadata-timeout') {
         setPermissionNotice('Camera did not initialize. Try again or continue without the analysis step.');
         setCameraError('Camera initialization failed. Please refresh the page and try again.');
       } else {
@@ -417,6 +425,8 @@ export default function FreestyleAnalysis(): JSX.Element {
         setCameraError('Could not start camera. Please try again or skip this step.');
       }
       setStage('setup');
+    } finally {
+      setStartingCamera(false);
     }
   };
 
@@ -587,9 +597,10 @@ export default function FreestyleAnalysis(): JSX.Element {
             <div className="flex flex-col gap-2.5">
               <button
                 onClick={startCamera}
-                className="btn-primary w-full h-14 flex items-center justify-center gap-2 text-sm font-black italic tracking-wider shadow-[0_0_25px_rgba(226,255,59,0.35)]"
+                disabled={startingCamera}
+                className="btn-primary w-full h-14 flex items-center justify-center gap-2 text-sm font-black italic tracking-wider shadow-[0_0_25px_rgba(226,255,59,0.35)] disabled:opacity-60"
               >
-                START 30s ANALYSIS <Play className="w-4 h-4 fill-current" />
+                {startingCamera ? 'STARTING CAMERA...' : 'START 30s ANALYSIS'} <Play className="w-4 h-4 fill-current" />
               </button>
               <button
                 onClick={() => { nextStep(); }}

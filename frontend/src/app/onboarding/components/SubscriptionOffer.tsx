@@ -53,26 +53,26 @@ const SubscriptionOffer: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col min-h-[85vh] justify-between py-2">
-      <header className="text-left mb-5">
+    <div className="flex h-full min-h-0 flex-col justify-between gap-3 py-2 pb-4">
+      <header className="text-left mb-1">
         <StepBadge />
-        <h1 className="text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
+        <h1 className="mt-2 text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
           Choose your <span className="text-primary">edge</span>
         </h1>
-        <p className="text-white/50 mt-3 text-sm leading-relaxed font-semibold">
+        <p className="mt-2 text-white/50 text-sm leading-relaxed font-semibold">
           Use your referral code to unlock the first 30 days, or pick a plan and set up your training stack.
         </p>
       </header>
 
-      <main className="flex-1 flex flex-col gap-4 overflow-y-auto scrollbar-hide">
-        <div className="relative overflow-hidden rounded-[28px] border border-primary/40 bg-gradient-to-br from-primary/20 via-black/80 to-black/95 p-5 shadow-[0_0_25px_rgba(226,255,59,0.14)]">
-          <div className="absolute inset-x-10 top-0 h-24 rounded-full bg-primary/10 blur-3xl" />
+      <main className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+        <div className="relative overflow-hidden rounded-[22px] border border-primary/40 bg-gradient-to-br from-primary/20 via-black/80 to-black/95 p-3 shadow-[0_0_25px_rgba(226,255,59,0.14)]">
+          <div className="absolute inset-x-8 top-0 h-16 rounded-full bg-primary/10 blur-3xl" />
           <div className="relative flex items-center justify-between gap-3">
             <div>
               <span className="text-[9px] font-black uppercase tracking-[0.24em] text-primary">Benefit</span>
               <div className="mt-2 flex items-end gap-2">
-                <span className="text-5xl font-black text-white leading-none">30</span>
-                <span className="pb-2 text-base font-black uppercase text-white/70">Days</span>
+                <span className="text-4xl font-black text-white leading-none">30</span>
+                <span className="pb-1 text-sm font-black uppercase text-white/70">Days</span>
               </div>
             </div>
             <div className="rounded-2xl border border-primary/40 bg-primary/10 px-3 py-2 text-right">
@@ -81,29 +81,31 @@ const SubscriptionOffer: React.FC = () => {
             </div>
           </div>
 
-          <p className="relative mt-4 text-sm font-semibold text-white/75 leading-relaxed">
+          <p className="relative mt-2 text-[11px] font-semibold text-white/75 leading-relaxed">
             Your referral code unlocks the first 30 days of full access. After the trial, your plan continues at the standard rate unless you change it.
           </p>
         </div>
 
         {uid ? (
-          <div className="rounded-3xl border border-white/10 bg-black/30 p-4">
-            <div className="mb-3 flex items-center justify-between">
+          <div className="rounded-3xl border border-white/10 bg-black/30 p-3">
+            <div className="mb-2 flex items-center justify-between">
               <span className="text-[9px] font-black uppercase tracking-[0.18em] text-white/45">Your referral code</span>
               <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-1 text-[7px] font-black uppercase tracking-[0.18em] text-primary">
                 Active
               </span>
             </div>
-            <ReferralCard uid={uid} />
+            <div className="max-h-[84px] overflow-hidden">
+              <ReferralCard uid={uid} />
+            </div>
           </div>
         ) : (
-          <div className="rounded-3xl border border-white/10 bg-black/30 p-5 text-[11px] font-semibold text-white/50 text-center">
+          <div className="rounded-3xl border border-white/10 bg-black/30 p-4 text-[11px] font-semibold text-white/50 text-center">
             Verify your phone first to unlock your referral code.
           </div>
         )}
 
-        <div className="rounded-3xl border border-primary/25 bg-primary/[0.04] p-4">
-          <div className="mb-3 flex items-center gap-2">
+        <div className="rounded-3xl border border-primary/25 bg-primary/[0.04] p-3">
+          <div className="mb-2 flex items-center gap-2">
             <Ticket className="w-4 h-4 text-primary" />
             <span className="text-[10px] font-black uppercase tracking-[0.18em] text-primary">Enter referral code</span>
           </div>
@@ -139,12 +141,12 @@ const SubscriptionOffer: React.FC = () => {
         </div>
       </main>
 
-      <footer className="mt-8 flex flex-col gap-4">
-        <button onClick={handleContinue} className="btn-primary w-full h-16 flex items-center justify-center gap-2">
+      <footer className="mt-1 flex flex-col gap-2">
+        <button onClick={handleContinue} className="btn-primary w-full h-14 flex items-center justify-center gap-2">
           Get my plan
         </button>
 
-        <div className="bg-black/80 border border-white/10 rounded-2xl py-3 px-4 flex flex-wrap justify-center items-center gap-x-3 gap-y-1.5 text-white/50 text-[9px] font-bold uppercase tracking-widest text-center mt-2 shadow-[0_4px_12px_rgba(0,0,0,0.5)]">
+        <div className="bg-black/80 border border-white/10 rounded-2xl py-2 px-4 flex flex-wrap justify-center items-center gap-x-3 gap-y-1 text-white/50 text-[9px] font-bold uppercase tracking-widest text-center shadow-[0_4px_12px_rgba(0,0,0,0.5)]">
           <a href="/legal/terms" target="_blank" className="hover:text-primary transition-colors">Terms</a>
           <span className="text-white/20">•</span>
           <a href="/legal/privacy" target="_blank" className="hover:text-primary transition-colors">Privacy Policy</a>
