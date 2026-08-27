@@ -239,12 +239,29 @@ const OnboardingFlow: React.FC = () => {
 export default function OnboardingPage() {
     const router = useRouter();
     const { user, loading } = useFirebaseUser();
+    const [onboardingComplete, setOnboardingComplete] = useState(false);
+    const [onboardingStateLoaded, setOnboardingStateLoaded] = useState(false);
 
     useEffect(() => {
-        if (!loading && user) router.replace('/dashboard');
-    }, [loading, router, user]);
+        if (loading) return;
+        try {
+            const storedData = JSON.parse(localStorage.getItem('boxing_onboarding_data') || '{}');
+            const complete = localStorage.getItem('boxing_onboarding_done') === 'true' || storedData.onboarding_completed === true;
+            setOnboardingComplete(complete);
+        } catch {
+            setOnboardingComplete(false);
+        } finally {
+            setOnboardingStateLoaded(true);
+        }
+    }, [loading]);
 
-    if (loading || user) {
+    useEffect(() => {
+        if (!loading && onboardingStateLoaded && user && onboardingComplete) {
+            router.replace('/dashboard');
+        }
+    }, [loading, onboardingComplete, onboardingStateLoaded, router, user]);
+
+    if (loading || !onboardingStateLoaded || (user && onboardingComplete)) {
         return (
             <div className="flex min-h-screen items-center justify-center bg-bg-dark">
                 <Loader2 className="h-10 w-10 animate-spin text-primary" />
