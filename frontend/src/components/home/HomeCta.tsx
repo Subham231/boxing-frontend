@@ -10,7 +10,7 @@ import { useFirebaseUser } from '@/lib/useFirebaseUser';
 export default function HomeCta() {
   const { user, loading } = useFirebaseUser();
   const [destination, setDestination] = useState<'/onboarding' | '/dashboard'>('/onboarding');
-  const [label, setLabel] = useState('Get Started');
+  const [label, setLabel] = useState('Get Into My App');
 
   useEffect(() => {
     if (loading) return;
@@ -27,17 +27,17 @@ export default function HomeCta() {
 
     if (user && isOnboardingComplete()) {
       setDestination('/dashboard');
-      setLabel('Go to Dashboard');
+      setLabel('Get Into My App');
     } else {
       setDestination('/onboarding');
-      setLabel('Get Started');
+      setLabel('Get Into My App');
     }
   }, [user, loading]);
 
   return (
     <Link
       href={destination}
-      className="btn-primary w-full sm:w-auto h-14 px-8 flex items-center justify-center gap-2 text-sm"
+      className="btn-primary w-full sm:w-auto h-14 px-8 flex items-center justify-center gap-2 text-sm shadow-[0_0_28px_rgba(226,255,59,0.55)]"
     >
       {label} <ChevronRight size={18} />
     </Link>

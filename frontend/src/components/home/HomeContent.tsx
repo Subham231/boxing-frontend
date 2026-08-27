@@ -542,6 +542,14 @@ function FaqAccordion() {
 }
 
 export default function HomeContent() {
+  const [launchReady, setLaunchReady] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/launch-status', { cache: 'no-store' })
+      .then((response) => response.json())
+      .then((data) => setLaunchReady(data.launched === true))
+      .catch(() => setLaunchReady(false));
+  }, []);
   const router = useRouter();
   const { user, loading } = useFirebaseUser();
 
@@ -1268,7 +1276,7 @@ export default function HomeContent() {
             <Crown className="w-4 h-4 text-primary" /> Plans & pricing
           </h2>
           <p className="text-white/50 text-xs sm:text-sm font-medium mb-4 max-w-2xl">
-            Start free during onboarding, upgrade whenever you want unlimited AI analyses. Cancel anytime.
+            {launchReady ? 'Start free during onboarding, upgrade whenever you want unlimited AI analyses. Cancel anytime.' : 'Plans and pricing will be revealed when SparAI goes live.'}
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {PRICING_PLANS.map((plan) => (
@@ -1289,17 +1297,18 @@ export default function HomeContent() {
                       </span>
                     )}
                   </div>
-                  <div>
+                  <div className={!launchReady ? 'relative overflow-hidden' : undefined}>
                     {plan.originalPrice && (
-                      <span className="text-[11px] font-bold text-red-400/80 line-through block">
+                      <span className={`text-[11px] font-bold text-red-400/80 line-through block ${!launchReady ? 'select-none blur-md' : ''}`}>
                         {plan.originalPrice}
                       </span>
                     )}
                     <div className="flex items-baseline gap-1">
-                      <span className="text-xl font-black text-white">{plan.price}</span>
+                      <span className={`text-xl font-black text-white ${!launchReady ? 'select-none blur-md' : ''}`}>{plan.price}</span>
                       <span className="text-[10px] font-bold text-white/40">{plan.period}</span>
                     </div>
                   </div>
+                  {!launchReady && <span className="mt-1 block text-[8px] font-black uppercase tracking-widest text-primary/80">Reveals at launch</span>}
                 </div>
 
                 <ul className="flex flex-col gap-1.5 mt-1">
@@ -1318,7 +1327,7 @@ export default function HomeContent() {
                       : 'bg-white/10 text-white hover:bg-white/20'
                   }`}
                 >
-                  Get Started
+                  GET INTO MY APP
                 </Link>
               </div>
             ))}

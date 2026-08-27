@@ -13,6 +13,7 @@ const nextConfig = {
     TURNS_SERVER_URL: process.env.TURNS_SERVER_URL,
     TURNS_USERNAME: process.env.TURNS_USERNAME,
     TURNS_CREDENTIAL: process.env.TURNS_CREDENTIAL,
+    NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
   },
   async headers() {
     return [
