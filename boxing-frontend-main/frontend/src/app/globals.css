@@ -1,0 +1,124 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary: #E2FF3B;
+  --primary-rgb: 226, 255, 59;
+  --bg-dark: #0A0A0A;
+  --surface: #121212;
+  --text: #FFFFFF;
+  --text-muted: #888888;
+  --accent: #00F0FF;
+  --glass: rgba(255, 255, 255, 0.03);
+  --glass-border: rgba(255, 255, 255, 0.1);
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  height: 100%;
+  /* Prevents iOS Safari's rubber-band overscroll from visually detaching
+     position:fixed elements (like the bottom nav) from the viewport edge
+     during a bounce-scroll. */
+  overscroll-behavior-y: none;
+}
+
+body {
+  background-color: var(--bg-dark);
+  color: var(--text);
+  overflow-x: hidden;
+  /* 100vh on mobile is the LAYOUT viewport, which doesn't shrink when the
+     address bar or on-screen keyboard appears — that mismatch between the
+     layout and visual viewport is what makes fixed-position elements (like
+     the bottom nav) appear to jump. 100dvh tracks the actual visible area;
+     100vh stays as a fallback for browsers that don't support dvh yet. */
+  min-height: 100vh;
+  min-height: 100dvh;
+  overscroll-behavior-y: none;
+}
+
+@layer components {
+  .btn-primary {
+    @apply relative bg-primary text-black font-black uppercase tracking-wider rounded-full transition-all duration-300 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100;
+    box-shadow: 0 10px 40px rgba(226, 255, 59, 0.25);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background-color: rgba(226, 255, 59, 0.95);
+    box-shadow: 0 0 30px rgba(226, 255, 59, 0.45);
+  }
+}
+
+@layer utilities {
+  .text-glow {
+    text-shadow: 0 0 15px rgba(226, 255, 59, 0.4);
+  }
+  .text-glow-accent {
+    text-shadow: 0 0 15px rgba(0, 240, 255, 0.4);
+  }
+  .glass-card {
+    background: var(--glass);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 9999px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  /* Mobile performance & smoothness optimizations */
+  .gpu-accelerated {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    perspective: 1000px;
+    will-change: transform, opacity;
+  }
+
+  .tap-smooth {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+
+  .neon-glow-lime {
+    filter: drop-shadow(0 0 8px rgba(226, 255, 59, 0.75));
+  }
+
+  .neon-glow-orange {
+    filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.75));
+  }
+
+  .neon-glow-cyan {
+    filter: drop-shadow(0 0 8px rgba(0, 240, 255, 0.75));
+  }
+
+  /* Stealth Mode — blurs personally-identifying info */
+  .stealth-active .stealth-sensitive {
+    filter: blur(8px);
+    transition: filter 0.15s ease;
+  }
+  .stealth-active .stealth-sensitive:active,
+  .stealth-active .stealth-sensitive:focus-within {
+    filter: blur(0);
+  }
+}
