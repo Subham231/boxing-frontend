@@ -55,8 +55,8 @@ export function ComingSoonGate() {
   }, [launch, now]);
 
   useEffect(() => {
-    if (launch?.launched) router.replace('/dashboard');
-  }, [launch?.launched, router]);
+    router.replace('/dashboard');
+  }, [router]);
 
   const enableNotifications = async () => {
     if (!('Notification' in window) || !('serviceWorker' in navigator)) {

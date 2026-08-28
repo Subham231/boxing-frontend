@@ -18,7 +18,7 @@ const FinalPromise: React.FC = () => {
     setError(null);
     try {
       await syncToSupabase();
-      router.replace('/coming-soon');
+      router.replace('/dashboard');
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Could not save your fighter profile.');
       setLaunching(false);

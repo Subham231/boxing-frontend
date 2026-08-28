@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, ShieldCheck } from 'lucide-react';
 import type { ConfirmationResult } from 'firebase/auth';
-import { checkPhoneExists, checkOtpRateLimit, confirmOtp, sendOtp } from '@/lib/firebase-auth';
+import { checkPhoneExists, checkOtpRateLimit, confirmOtp, sendOtp, saveProfileDetails } from '@/lib/firebase-auth';
 
 const RECAPTCHA_CONTAINER_ID = 'login-phone-recaptcha';
 
@@ -48,7 +48,18 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      await confirmOtp(confirmation, code.trim());
+      const { user, profile } = await confirmOtp(confirmation, code.trim());
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('boxing_onboarding_done', 'true');
+        localStorage.removeItem('boxing_onboarding_step');
+        localStorage.removeItem('boxing_onboarding_screen_order');
+      }
+      const onboardingData = (profile?.onboarding_data ?? {}) as Record<string, unknown>;
+      if (!onboardingData.onboarding_completed) {
+        await saveProfileDetails(user, {
+          onboardingData: { ...onboardingData, onboarding_completed: true },
+        }).catch(() => {});
+      }
       router.replace('/dashboard');
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : 'Invalid code. Try again.');

@@ -131,12 +131,11 @@ const OnboardingFlow: React.FC = () => {
     }, [isLoaded]);
 
     useEffect(() => {
-        if (!isLoaded || !middleOrder || loginModeHandled.current) return;
+        if (!isLoaded || !middleOrder) return;
         if (new URLSearchParams(window.location.search).get('mode') === 'login') {
-            loginModeHandled.current = true;
-            goToStep(totalSteps - 3);
+            router.replace('/login');
         }
-    }, [goToStep, isLoaded, middleOrder, totalSteps]);
+    }, [isLoaded, middleOrder, router]);
 
     const screens = useMemo(() => {
         if (!middleOrder) return [];
@@ -262,7 +261,11 @@ export default function OnboardingPage() {
             .then(({ profile }) => {
                 if (cancelled) return;
                 const onboardingData = (profile.onboarding_data ?? {}) as Record<string, unknown>;
-                const complete = !!onboardingData.onboarding_completed;
+                const complete =
+                    !!onboardingData.onboarding_completed ||
+                    !!profile.uid ||
+                    !!profile.phone ||
+                    localStorage.getItem('boxing_onboarding_done') === 'true';
                 cacheProfileLocally(profile);
                 if (complete) localStorage.setItem('boxing_onboarding_done', 'true');
                 setOnboardingComplete(complete);

@@ -6,7 +6,7 @@ import { AppShell } from '@/components/layout/AppShell';
 import { Loader2 } from 'lucide-react';
 import { useFirebaseUser } from '@/lib/useFirebaseUser';
 import { isExemptFromSubscriptionGate } from '@/lib/subscription';
-import { ensureUserProfile } from '@/lib/firebase-auth';
+import { ensureUserProfile, saveProfileDetails } from '@/lib/firebase-auth';
 import { cacheProfileLocally } from '@/lib/profile-client';
 
 export default function ProtectedLayout({
@@ -40,25 +40,29 @@ export default function ProtectedLayout({
     let cancelled = false;
 
     const checkOnboarding = async () => {
-      // Server truth, not localStorage: a fresh login (new device/browser,
-      // or after clearing storage) previously had no local onboarding flag
-      // and got bounced into /onboarding even for a fully set-up account.
-      // ensureUserProfile is a no-op for an existing account — it just
-      // fetches the real Supabase profile.
       let isOnboardingComplete = false;
       try {
         const { profile } = await ensureUserProfile(user);
         if (cancelled) return;
         const onboardingData = (profile.onboarding_data ?? {}) as Record<string, unknown>;
-        isOnboardingComplete = !!onboardingData.onboarding_completed;
+        // An account that exists in Supabase (has profile row / uid / phone) or has
+        // onboarding_completed: true or local flag is considered complete.
+        isOnboardingComplete =
+          !!onboardingData.onboarding_completed ||
+          !!profile.uid ||
+          !!profile.phone ||
+          localStorage.getItem('boxing_onboarding_done') === 'true';
+
         cacheProfileLocally(profile);
         if (isOnboardingComplete) {
           localStorage.setItem('boxing_onboarding_done', 'true');
+          if (!onboardingData.onboarding_completed) {
+            saveProfileDetails(user, {
+              onboardingData: { ...onboardingData, onboarding_completed: true },
+            }).catch(() => {});
+          }
         }
       } catch {
-        // Fall back to a local flag only if we truly couldn't reach the
-        // server (offline, etc.) — never treat a fetch failure as "must
-        // redo onboarding".
         if (localStorage.getItem('boxing_onboarding_done') === 'true') {
           isOnboardingComplete = true;
         } else {

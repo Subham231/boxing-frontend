@@ -10,17 +10,9 @@ export function getLaunchStatus() {
   const now = new Date();
   const launchAt = getLaunchAt();
   return {
-    launched: now.getTime() >= launchAt.getTime(),
+    launched: true,
     launchAt: launchAt.toISOString(),
-    launchLabel: launchAt.toLocaleString('en-IN', {
-      timeZone: 'Asia/Kolkata',
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    }) + ' IST',
+    launchLabel: 'Live',
     serverNow: now.toISOString(),
   };
 }
