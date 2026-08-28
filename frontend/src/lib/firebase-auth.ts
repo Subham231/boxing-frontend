@@ -204,7 +204,7 @@ export async function claimReferralIfNeeded(user: User): Promise<void> {
 
 export async function saveProfileDetails(
   user: User,
-  details: { phone?: string; displayName?: string; age?: number; profession?: string; promiseWord?: string; avatarUrl?: string },
+  details: { phone?: string; displayName?: string; age?: number; profession?: string; promiseWord?: string; avatarUrl?: string; onboardingData?: Record<string, unknown> },
 ): Promise<UserProfile | null> {
   const idToken = await user.getIdToken();
   try {
