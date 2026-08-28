@@ -189,7 +189,7 @@ const OnboardingFlow: React.FC = () => {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -20 }}
                     transition={{ duration: 0.35, ease: 'easeOut' }}
-                    className="w-full max-w-lg h-full overflow-hidden flex flex-col justify-between pb-24"
+                    className="w-full max-w-lg h-full overflow-y-auto scrollbar-hide flex flex-col justify-between pb-24"
                 >
                     {screens[currentStep - 1] || <FinalPromise />}
                 </motion.div>
