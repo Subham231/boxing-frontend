@@ -52,9 +52,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ updated: false, reason: 'Nothing to update.' });
   }
 
-  const { data, error } = await supabaseAdmin.from('reflex_profiles').update(update).eq('uid', decoded.uid).select('*').single();
+  const { data, error } = await supabaseAdmin.from('reflex_profiles').update(update).eq('uid', decoded.uid).select('*').maybeSingle();
   if (error) {
     return NextResponse.json({ updated: false, error: error.message }, { status: 500 });
+  }
+  if (!data) {
+    // No row matched this uid at all — this should only happen if
+    // ensure-profile hasn't run yet for this account. Fail clearly instead
+    // of throwing an opaque PostgREST "0 rows" error, so the client can
+    // surface a real message instead of silently proceeding as if this
+    // succeeded.
+    return NextResponse.json(
+      { updated: false, error: 'No profile found for this account yet. Please try signing up again.' },
+      { status: 404 },
+    );
   }
   return NextResponse.json({ updated: true, profile: data });
 }

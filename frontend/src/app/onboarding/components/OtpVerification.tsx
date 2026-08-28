@@ -63,17 +63,33 @@ const OtpVerification: React.FC = () => {
       updateData({ phone: trimmedPhone });
 
       const avatar = typeof window !== 'undefined' ? localStorage.getItem('boxing_user_avatar') || undefined : undefined;
-      await saveProfileDetails(user, {
+      const savedProfile = await saveProfileDetails(user, {
         phone: trimmedPhone,
         displayName: data.ringName,
         age: Number(data.age),
         profession: data.profession,
         promiseWord: data.promiseWord,
         avatarUrl: avatar,
-      }).catch(() => {});
+      });
+      if (!savedProfile) {
+        // Don't silently proceed as if this succeeded — the account was
+        // created by confirmOtp()/ensure-profile above, but the user's
+        // name/age/profession/promise word did NOT get saved. Surfacing
+        // this now (while we can still retry) beats the user discovering
+        // a blank profile later with no idea why.
+        setError('Your account was created, but saving your profile details failed. Please try again.');
+        return;
+      }
 
-      localStorage.setItem('boxing_onboarding_done', 'false');
-      localStorage.removeItem('boxing_onboarding_step');
+      // NOTE: do not clear 'boxing_onboarding_step' here — onboarding is
+      // NOT finished yet at this point (more steps follow, e.g. the
+      // subscription offer). The true completion handler in
+      // OnboardingContext.tsx already clears this step marker when
+      // onboarding actually finishes. Clearing it here left a window where
+      // a Firebase auth-state-triggered remount of the onboarding flow
+      // (confirmOtp() above changes the logged-in state, which can trigger
+      // exactly that) would find no saved step and reset to step 1 —
+      // sending verified users back to the very first onboarding screen.
       nextStep();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Invalid code. Try again.');
