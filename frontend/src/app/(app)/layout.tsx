@@ -49,7 +49,8 @@ export default function ProtectedLayout({
       try {
         const { profile } = await ensureUserProfile(user);
         if (cancelled) return;
-        isOnboardingComplete = !!profile.onboarding_completed;
+        const onboardingData = (profile.onboarding_data ?? {}) as Record<string, unknown>;
+        isOnboardingComplete = !!onboardingData.onboarding_completed;
         cacheProfileLocally(profile);
         if (isOnboardingComplete) {
           localStorage.setItem('boxing_onboarding_done', 'true');

@@ -261,7 +261,8 @@ export default function OnboardingPage() {
         ensureUserProfile(user)
             .then(({ profile }) => {
                 if (cancelled) return;
-                const complete = !!profile.onboarding_completed;
+                const onboardingData = (profile.onboarding_data ?? {}) as Record<string, unknown>;
+                const complete = !!onboardingData.onboarding_completed;
                 cacheProfileLocally(profile);
                 if (complete) localStorage.setItem('boxing_onboarding_done', 'true');
                 setOnboardingComplete(complete);
