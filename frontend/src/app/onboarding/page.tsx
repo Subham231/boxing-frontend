@@ -107,6 +107,7 @@ const MIDDLE_COMPONENTS: Record<MiddleScreenId, React.ReactNode> = {
 };
 
 const OnboardingFlow: React.FC = () => {
+    const router = useRouter();
     const { currentStep, totalSteps, isLoaded, goToStep } = useOnboarding();
     const [middleOrder, setMiddleOrder] = useState<MiddleScreenId[] | null>(null);
     const loginModeHandled = useRef(false);
