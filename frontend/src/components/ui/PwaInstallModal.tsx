@@ -110,9 +110,11 @@ export function PwaInstallModal() {
             </button>
 
             <div className="flex items-start gap-3.5 pr-6">
-              <div className="w-11 h-11 rounded-xl bg-primary/20 border border-primary/50 flex items-center justify-center shrink-0">
-                <Download className="w-6 h-6 text-primary animate-bounce" />
-              </div>
+              <img
+                src="/logo.jpg"
+                alt="SPARAI Logo"
+                className="w-11 h-11 rounded-xl object-cover border border-primary/50 shrink-0 shadow-[0_0_15px_rgba(226,255,59,0.4)]"
+              />
               <div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs font-black uppercase text-primary tracking-widest">SPARAI WEB APP</span>
@@ -184,8 +186,12 @@ export function PwaInstallModal() {
                 <X className="w-5 h-5" />
               </button>
 
-              <div className="flex items-center gap-2 mb-2">
-                <Sparkles className="w-5 h-5 text-primary" />
+              <div className="flex items-center gap-3 mb-2">
+                <img
+                  src="/logo.jpg"
+                  alt="SPARAI Logo"
+                  className="w-8 h-8 rounded-lg object-cover border border-primary/50 shadow-[0_0_10px_rgba(226,255,59,0.4)]"
+                />
                 <h3 className="text-xl font-black italic uppercase text-white">HOW TO INSTALL SPARAI</h3>
               </div>
               <p className="text-xs font-semibold text-white/60 mb-5">
