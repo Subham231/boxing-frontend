@@ -503,23 +503,24 @@ export default function SparMatchClient() {
 
   useEffect(() => {
     if (phase !== 'live' || !match) return;
-    const seq =
+    const fallbackSeq: SparCommand[] = [
+      { command: 'JAB', kind: 'punch', callAtMs: 3500 },
+      { command: 'CROSS', kind: 'punch', callAtMs: 6500 },
+      { command: '1-2 COMBO', kind: 'punch', callAtMs: 9500 },
+      { command: 'LEAD HOOK', kind: 'punch', callAtMs: 12500 },
+      { command: 'REAR HOOK', kind: 'punch', callAtMs: 15500 },
+      { command: 'BODY HOOK', kind: 'punch', callAtMs: 18500 },
+      { command: 'LEAD UPPERCUT', kind: 'punch', callAtMs: 21500 },
+      { command: '1-2-3 COMBO', kind: 'punch', callAtMs: 24500 },
+      { command: 'OVERHAND RIGHT', kind: 'punch', callAtMs: 27500 },
+      { command: 'DOUBLE JAB', kind: 'punch', callAtMs: 30500 },
+      { command: 'BODY-HEAD COMBO', kind: 'punch', callAtMs: 33500 },
+      { command: 'REAR UPPERCUT', kind: 'punch', callAtMs: 36500 },
+    ];
+    const seq: SparCommand[] =
       match.commandSequence && Array.isArray(match.commandSequence) && match.commandSequence.length > 0
-        ? match.commandSequence
-        : [
-            { command: 'JAB', kind: 'punch', callAtMs: 3500 },
-            { command: 'CROSS', kind: 'punch', callAtMs: 6500 },
-            { command: '1-2 COMBO', kind: 'punch', callAtMs: 9500 },
-            { command: 'LEAD HOOK', kind: 'punch', callAtMs: 12500 },
-            { command: 'REAR HOOK', kind: 'punch', callAtMs: 15500 },
-            { command: 'BODY HOOK', kind: 'punch', callAtMs: 18500 },
-            { command: 'LEAD UPPERCUT', kind: 'punch', callAtMs: 21500 },
-            { command: '1-2-3 COMBO', kind: 'punch', callAtMs: 24500 },
-            { command: 'OVERHAND RIGHT', kind: 'punch', callAtMs: 27500 },
-            { command: 'DOUBLE JAB', kind: 'punch', callAtMs: 30500 },
-            { command: 'BODY-HEAD COMBO', kind: 'punch', callAtMs: 33500 },
-            { command: 'REAR UPPERCUT', kind: 'punch', callAtMs: 36500 },
-          ];
+        ? (match.commandSequence as SparCommand[])
+        : fallbackSeq;
 
     const interval = setInterval(() => {
       const elapsed = Date.now() - matchStartRef.current;
