@@ -81,11 +81,27 @@ export default function SparMatchClient() {
   const speak = (text: string) => {
     try {
       if (typeof window === 'undefined' || !window.speechSynthesis) return;
-      const u = new SpeechSynthesisUtterance(text);
-      u.rate = 1.05;
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(u);
-    } catch { /* ignore */ }
+      const synth = window.speechSynthesis;
+      synth.cancel();
+      setTimeout(() => {
+        try {
+          const u = new SpeechSynthesisUtterance(text);
+          u.volume = 1.0; // Maximum volume for loud & clear coach voice
+          u.rate = 1.0;   // Energetic clear rate
+          u.pitch = 1.0;
+          const voices = synth.getVoices();
+          const preferredVoice = voices.find(
+            (v) => v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Natural') || v.default),
+          );
+          if (preferredVoice) u.voice = preferredVoice;
+          synth.speak(u);
+        } catch {
+          /* ignore */
+        }
+      }, 30);
+    } catch {
+      /* ignore */
+    }
   };
 
   const cleanup = useCallback(() => {
@@ -487,7 +503,24 @@ export default function SparMatchClient() {
 
   useEffect(() => {
     if (phase !== 'live' || !match) return;
-    const seq = match.commandSequence || [];
+    const seq =
+      match.commandSequence && Array.isArray(match.commandSequence) && match.commandSequence.length > 0
+        ? match.commandSequence
+        : [
+            { command: 'JAB', kind: 'punch', callAtMs: 3500 },
+            { command: 'CROSS', kind: 'punch', callAtMs: 6500 },
+            { command: '1-2 COMBO', kind: 'punch', callAtMs: 9500 },
+            { command: 'LEAD HOOK', kind: 'punch', callAtMs: 12500 },
+            { command: 'REAR HOOK', kind: 'punch', callAtMs: 15500 },
+            { command: 'BODY HOOK', kind: 'punch', callAtMs: 18500 },
+            { command: 'LEAD UPPERCUT', kind: 'punch', callAtMs: 21500 },
+            { command: '1-2-3 COMBO', kind: 'punch', callAtMs: 24500 },
+            { command: 'OVERHAND RIGHT', kind: 'punch', callAtMs: 27500 },
+            { command: 'DOUBLE JAB', kind: 'punch', callAtMs: 30500 },
+            { command: 'BODY-HEAD COMBO', kind: 'punch', callAtMs: 33500 },
+            { command: 'REAR UPPERCUT', kind: 'punch', callAtMs: 36500 },
+          ];
+
     const interval = setInterval(() => {
       const elapsed = Date.now() - matchStartRef.current;
       for (let i = 0; i < seq.length; i++) {
