@@ -38,6 +38,7 @@ export default function SparMatchClient() {
   const matchId = searchParams.get('id') || '';
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -492,6 +493,59 @@ export default function SparMatchClient() {
         pose.onResults((results: any) => {
           const landmarks = results.poseLandmarks;
           if (!landmarks || landmarks.length < 17 || phase !== 'live') return;
+
+          // Draw real-time AI vision skeleton overlay
+          const canvas = canvasRef.current;
+          const video = localVideoRef.current;
+          if (canvas && video) {
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+                canvas.width = video.videoWidth || 640;
+                canvas.height = video.videoHeight || 480;
+              }
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
+              const w = canvas.width;
+              const h = canvas.height;
+
+              // Draw skeleton connection lines
+              const connections = [
+                [11, 12], // shoulders
+                [11, 13], [13, 15], // left arm
+                [12, 14], [14, 16], // right arm
+                [11, 23], [12, 24], [23, 24], // torso
+              ];
+
+              ctx.strokeStyle = '#E2FF3B';
+              ctx.lineWidth = 3;
+              ctx.shadowColor = 'rgba(226,255,59,0.8)';
+              ctx.shadowBlur = 8;
+
+              for (const [i, j] of connections) {
+                const ptA = landmarks[i];
+                const ptB = landmarks[j];
+                if (ptA && ptB && (ptA.visibility ?? 1) > 0.3 && (ptB.visibility ?? 1) > 0.3) {
+                  ctx.beginPath();
+                  ctx.moveTo((1 - ptA.x) * w, ptA.y * h); // flipped x for mirrored video
+                  ctx.lineTo((1 - ptB.x) * w, ptB.y * h);
+                  ctx.stroke();
+                }
+              }
+
+              // Draw keypoint joint nodes
+              const keypoints = [11, 12, 13, 14, 15, 16, 0];
+              for (const idx of keypoints) {
+                const pt = landmarks[idx];
+                if (pt && (pt.visibility ?? 1) > 0.3) {
+                  ctx.fillStyle = idx === 15 || idx === 16 ? '#F97316' : '#E2FF3B';
+                  ctx.beginPath();
+                  ctx.arc((1 - pt.x) * w, pt.y * h, idx === 15 || idx === 16 ? 8 : 5, 0, 2 * Math.PI);
+                  ctx.fill();
+                }
+              }
+            }
+          }
+
           const leftShoulder = landmarks[11], rightShoulder = landmarks[12];
           const leftElbow = landmarks[13], rightElbow = landmarks[14];
           const leftWrist = landmarks[15], rightWrist = landmarks[16];
@@ -722,7 +776,9 @@ export default function SparMatchClient() {
       <div className="grid grid-cols-2 gap-2 mb-3 relative">
         <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-black border border-white/10">
           <video ref={localVideoRef} playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
-          <span className="absolute bottom-2 left-2 text-[8px] font-black uppercase bg-black/60 px-2 py-0.5 rounded z-10">You</span>
+          <canvas ref={canvasRef} className="absolute inset-0 w-full h-full object-cover pointer-events-none z-10" />
+          <span className="absolute bottom-2 left-2 text-[8px] font-black uppercase bg-black/60 px-2 py-0.5 rounded z-20">You</span>
+          <span className="absolute top-2 left-2 text-[7px] font-black uppercase bg-primary/20 text-primary px-1.5 py-0.5 rounded border border-primary/30 z-20">AI VISION ACTIVE</span>
 
           {/* Boxing Target Stance Alignment Grid */}
           <div className="pointer-events-none absolute inset-0 border border-primary/20 rounded-2xl flex flex-col items-center justify-between p-3 opacity-60">

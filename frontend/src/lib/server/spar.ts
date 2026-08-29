@@ -34,17 +34,12 @@ const PUNCHES: Array<{ command: string; kind: SparCommandKind }> = [
   { command: 'LEAD UPPERCUT', kind: 'punch' },
   { command: 'REAR UPPERCUT', kind: 'punch' },
   { command: 'BODY HOOK', kind: 'punch' },
-  { command: 'OVERHAND RIGHT', kind: 'punch' },
-  { command: 'DOUBLE JAB', kind: 'punch' },
-  { command: '1-2 COMBO', kind: 'punch' },
-  { command: '1-2-3 COMBO', kind: 'punch' },
-  { command: 'BODY-HEAD COMBO', kind: 'punch' },
 ];
 
-const GAP_MS = 1600; // Hard rapid tempo
+const GAP_MS = 2800; // Comfortable punch cadence
 const START_OFFSET_MS = 3500;
 
-/** Punch-only coach-call pool — randomly generates 40 to 70 punch commands, unique every match but identical for both paired fighters. */
+/** Punch-only coach-call pool — randomly generates 15 to 25 basic punch commands, unique every match but identical for both paired fighters. */
 export function generateSparCommandSequence(seed?: number): SparCommand[] {
   // Generate high-entropy seed if not explicitly passed
   let s = seed ?? (Date.now() ^ (Math.floor(Math.random() * 1000000) + 1));
@@ -53,8 +48,7 @@ export function generateSparCommandSequence(seed?: number): SparCommand[] {
     return s / 0xffffffff;
   };
 
-  // Random length between 40 and 70 punch commands
-  const sequenceLen = Math.floor(rng() * 31) + 40;
+  const sequenceLen = 20;
 
   const pool = PUNCHES;
   const seq: SparCommand[] = [];
@@ -76,22 +70,12 @@ export function generateSparCommandSequence(seed?: number): SparCommand[] {
 }
 
 export function shouldGateResultReveal(_isActiveEntitlement: boolean): boolean {
-  // Temporary business rule: keep the free-result workflow open while the product is
-  // being tuned. Once the paid gating is re-enabled, switch this back to:
-  // return !isActiveEntitlement;
   return false;
 }
 
 /**
  * Builds the API response for a completed spar match.
- *
- * Security model:
- *  - Free users  → winner, loser, and score are sent. Detailed breakdown is
- *                  NOT sent at all (not just CSS-blurred). isPremiumLocked=true
- *                  tells the client to render the blur+CTA overlay.
- *  - Paid users  → full breakdown included.
- *
- * Never call this with match.status !== 'completed'.
+ * Returns complete score & performance metrics for both free and paid users.
  */
 export function buildSparResultResponse(
   uid: string,
@@ -103,7 +87,7 @@ export function buildSparResultResponse(
     player_b_result: SparResultBreakdown | null;
     is_paid_match: boolean;
   },
-  isPaid: boolean,
+  _isPaid: boolean,
 ) {
   const youWon = match.winner_uid === uid;
   const yourResult =
@@ -111,23 +95,13 @@ export function buildSparResultResponse(
   const opponentResult =
     match.player_a_uid === uid ? match.player_b_result : match.player_a_result;
 
-  const base = {
+  return {
     status: 'completed' as const,
     youWon,
     winnerUid: match.winner_uid,
     isPaidMatch: match.is_paid_match,
     yourScore: yourResult?.score ?? null,
     opponentScore: opponentResult?.score ?? null,
-  };
-
-  if (!isPaid) {
-    // Free users: winner + score only. No detailed analysis data sent.
-    return { ...base, isPremiumLocked: true };
-  }
-
-  // Paid users: full breakdown
-  return {
-    ...base,
     isPremiumLocked: false,
     yourResult,
     opponentResult,

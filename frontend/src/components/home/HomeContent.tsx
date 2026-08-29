@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import HomeCta from './HomeCta';
 import { SparFreePromoModal } from '@/components/ui/SparFreePromoModal';
+import { PwaInstallModal } from '@/components/ui/PwaInstallModal';
 import { useFirebaseUser } from '@/lib/useFirebaseUser';
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -1440,16 +1441,17 @@ export default function HomeContent() {
         </footer>
       </main>
 
-      {/* Sticky mobile CTA — mobile only; desktop already has the CTA
-          visible in the hero without scrolling far, so this stays hidden
-          from md breakpoint up. Safe-area padding keeps it clear of the
-          home-indicator bar on iOS. */}
+      {/* Sticky mobile CTA */}
       <div
         className="md:hidden fixed bottom-0 inset-x-0 z-50 border-t border-white/10 bg-black/85 backdrop-blur-xl px-4 pt-3"
         style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))' }}
       >
         <HomeCta />
       </div>
+
+      {/* Non-overlapping Modals */}
+      <SparFreePromoModal />
+      <PwaInstallModal />
     </div>
   );
 }
