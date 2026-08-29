@@ -45,20 +45,25 @@ export async function POST(
   // TURN_SERVER_URL=turn:your-turn-server.com:3478
   // TURN_USERNAME=your-username
   // TURN_CREDENTIAL=your-password
-  if (process.env.TURN_SERVER_URL && process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL) {
+  const turnUrl = (process.env.TURN_SERVER_URL || '').trim();
+  const turnUser = (process.env.TURN_USERNAME || '').trim();
+  const turnCred = (process.env.TURN_CREDENTIAL || '').trim();
+  if (turnUrl && turnUser && turnCred) {
     iceServers.push({
-      urls: process.env.TURN_SERVER_URL,
-      username: process.env.TURN_USERNAME,
-      credential: process.env.TURN_CREDENTIAL,
+      urls: turnUrl,
+      username: turnUser,
+      credential: turnCred,
     });
   }
 
-  // Also support TURNS (TLS) for stricter firewalls
-  if (process.env.TURNS_SERVER_URL && process.env.TURNS_USERNAME && process.env.TURNS_CREDENTIAL) {
+  const turnsUrl = (process.env.TURNS_SERVER_URL || '').trim();
+  const turnsUser = (process.env.TURNS_USERNAME || '').trim();
+  const turnsCred = (process.env.TURNS_CREDENTIAL || '').trim();
+  if (turnsUrl && turnsUser && turnsCred) {
     iceServers.push({
-      urls: process.env.TURNS_SERVER_URL,
-      username: process.env.TURNS_USERNAME,
-      credential: process.env.TURNS_CREDENTIAL,
+      urls: turnsUrl,
+      username: turnsUser,
+      credential: turnsCred,
     });
   }
 

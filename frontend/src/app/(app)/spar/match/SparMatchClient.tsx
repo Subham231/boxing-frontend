@@ -61,7 +61,8 @@ export default function SparMatchClient() {
   const lastPunchMotionAtRef = useRef(0);
 
   const [match, setMatch] = useState<MatchInfo | null>(null);
-  const [phase, setPhase] = useState<'setup' | 'live' | 'submitting' | 'done'>('setup');
+  const [phase, setPhase] = useState<'setup' | 'countdown' | 'live' | 'submitting' | 'done'>('setup');
+  const [countdownNum, setCountdownNum] = useState<number | null>(null);
   const [currentCommand, setCurrentCommand] = useState<string>('');
   const [hits, setHits] = useState(0);
   const [misses, setMisses] = useState(0);
@@ -86,8 +87,8 @@ export default function SparMatchClient() {
       setTimeout(() => {
         try {
           const u = new SpeechSynthesisUtterance(text);
-          u.volume = 1.0; // Maximum volume for loud & clear coach voice
-          u.rate = 1.0;   // Energetic clear rate
+          u.volume = 1.0;
+          u.rate = 1.0;
           u.pitch = 1.0;
           const voices = synth.getVoices();
           const preferredVoice = voices.find(
@@ -227,6 +228,32 @@ export default function SparMatchClient() {
     }
   }, [match, authHeaders, cleanup, router]);
 
+  const startCountdown = useCallback(() => {
+    setPhase('countdown');
+    setStatusLine('Get ready in stance…');
+    let count = 3;
+    setCountdownNum(count);
+    speak('3');
+
+    const timer = setInterval(() => {
+      count -= 1;
+      if (count > 0) {
+        setCountdownNum(count);
+        speak(String(count));
+      } else {
+        clearInterval(timer);
+        setCountdownNum(0);
+        speak('Fight!');
+        setTimeout(() => {
+          setPhase('live');
+          matchStartRef.current = Date.now();
+          setCountdownNum(null);
+          setStatusLine('Sparring active!');
+        }, 600);
+      }
+    }, 1000);
+  }, []);
+
   const setupMediaAndConnect = useCallback(async () => {
     if (!match || !supabase) return;
     const client = supabase;
@@ -240,24 +267,50 @@ export default function SparMatchClient() {
         method: 'POST',
         headers,
       });
-      const rawIceServers =
-        readyData.iceServers && readyData.iceServers.length > 0
-          ? readyData.iceServers
-          : [
-              { urls: 'stun:stun.l.google.com:19302' },
-              { urls: 'stun:stun1.l.google.com:19302' },
-              { urls: 'stun:stun2.l.google.com:19302' },
-              { urls: 'stun:stun3.l.google.com:19302' },
-              { urls: 'stun:stun4.l.google.com:19302' },
-            ];
+      const readyData = await readyRes.json().catch(() => ({}));
 
-      const iceServers = rawIceServers.filter((server: any) => {
-        const urlsStr = Array.isArray(server.urls) ? server.urls.join(' ') : server.urls || '';
-        if (urlsStr.includes('turn:') || urlsStr.includes('turns:')) {
-          return Boolean(server.username && server.credential);
-        }
-        return true;
-      });
+      const defaultStunServers = [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+      ];
+
+      const cleanIceServers = (readyData.iceServers && Array.isArray(readyData.iceServers))
+        ? readyData.iceServers
+            .map((server: any) => {
+              if (!server) return null;
+              const rawUrls = server.urls || server.url;
+              const urlsArr = Array.isArray(rawUrls) ? rawUrls : typeof rawUrls === 'string' ? [rawUrls] : [];
+              const validUrls = urlsArr.filter((u: any) => typeof u === 'string' && u.trim().length > 0);
+              if (validUrls.length === 0) return null;
+
+              const hasTurn = validUrls.some((u: string) => {
+                const lower = u.toLowerCase();
+                return lower.startsWith('turn:') || lower.startsWith('turns:');
+              });
+
+              if (hasTurn) {
+                const hasUser = typeof server.username === 'string' && server.username.trim().length > 0;
+                const hasCred = typeof server.credential === 'string' && server.credential.trim().length > 0;
+                if (!hasUser || !hasCred) {
+                  const stunOnly = validUrls.filter((u: string) => {
+                    const lower = u.toLowerCase();
+                    return !lower.startsWith('turn:') && !lower.startsWith('turns:');
+                  });
+                  if (stunOnly.length > 0) return { urls: stunOnly };
+                  return null;
+                }
+              }
+              return {
+                urls: validUrls,
+                ...(server.username ? { username: String(server.username).trim() } : {}),
+                ...(server.credential ? { credential: String(server.credential).trim() } : {}),
+              };
+            })
+            .filter(Boolean)
+        : defaultStunServers;
+
+      const finalIceServers = cleanIceServers.length > 0 ? cleanIceServers : defaultStunServers;
 
       let stream: MediaStream | null = null;
       try {
@@ -266,7 +319,6 @@ export default function SparMatchClient() {
           audio: true,
         });
       } catch (audioErr: any) {
-        // Fallback to camera-only if microphone is denied or unavailable on device
         try {
           stream = await navigator.mediaDevices.getUserMedia({
             video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
@@ -289,7 +341,13 @@ export default function SparMatchClient() {
         await localVideoRef.current.play().catch(() => {});
       }
 
-      const pc = new RTCPeerConnection({ iceServers });
+      let pc: RTCPeerConnection;
+      try {
+        pc = new RTCPeerConnection({ iceServers: finalIceServers });
+      } catch (pcErr) {
+        console.warn('[WebRTC] Custom iceServers construction failed, using fallback STUN:', pcErr);
+        pc = new RTCPeerConnection({ iceServers: defaultStunServers });
+      }
       pcRef.current = pc;
       stream.getTracks().forEach((t) => pc.addTrack(t, stream!));
 
@@ -398,14 +456,11 @@ export default function SparMatchClient() {
         });
       }
 
-      setStatusLine('Match starting…');
-      setPhase('live');
-      matchStartRef.current = Date.now();
-      speak('Fight');
+      startCountdown();
     } catch (e: any) {
       setError(e.message || 'Camera / connection failed.');
     }
-  }, [match, authHeaders, handleOpponentExit]);
+  }, [match, authHeaders, handleOpponentExit, startCountdown]);
 
   useEffect(() => {
     setupMediaAndConnect();
@@ -510,24 +565,24 @@ export default function SparMatchClient() {
 
   useEffect(() => {
     if (phase !== 'live' || !match) return;
-    const fallbackSeq: SparCommand[] = [
+    const BASIC_PUNCHES: SparCommand[] = [
       { command: 'JAB', kind: 'punch', callAtMs: 3500 },
       { command: 'CROSS', kind: 'punch', callAtMs: 6500 },
-      { command: '1-2 COMBO', kind: 'punch', callAtMs: 9500 },
-      { command: 'LEAD HOOK', kind: 'punch', callAtMs: 12500 },
-      { command: 'REAR HOOK', kind: 'punch', callAtMs: 15500 },
-      { command: 'BODY HOOK', kind: 'punch', callAtMs: 18500 },
-      { command: 'LEAD UPPERCUT', kind: 'punch', callAtMs: 21500 },
-      { command: '1-2-3 COMBO', kind: 'punch', callAtMs: 24500 },
-      { command: 'OVERHAND RIGHT', kind: 'punch', callAtMs: 27500 },
-      { command: 'DOUBLE JAB', kind: 'punch', callAtMs: 30500 },
-      { command: 'BODY-HEAD COMBO', kind: 'punch', callAtMs: 33500 },
-      { command: 'REAR UPPERCUT', kind: 'punch', callAtMs: 36500 },
+      { command: 'LEAD HOOK', kind: 'punch', callAtMs: 9500 },
+      { command: 'REAR HOOK', kind: 'punch', callAtMs: 12500 },
+      { command: 'LEAD UPPERCUT', kind: 'punch', callAtMs: 15500 },
+      { command: 'REAR UPPERCUT', kind: 'punch', callAtMs: 18500 },
+      { command: 'BODY HOOK', kind: 'punch', callAtMs: 21500 },
+      { command: 'JAB', kind: 'punch', callAtMs: 24500 },
+      { command: 'CROSS', kind: 'punch', callAtMs: 27500 },
+      { command: 'LEAD HOOK', kind: 'punch', callAtMs: 30500 },
+      { command: 'REAR UPPERCUT', kind: 'punch', callAtMs: 33500 },
+      { command: 'BODY HOOK', kind: 'punch', callAtMs: 36500 },
     ];
     const seq: SparCommand[] =
       match.commandSequence && Array.isArray(match.commandSequence) && match.commandSequence.length > 0
         ? (match.commandSequence as SparCommand[])
-        : fallbackSeq;
+        : BASIC_PUNCHES;
 
     const interval = setInterval(() => {
       const elapsed = Date.now() - matchStartRef.current;
@@ -612,7 +667,7 @@ export default function SparMatchClient() {
   };
 
   return (
-    <div className="min-h-[100dvh] bg-[#0A0A0A] text-white p-4 pb-8 font-sans">
+    <div className="min-h-[100dvh] bg-[#0A0A0A] text-white p-4 pb-8 font-sans relative">
       <header className="flex items-center justify-between mb-4">
         <button
           onClick={() => router.push('/spar')}
@@ -653,14 +708,41 @@ export default function SparMatchClient() {
         </GlassCard>
       )}
 
-      <div className="grid grid-cols-2 gap-2 mb-3">
+      {phase === 'countdown' && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/85 backdrop-blur-md">
+          <div className="text-8xl font-black italic text-primary animate-pulse drop-shadow-[0_0_30px_rgba(226,255,59,0.9)]">
+            {countdownNum === 0 ? 'FIGHT!' : countdownNum}
+          </div>
+          <p className="text-xs font-black uppercase tracking-widest text-white/70 mt-4">
+            Get ready in stance · Hands up
+          </p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-2 mb-3 relative">
         <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-black border border-white/10">
           <video ref={localVideoRef} playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
-          <span className="absolute bottom-2 left-2 text-[8px] font-black uppercase bg-black/60 px-2 py-0.5 rounded">You</span>
+          <span className="absolute bottom-2 left-2 text-[8px] font-black uppercase bg-black/60 px-2 py-0.5 rounded z-10">You</span>
+
+          {/* Boxing Target Stance Alignment Grid */}
+          <div className="pointer-events-none absolute inset-0 border border-primary/20 rounded-2xl flex flex-col items-center justify-between p-3 opacity-60">
+            <div className="w-16 h-16 rounded-full border border-dashed border-primary/40 mt-4 flex items-center justify-center">
+              <span className="text-[7px] font-black uppercase text-primary/60">HEAD</span>
+            </div>
+            <div className="w-28 h-20 border border-dashed border-primary/30 rounded-xl mb-4 flex items-center justify-center">
+              <span className="text-[7px] font-black uppercase text-primary/60">STANCE</span>
+            </div>
+            <div className="absolute top-2 left-2 w-3 h-3 border-t-2 border-l-2 border-primary" />
+            <div className="absolute top-2 right-2 w-3 h-3 border-t-2 border-r-2 border-primary" />
+            <div className="absolute bottom-2 left-2 w-3 h-3 border-b-2 border-l-2 border-primary" />
+            <div className="absolute bottom-2 right-2 w-3 h-3 border-b-2 border-r-2 border-primary" />
+          </div>
         </div>
         <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-black border border-primary/20">
           <video ref={remoteVideoRef} playsInline className="w-full h-full object-cover" />
-          <span className="absolute bottom-2 left-2 text-[8px] font-black uppercase bg-black/60 px-2 py-0.5 rounded">Opponent</span>
+          <span className="absolute bottom-2 left-2 text-[8px] font-black uppercase bg-black/60 px-2 py-0.5 rounded z-10">Opponent</span>
+          <div className="pointer-events-none absolute top-2 right-2 w-3 h-3 border-t-2 border-r-2 border-primary/40" />
+          <div className="pointer-events-none absolute bottom-2 left-2 w-3 h-3 border-b-2 border-l-2 border-primary/40" />
         </div>
       </div>
 
