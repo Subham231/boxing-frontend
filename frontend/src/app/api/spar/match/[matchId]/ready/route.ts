@@ -45,7 +45,7 @@ export async function POST(
   // TURN_SERVER_URL=turn:your-turn-server.com:3478
   // TURN_USERNAME=your-username
   // TURN_CREDENTIAL=your-password
-  if (process.env.TURN_SERVER_URL) {
+  if (process.env.TURN_SERVER_URL && process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL) {
     iceServers.push({
       urls: process.env.TURN_SERVER_URL,
       username: process.env.TURN_USERNAME,
@@ -54,7 +54,7 @@ export async function POST(
   }
 
   // Also support TURNS (TLS) for stricter firewalls
-  if (process.env.TURNS_SERVER_URL) {
+  if (process.env.TURNS_SERVER_URL && process.env.TURNS_USERNAME && process.env.TURNS_CREDENTIAL) {
     iceServers.push({
       urls: process.env.TURNS_SERVER_URL,
       username: process.env.TURNS_USERNAME,

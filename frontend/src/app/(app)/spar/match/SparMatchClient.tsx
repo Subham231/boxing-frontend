@@ -240,8 +240,7 @@ export default function SparMatchClient() {
         method: 'POST',
         headers,
       });
-      const readyData = await readyRes.json();
-      const iceServers =
+      const rawIceServers =
         readyData.iceServers && readyData.iceServers.length > 0
           ? readyData.iceServers
           : [
@@ -251,6 +250,14 @@ export default function SparMatchClient() {
               { urls: 'stun:stun3.l.google.com:19302' },
               { urls: 'stun:stun4.l.google.com:19302' },
             ];
+
+      const iceServers = rawIceServers.filter((server: any) => {
+        const urlsStr = Array.isArray(server.urls) ? server.urls.join(' ') : server.urls || '';
+        if (urlsStr.includes('turn:') || urlsStr.includes('turns:')) {
+          return Boolean(server.username && server.credential);
+        }
+        return true;
+      });
 
       let stream: MediaStream | null = null;
       try {
