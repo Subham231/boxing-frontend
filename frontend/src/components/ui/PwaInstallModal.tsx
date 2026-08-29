@@ -20,11 +20,22 @@ export function PwaInstallModal() {
     if (typeof window !== 'undefined') {
       const isStandalone =
         window.matchMedia('(display-mode: standalone)').matches ||
-        (window.navigator as any).standalone === true;
+        (window.navigator as any).standalone === true ||
+        window.location.search.includes('source=pwa') ||
+        localStorage.getItem('sparai_pwa_installed') === 'true';
+
       if (isStandalone) {
         setIsInstalled(true);
         return;
       }
+
+      const handleAppInstalled = () => {
+        localStorage.setItem('sparai_pwa_installed', 'true');
+        setIsInstalled(true);
+        setIsVisible(false);
+      };
+
+      window.addEventListener('appinstalled', handleAppInstalled);
 
       // Detect OS
       const ua = navigator.userAgent || '';
@@ -53,7 +64,6 @@ export function PwaInstallModal() {
         if (hasDismissedPwa) return;
 
         // Check if free promo modal key is stored or modal is closed
-        const promoState = localStorage.getItem(FREE_PROMO_KEY);
         const promoElement = document.querySelector('[data-free-promo-active="true"]');
         if (!promoElement) {
           setIsVisible(true);
@@ -63,6 +73,7 @@ export function PwaInstallModal() {
 
       return () => {
         window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+        window.removeEventListener('appinstalled', handleAppInstalled);
         clearInterval(timer);
       };
     }

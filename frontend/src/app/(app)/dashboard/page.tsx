@@ -41,6 +41,7 @@ import { NeonButton } from '@/components/ui/NeonButton';
 import WelcomeIntro, { WELCOME_INTRO_KEY } from '@/components/tutorial/WelcomeIntro';
 import SpotlightTour, { TourStep } from '@/components/tutorial/SpotlightTour';
 import { SparFreePromoModal } from '@/components/ui/SparFreePromoModal';
+import { PwaInstallModal } from '@/components/ui/PwaInstallModal';
 import { HomePromoDealsBanner } from '@/components/ui/HomePromoDealsBanner';
 import { FeatureShowcaseTemplates } from '@/components/dashboard/FeatureShowcaseTemplates';
 
@@ -240,6 +241,7 @@ export default function DashboardPage() {
     <div className="relative w-full">
       {/* Non-repeating One-Time Limited Free Sparring & Deals Launch Popup */}
       <SparFreePromoModal />
+      <PwaInstallModal />
 
       <div className="flex flex-col gap-6 anim-fade-in">
         {/* Unified Fighter Header */}
