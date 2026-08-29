@@ -33,16 +33,19 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  const used = entitlement.sparDailyUsed || 0;
+  const canSpar = used < 1;
+
   return NextResponse.json({
     mode: 'free',
     active: false,
     planName: null,
     sparDailyLimit: 1,
-    sparDailyUsed: entitlement.sparDailyUsed || 0,
-    remaining: entitlement.freeSparAvailable ? 1 : 0,
-    canSpar: entitlement.freeSparAvailable,
-    freeSparAvailable: entitlement.freeSparAvailable,
-    freeSparUnlocked: entitlement.freeSparUnlocked,
+    sparDailyUsed: used,
+    remaining: canSpar ? 1 : 0,
+    canSpar,
+    freeSparAvailable: canSpar,
+    freeSparUnlocked: true,
     needsAd: false,
   });
 }

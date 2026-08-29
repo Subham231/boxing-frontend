@@ -65,7 +65,17 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  if (isPaid) {
+  if (!isPaid) {
+    if (entitlement.sparDailyUsed >= 1) {
+      return NextResponse.json(
+        {
+          error: 'Daily free spar limit reached. Come back tomorrow or subscribe for more spars.',
+          reason: 'daily_limit_reached',
+        },
+        { status: 403 },
+      );
+    }
+  } else {
     const limit = entitlement.sparDailyLimit;
     const used = entitlement.sparDailyUsed;
     if (limit >= 0 && used >= limit) {
@@ -81,28 +91,19 @@ export async function POST(req: NextRequest) {
     p_is_paid: isPaid,
   });
 
-  if (consumeErr) {
-    console.error('[spar/queue/join] consume', consumeErr);
-    return NextResponse.json(
-      { error: 'Could not consume spar credit. Run reflex-schema-v18.sql in Supabase.' },
-      { status: 500 },
-    );
+  if (consumeErr || consumed === false) {
+    // Direct table fallback if RPC is not installed or returns false
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    await supabaseAdmin
+      .from('reflex_profiles')
+      .update({
+        daily_spar_date: today,
+        daily_spar_count: (entitlement.sparDailyUsed || 0) + 1,
+      })
+      .eq('uid', uid);
   }
 
-  if (!consumed) {
-    if (!isPaid) {
-      return NextResponse.json(
-        {
-          error: 'Daily free spar limit reached. Come back tomorrow.',
-          reason: 'daily_limit_reached',
-          needsAd: false,
-        },
-        { status: 403 },
-      );
-    }
-    return NextResponse.json({ error: 'Spar credit denied.', reason: 'denied' }, { status: 403 });
-  }
-
+  // Proceed with matchmaking for the user
   await supabaseAdmin.from('spar_queue').upsert({
     uid,
     joined_at: new Date().toISOString(),

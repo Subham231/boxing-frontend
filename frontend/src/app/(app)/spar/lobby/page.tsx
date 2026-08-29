@@ -90,16 +90,6 @@ export default function SparLobbyPage() {
   const startSearch = async () => {
     const generation = ++searchGenerationRef.current;
     setError(null);
-    if (!status) return;
-
-    if (status.mode === 'free' && !status.freeSparAvailable) {
-      setError('Daily free spar has already been used. Come back tomorrow.');
-      return;
-    }
-    if (!status.canSpar && status.mode === 'paid') {
-      setError('Daily spar limit reached. Come back tomorrow or upgrade.');
-      return;
-    }
 
     setSearching(true);
     try {

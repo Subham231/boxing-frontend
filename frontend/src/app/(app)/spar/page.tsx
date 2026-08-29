@@ -108,18 +108,6 @@ export default function SparIntroPage() {
   const paidBlocked = !!status && status.mode === 'paid' && !status.canSpar;
 
   const onPrimary = () => {
-    if (!status) {
-      router.push('/onboarding');
-      return;
-    }
-    if (usedUp || paidBlocked) {
-      router.push('/subscription');
-      return;
-    }
-    if (needsAd) {
-      router.push('/spar/watch-ad');
-      return;
-    }
     router.push('/spar/lobby');
   };
 
@@ -163,7 +151,7 @@ export default function SparIntroPage() {
           <div>
             <p className="text-sm font-black uppercase tracking-wide text-white">Real-time opponent spar</p>
             <p className="text-[11px] text-white/60 font-semibold leading-relaxed mt-1">
-              Free fighters get one daily spar after the required unlock step. Subscribers get plan-based daily spar limits.
+              Match with a fighter in real-time. Follow the voice calls and fight for the top rank.
             </p>
           </div>
         </motion.div>
@@ -231,40 +219,9 @@ export default function SparIntroPage() {
               </div>
             )}
 
-            {status && (
-              <p className="text-[10px] text-white/50 font-bold uppercase tracking-wide">
-                {status.mode === 'paid'
-                  ? status.sparDailyLimit < 0
-                    ? `${status.planName} · Unlimited spars today`
-                    : `${status.planName} · ${status.sparDailyUsed}/${status.sparDailyLimit} used today`
-                  : usedUp
-                    ? 'Free spar already used today'
-                    : needsAd
-                      ? 'Unlock today\'s free spar to find an opponent'
-                      : 'Free spar unlocked — ready to find an opponent'}
-              </p>
-            )}
-
             <NeonButton className="w-full h-14" onClick={onPrimary}>
-              {usedUp || paidBlocked ? (
-                <>
-                  UPGRADE PLAN <Crown className="w-4 h-4 ml-1" />
-                </>
-              ) : (
-                <>
-                  {needsAd ? 'UNLOCK FREE SPAR' : 'START SPARRING'} <SwordsNeonIcon className="w-4 h-4 ml-1 text-black" glow={false} />
-                </>
-              )}
+              START SPARRING <SwordsNeonIcon className="w-4 h-4 ml-1 text-black" glow={false} />
             </NeonButton>
-
-            {status?.mode === 'free' && (
-              <Link
-                href="/subscription"
-                className="text-center text-[10px] font-black text-primary uppercase tracking-widest"
-              >
-                Skip ads — subscribe for daily spars →
-              </Link>
-            )}
           </GlassCard>
         )}
       </div>

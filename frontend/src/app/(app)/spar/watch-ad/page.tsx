@@ -18,6 +18,10 @@ export default function SparWatchAdPage() {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
+  React.useEffect(() => {
+    router.replace('/spar/lobby');
+  }, [router]);
+
   const finishDevUnlock = async () => {
     setError(null);
     setPlaying(true);

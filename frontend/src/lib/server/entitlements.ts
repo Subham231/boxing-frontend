@@ -178,6 +178,8 @@ export async function getEntitlement(uid: string): Promise<Entitlement> {
     }
   }
 
+  if (!row) return empty;
+
   const now = Date.now();
   const today = todayDateStr();
   const week = currentIsoWeek();

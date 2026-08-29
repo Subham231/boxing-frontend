@@ -70,6 +70,8 @@ export default function SparMatchClient() {
   const [opponentLeft, setOpponentLeft] = useState(false);
   const [opponentLeftReason, setOpponentLeftReason] = useState('Opponent left the match.');
 
+  const [permissionNeeded, setPermissionNeeded] = useState(false);
+
   const authHeaders = useCallback(async () => {
     const user = firebaseAuth.currentUser;
     if (!user) throw new Error('Not logged in');
@@ -209,155 +211,182 @@ export default function SparMatchClient() {
     }
   }, [match, authHeaders, cleanup, router]);
 
-  useEffect(() => {
+  const setupMediaAndConnect = useCallback(async () => {
     if (!match || !supabase) return;
     const client = supabase;
-    let cancelled = false;
+    setError(null);
+    setPermissionNeeded(false);
+    setStatusLine('Connecting to devices…');
 
-    const run = async () => {
+    try {
+      const headers = await authHeaders();
+      const readyRes = await fetch(`/api/spar/match/${match.matchId}/ready`, {
+        method: 'POST',
+        headers,
+      });
+      const readyData = await readyRes.json();
+      const iceServers =
+        readyData.iceServers && readyData.iceServers.length > 0
+          ? readyData.iceServers
+          : [
+              { urls: 'stun:stun.l.google.com:19302' },
+              { urls: 'stun:stun1.l.google.com:19302' },
+              { urls: 'stun:stun2.l.google.com:19302' },
+              { urls: 'stun:stun3.l.google.com:19302' },
+              { urls: 'stun:stun4.l.google.com:19302' },
+            ];
+
+      let stream: MediaStream | null = null;
       try {
-        const headers = await authHeaders();
-        const readyRes = await fetch(`/api/spar/match/${match.matchId}/ready`, {
-          method: 'POST',
-          headers,
-        });
-        const readyData = await readyRes.json();
-        const iceServers = readyData.iceServers || [{ urls: 'stun:stun.l.google.com:19302' }];
-
-        const stream = await navigator.mediaDevices.getUserMedia({
+        stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
           audio: true,
         });
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
+      } catch (audioErr: any) {
+        // Fallback to camera-only if microphone is denied or unavailable on device
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+            audio: false,
+          });
+        } catch (videoErr: any) {
+          setPermissionNeeded(true);
+          throw new Error(
+            videoErr.name === 'NotAllowedError' || videoErr.name === 'PermissionDeniedError'
+              ? 'Camera permission denied. Please tap "GRANT CAMERA ACCESS" below to allow your camera.'
+              : 'Could not access device camera. Please check browser permissions.',
+          );
+        }
+      }
+
+      localStreamRef.current = stream;
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
+        localVideoRef.current.muted = true;
+        await localVideoRef.current.play().catch(() => {});
+      }
+
+      const pc = new RTCPeerConnection({ iceServers });
+      pcRef.current = pc;
+      stream.getTracks().forEach((t) => pc.addTrack(t, stream!));
+
+      pc.onconnectionstatechange = () => {
+        if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
+          handleOpponentExit('Connection lost. Your opponent left the match.');
+        }
+        if (pc.connectionState === 'connected') {
+          setStatusLine('Opponent connected');
+          setOpponentLeft(false);
+        }
+      };
+
+      pc.ontrack = (ev) => {
+        const remoteStream = ev.streams?.[0] || new MediaStream([ev.track]);
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = remoteStream;
+          remoteVideoRef.current.play().catch(() => {});
+          setStatusLine('Opponent connected');
+          setOpponentLeft(false);
+        }
+      };
+
+      const channel = client.channel(match.signalingChannel, {
+        config: { broadcast: { self: false } },
+      });
+      channelRef.current = channel;
+      const pendingIceCandidates: RTCIceCandidateInit[] = [];
+
+      const addIceCandidate = async (candidate: RTCIceCandidateInit) => {
+        if (!pc.remoteDescription) {
+          pendingIceCandidates.push(candidate);
           return;
         }
-        localStreamRef.current = stream;
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-          localVideoRef.current.muted = true;
-          await localVideoRef.current.play().catch(() => {});
+        try {
+          await pc.addIceCandidate(candidate);
+        } catch {
+          /* ignore stale candidates */
         }
+      };
 
-        const pc = new RTCPeerConnection({ iceServers });
-        pcRef.current = pc;
-        stream.getTracks().forEach((t) => pc.addTrack(t, stream));
-
-        pc.onconnectionstatechange = () => {
-          if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
-            handleOpponentExit('Connection lost. Your opponent left the match.');
-          }
-          if (pc.connectionState === 'connected') {
-            setStatusLine('Opponent connected');
-            setOpponentLeft(false);
-          }
-        };
-
-        pc.ontrack = (ev) => {
-          const remoteStream = ev.streams?.[0];
-          if (remoteStream && remoteVideoRef.current) {
-            remoteVideoRef.current.srcObject = remoteStream;
-            remoteVideoRef.current.play().catch(() => {});
-            setStatusLine('Opponent connected');
-            setOpponentLeft(false);
-          }
-        };
-
-        const channel = client.channel(match.signalingChannel, {
-          config: { broadcast: { self: false } },
-        });
-        channelRef.current = channel;
-        const pendingIceCandidates: RTCIceCandidateInit[] = [];
-
-        const addIceCandidate = async (candidate: RTCIceCandidateInit) => {
-          if (!pc.remoteDescription) {
-            pendingIceCandidates.push(candidate);
-            return;
-          }
-          try { await pc.addIceCandidate(candidate); } catch { /* ignore stale candidates */ }
-        };
-
-        pc.onicecandidate = (ev) => {
-          if (ev.candidate) {
-            channel.send({
-              type: 'broadcast',
-              event: 'ice',
-              payload: { candidate: ev.candidate.toJSON(), from: match.role },
-            });
-          }
-        };
-
-        channel.on('broadcast', { event: 'ice' }, async ({ payload }) => {
-          if (!payload?.candidate || payload.from === match.role) return;
-          await addIceCandidate(payload.candidate);
-        });
-
-        channel.on('broadcast', { event: 'sdp' }, async ({ payload }) => {
-          if (!payload?.sdp || payload.from === match.role) return;
-          try {
-            await pc.setRemoteDescription(payload.sdp);
-            while (pendingIceCandidates.length) {
-              const candidate = pendingIceCandidates.shift();
-              if (candidate) await addIceCandidate(candidate);
-            }
-            if (payload.sdp.type === 'offer') {
-              const answer = await pc.createAnswer();
-              await pc.setLocalDescription(answer);
-              channel.send({
-                type: 'broadcast',
-                event: 'sdp',
-                payload: { sdp: pc.localDescription, from: match.role },
-              });
-            }
-          } catch {
-            /* ignore */
-          }
-        });
-
-        channel.on('broadcast', { event: 'peer-left' }, ({ payload }) => {
-          if (!payload || payload.matchId !== match.matchId) return;
-          handleOpponentExit('Your opponent left the match.');
-        });
-
-        await new Promise<void>((resolve, reject) => {
-          const timeout = window.setTimeout(() => reject(new Error('Spar connection timed out.')), 10000);
-          channel.subscribe((status) => {
-            if (status === 'SUBSCRIBED') {
-              window.clearTimeout(timeout);
-              resolve();
-            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-              window.clearTimeout(timeout);
-              reject(new Error('Could not connect to the spar signaling service.'));
-            }
-          });
-        });
-
-        await new Promise((r) => setTimeout(r, 800));
-
-        if (match.role === 'offer') {
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
+      pc.onicecandidate = (ev) => {
+        if (ev.candidate) {
           channel.send({
             type: 'broadcast',
-            event: 'sdp',
-            payload: { sdp: pc.localDescription, from: match.role },
+            event: 'ice',
+            payload: { candidate: ev.candidate.toJSON(), from: match.role },
           });
         }
+      };
 
-        setStatusLine('Match starting…');
-        setPhase('live');
-        matchStartRef.current = Date.now();
-        speak('Fight');
-      } catch (e: any) {
-        setError(e.message || 'Camera / connection failed.');
+      channel.on('broadcast', { event: 'ice' }, async ({ payload }) => {
+        if (!payload?.candidate || payload.from === match.role) return;
+        await addIceCandidate(payload.candidate);
+      });
+
+      channel.on('broadcast', { event: 'sdp' }, async ({ payload }) => {
+        if (!payload?.sdp || payload.from === match.role) return;
+        try {
+          await pc.setRemoteDescription(payload.sdp);
+          while (pendingIceCandidates.length) {
+            const candidate = pendingIceCandidates.shift();
+            if (candidate) await addIceCandidate(candidate);
+          }
+          if (payload.sdp.type === 'offer') {
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            channel.send({
+              type: 'broadcast',
+              event: 'sdp',
+              payload: { sdp: pc.localDescription, from: match.role },
+            });
+          }
+        } catch {
+          /* ignore */
+        }
+      });
+
+      channel.on('broadcast', { event: 'peer-left' }, ({ payload }) => {
+        if (!payload || payload.matchId !== match.matchId) return;
+        handleOpponentExit('Your opponent left the match.');
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        const timeout = window.setTimeout(() => reject(new Error('Spar connection timed out.')), 12000);
+        channel.subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            window.clearTimeout(timeout);
+            resolve();
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            window.clearTimeout(timeout);
+            reject(new Error('Could not connect to the spar signaling service.'));
+          }
+        });
+      });
+
+      await new Promise((r) => setTimeout(r, 600));
+
+      if (match.role === 'offer') {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        channel.send({
+          type: 'broadcast',
+          event: 'sdp',
+          payload: { sdp: pc.localDescription, from: match.role },
+        });
       }
-    };
 
-    run();
-    return () => {
-      cancelled = true;
-    };
+      setStatusLine('Match starting…');
+      setPhase('live');
+      matchStartRef.current = Date.now();
+      speak('Fight');
+    } catch (e: any) {
+      setError(e.message || 'Camera / connection failed.');
+    }
   }, [match, authHeaders, handleOpponentExit]);
+
+  useEffect(() => {
+    setupMediaAndConnect();
+  }, [setupMediaAndConnect]);
 
   useEffect(() => {
     if (phase !== 'live' || !match || typeof window === 'undefined') return;
