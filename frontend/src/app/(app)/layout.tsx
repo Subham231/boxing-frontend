@@ -45,8 +45,6 @@ export default function ProtectedLayout({
         const { profile } = await ensureUserProfile(user);
         if (cancelled) return;
         const onboardingData = (profile.onboarding_data ?? {}) as Record<string, unknown>;
-        // An account that exists in Supabase (has profile row / uid / phone) or has
-        // onboarding_completed: true or local flag is considered complete.
         isOnboardingComplete =
           !!onboardingData.onboarding_completed ||
           !!profile.uid ||
@@ -63,8 +61,10 @@ export default function ProtectedLayout({
           }
         }
       } catch {
-        if (localStorage.getItem('boxing_onboarding_done') === 'true') {
+        // Any existing user with phone/uid is considered onboarded if network fails
+        if (user.uid || user.phoneNumber || localStorage.getItem('boxing_onboarding_done') === 'true') {
           isOnboardingComplete = true;
+          localStorage.setItem('boxing_onboarding_done', 'true');
         } else {
           try {
             const data = JSON.parse(localStorage.getItem('boxing_onboarding_data') || '{}');
@@ -77,10 +77,8 @@ export default function ProtectedLayout({
 
       if (cancelled) return;
 
-      if (!isOnboardingComplete) {
-        if (!isExempt) {
-          window.location.replace('/onboarding');
-        }
+      if (!isOnboardingComplete && !isExempt) {
+        window.location.replace('/onboarding');
         return;
       }
 
@@ -94,7 +92,6 @@ export default function ProtectedLayout({
   useEffect(() => {
     if (authLoading || !user || !onboardingChecked) return;
 
-    // Exempt routes don't require active plan check
     if (isExempt) {
       setAllowed(true);
       return;
@@ -123,11 +120,9 @@ export default function ProtectedLayout({
           });
           const retryData = await retry.json().catch(() => ({}));
           if (cancelled) return;
-          if (!retry.ok) {
-            setAllowed(false);
-            return;
+          if (retry.ok) {
+            Object.assign(data, retryData);
           }
-          Object.assign(data, retryData);
         }
 
         const isActive = data.active === true;
@@ -144,7 +139,8 @@ export default function ProtectedLayout({
 
         setAllowed(true);
       } catch {
-        if (!cancelled && isExempt) {
+        // Retain access if network hiccup occurs while authenticated
+        if (!cancelled) {
           setAllowed(true);
         }
       }
