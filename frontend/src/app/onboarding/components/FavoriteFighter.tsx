@@ -25,19 +25,19 @@ const FavoriteFighter: React.FC = () => {
   const activeFighter = FIGHTERS.find((f) => f.name === selected);
 
   return (
-    <div className="flex flex-col min-h-[85vh] justify-between py-2">
-      <header className="text-left mb-6">
+    <div className="flex flex-col min-h-full justify-between py-2 pb-20 sm:pb-24">
+      <header className="text-left mb-4 sm:mb-6">
         <StepBadge />
-        <h1 className="text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
+        <h1 className="text-2xl sm:text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
           Who inspires your <span className="text-primary">fighting style</span>?
         </h1>
-        <p className="text-white/50 mt-4 text-sm leading-relaxed font-semibold">
+        <p className="text-white/50 mt-2.5 sm:mt-4 text-xs sm:text-sm leading-relaxed font-semibold">
           Every fighter has someone they look up to. Choose the athlete whose mindset, discipline, or
           fighting style motivates you the most.
         </p>
       </header>
 
-      <main className="flex-1 flex flex-col gap-3">
+      <main className="flex-1 flex flex-col gap-2.5 sm:gap-3 my-auto">
         {FIGHTERS.map((f) => {
           const active = selected === f.name;
           return (
@@ -71,7 +71,7 @@ const FavoriteFighter: React.FC = () => {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="glass-card p-4 rounded-3xl border-primary/20 bg-primary/[0.04] mt-1"
+              className="glass-card p-3.5 sm:p-4 rounded-3xl border-primary/20 bg-primary/[0.04] mt-1"
             >
               <p className="text-xs italic text-white/70 font-semibold leading-relaxed">"{activeFighter.quote}"</p>
             </motion.div>
@@ -79,8 +79,8 @@ const FavoriteFighter: React.FC = () => {
         </AnimatePresence>
       </main>
 
-      <footer className="mt-8 flex flex-col gap-4">
-        <button onClick={nextStep} disabled={!selected} className="btn-primary w-full h-16 flex items-center justify-center gap-2 disabled:opacity-40">
+      <footer className="mt-6 sm:mt-8 flex flex-col gap-3 sm:gap-4">
+        <button onClick={nextStep} disabled={!selected} className="btn-primary w-full h-14 sm:h-16 flex items-center justify-center gap-2 disabled:opacity-40">
           CONTINUE <ChevronRight size={20} />
         </button>
         <button onClick={prevStep} className="text-[10px] font-black text-white/40 hover:text-white uppercase tracking-widest py-1 mx-auto">

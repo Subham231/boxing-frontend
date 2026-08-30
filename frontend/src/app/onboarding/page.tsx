@@ -112,6 +112,8 @@ const OnboardingFlow: React.FC = () => {
     const [middleOrder, setMiddleOrder] = useState<MiddleScreenId[] | null>(null);
     const loginModeHandled = useRef(false);
 
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+
     useEffect(() => {
         const previousHtmlOverflow = document.documentElement.style.overflow;
         const previousBodyOverflow = document.body.style.overflow;
@@ -125,6 +127,13 @@ const OnboardingFlow: React.FC = () => {
             document.body.style.height = previousBodyHeight;
         };
     }, []);
+
+    // Scroll to top whenever step changes
+    useEffect(() => {
+        if (scrollContainerRef.current) {
+            scrollContainerRef.current.scrollTop = 0;
+        }
+    }, [currentStep]);
 
     useEffect(() => {
         if (!isLoaded) return;
@@ -183,15 +192,16 @@ const OnboardingFlow: React.FC = () => {
     }
 
     return (
-        <div className="fixed inset-0 flex h-[100dvh] w-screen flex-col items-center justify-center overflow-hidden bg-[#0a0a0c] p-4 sm:p-6 scrollbar-hide">
+        <div className="fixed inset-0 flex h-[100dvh] w-screen flex-col items-center overflow-hidden bg-[#0a0a0c] p-4 sm:p-6 scrollbar-hide">
             <AnimatePresence mode="wait">
                 <motion.div
                     key={currentStep}
+                    ref={scrollContainerRef}
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -20 }}
                     transition={{ duration: 0.35, ease: 'easeOut' }}
-                    className="w-full max-w-lg h-full overflow-hidden flex flex-col justify-between pb-24"
+                    className="w-full max-w-lg h-full overflow-y-auto overflow-x-hidden scrollbar-hide flex flex-col overscroll-contain"
                 >
                     {screens[currentStep - 1] || <FinalPromise />}
                 </motion.div>

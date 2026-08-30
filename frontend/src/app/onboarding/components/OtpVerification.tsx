@@ -99,25 +99,25 @@ const OtpVerification: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col min-h-[85vh] justify-between py-2">
+    <div className="flex flex-col min-h-full justify-between py-2 pb-20 sm:pb-24">
       <div id={RECAPTCHA_CONTAINER_ID} />
 
-      <header className="text-left mb-6">
-        <span className="text-sm font-black italic uppercase tracking-tight text-white block mb-3">
+      <header className="text-left mb-4 sm:mb-6">
+        <span className="text-sm font-black italic uppercase tracking-tight text-white block mb-2 sm:mb-3">
           Spar<span className="text-primary">ai</span>
         </span>
         <StepBadge />
-        <h1 className="text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
+        <h1 className="text-2xl sm:text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
           Verify your <span className="text-primary">fight number</span>.
         </h1>
-        <p className="text-white/50 mt-4 text-sm leading-relaxed font-semibold">
+        <p className="text-white/50 mt-2.5 sm:mt-4 text-xs sm:text-sm leading-relaxed font-semibold">
           {step === 'phone'
             ? "We'll send a one-time code to verify your identity. No passwords, ever."
             : `Enter the 6-digit code sent to ${phone}`}
         </p>
       </header>
 
-      <main className="flex-1 flex flex-col gap-5">
+      <main className="flex-1 flex flex-col gap-4 sm:gap-5 my-auto">
         <div className="flex items-center gap-2 mb-1">
           <ShieldCheck className="w-4 h-4 text-primary" />
           <span className="text-[9px] font-black text-primary uppercase tracking-widest">Secure Enclave</span>
@@ -159,19 +159,19 @@ const OtpVerification: React.FC = () => {
         {error && <p className="text-[10px] font-bold text-red-400">{error}</p>}
       </main>
 
-      <footer className="mt-8 flex flex-col gap-4">
+      <footer className="mt-6 sm:mt-8 flex flex-col gap-3 sm:gap-4">
         {step === 'phone' ? (
-          <button onClick={handleSendOtp} disabled={loading} className="btn-primary w-full h-16 flex items-center justify-center gap-2 disabled:opacity-50">
+          <button onClick={handleSendOtp} disabled={loading} className="btn-primary w-full h-14 sm:h-16 flex items-center justify-center gap-2 disabled:opacity-50">
             {loading ? 'SENDING...' : 'SEND OTP CODE'} <ChevronRight size={20} />
           </button>
         ) : (
-          <button onClick={handleVerify} disabled={loading || code.length < 6} className="btn-primary w-full h-16 flex items-center justify-center gap-2 disabled:opacity-50">
+          <button onClick={handleVerify} disabled={loading || code.length < 6} className="btn-primary w-full h-14 sm:h-16 flex items-center justify-center gap-2 disabled:opacity-50">
             {loading ? 'VERIFYING...' : 'VERIFY & CONTINUE'} <ChevronRight size={20} />
           </button>
         )}
 
         <div className="flex justify-center items-center px-1">
-          <button onClick={prevStep} className="text-[10px] font-black text-white/40 hover:text-white uppercase tracking-widest py-2">
+          <button onClick={prevStep} className="text-[10px] font-black text-white/40 hover:text-white uppercase tracking-widest py-1">
             Back
           </button>
         </div>

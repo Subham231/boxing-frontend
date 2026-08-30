@@ -92,7 +92,7 @@ const SubscriptionOffer: React.FC = () => {
   const rewardClaimed = !!profile?.referral_bonus_5_claimed;
 
   return (
-    <div className="flex h-full min-h-0 flex-col justify-between gap-3 py-2 pb-4">
+    <div className="flex min-h-full flex-col justify-between gap-3 py-2 pb-20 sm:pb-24">
       <header className="text-left mb-1">
         <StepBadge />
         <h1 className="mt-2 text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">

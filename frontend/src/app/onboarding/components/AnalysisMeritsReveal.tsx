@@ -43,7 +43,7 @@ export default function AnalysisMeritsReveal(): JSX.Element {
   const kineticPSI    = Math.min(620, Math.max(180, Math.round((peakV / 900) * 620)));
 
   return (
-    <div className="flex flex-col min-h-[85vh] justify-between py-2">
+    <div className="flex flex-col min-h-full justify-between py-2 pb-20 sm:pb-24">
       <header className="mb-3">
         <StepBadge />
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[8px] font-black uppercase tracking-wider mb-2">

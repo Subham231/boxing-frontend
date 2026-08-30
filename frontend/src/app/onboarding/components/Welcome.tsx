@@ -14,7 +14,7 @@ const Welcome: React.FC = () => {
     // OtpVerification, SubscriptionOffer, FinalPromise — OTP is three steps
     // from the end.
     return (
-        <div className="relative flex flex-col min-h-[85vh] justify-between py-4 overflow-hidden pb-20">
+        <div className="relative flex flex-col min-h-full justify-between py-4 pb-20 sm:pb-24">
             {/* Ambient particles */}
             <div className="absolute inset-0 pointer-events-none">
                 {Array.from({ length: 18 }).map((_, i) => (

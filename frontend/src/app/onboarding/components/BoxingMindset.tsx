@@ -23,15 +23,15 @@ const BoxingMindset: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col min-h-[85vh] justify-between py-2">
-      <header className="text-left mb-4">
+    <div className="flex flex-col min-h-full justify-between py-2 pb-20 sm:pb-24">
+      <header className="text-left mb-4 sm:mb-6">
         <StepBadge />
         <h1 className="text-2xl sm:text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
           Which mindset describes <span className="text-primary">you best</span>?
         </h1>
       </header>
 
-      <main className="flex-1 flex flex-col gap-2.5">
+      <main className="flex-1 flex flex-col gap-2.5 my-auto">
         {MINDSETS.map((m) => {
           const active = selected === m.label;
           const Icon = m.icon;
@@ -45,7 +45,7 @@ const BoxingMindset: React.FC = () => {
                 active ? 'bg-primary/10 border-primary shadow-[0_0_15px_rgba(226,255,59,0.15)]' : 'bg-black/30 border-white/5 hover:border-white/10'
               }`}
             >
-              <div className="flex items-center gap-3.5">
+              <div className="flex items-center gap-3 sm:gap-3.5">
                 <Icon className={`w-5 h-5 shrink-0 ${active ? 'text-primary' : 'text-primary/40'}`} strokeWidth={2.25} />
                 <div>
                   <span className={`text-xs sm:text-sm font-black uppercase block ${active ? 'text-primary' : 'text-white'}`}>{m.label}</span>
@@ -64,8 +64,8 @@ const BoxingMindset: React.FC = () => {
         })}
       </main>
 
-      <footer className="mt-8 flex flex-col gap-4">
-        <button onClick={nextStep} disabled={!selected} className="btn-primary w-full h-16 flex items-center justify-center gap-2 disabled:opacity-40">
+      <footer className="mt-6 sm:mt-8 flex flex-col gap-3 sm:gap-4">
+        <button onClick={nextStep} disabled={!selected} className="btn-primary w-full h-14 sm:h-16 flex items-center justify-center gap-2 disabled:opacity-40">
           CONTINUE <ChevronRight size={20} />
         </button>
         <button onClick={prevStep} className="text-[10px] font-black text-white/40 hover:text-white uppercase tracking-widest py-1 mx-auto">

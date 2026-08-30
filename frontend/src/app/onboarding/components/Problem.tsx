@@ -124,13 +124,13 @@ const Identity: React.FC = () => {
     };
 
     return (
-        <div className="flex flex-col min-h-[85vh] justify-between py-2">
-            <header className="text-left mb-4">
-                <div className="text-[10px] font-black tracking-[3px] text-primary uppercase mb-2">FIGHTER PROFILE</div>
+        <div className="flex flex-col min-h-full justify-between py-2 pb-20 sm:pb-24">
+            <header className="text-left mb-3 sm:mb-4">
+                <div className="text-[10px] font-black tracking-[3px] text-primary uppercase mb-1.5 sm:mb-2">FIGHTER PROFILE</div>
                 <h1 className="text-2xl sm:text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
                     Set up your <span className="text-primary">identity</span>.
                 </h1>
-                <p className="text-white/50 mt-2 text-xs sm:text-sm leading-relaxed font-semibold">
+                <p className="text-white/50 mt-1.5 sm:mt-2 text-xs sm:text-sm leading-relaxed font-semibold">
                     Customize your fighter handle, age and profession or tap a recommended tag.
                 </p>
             </header>

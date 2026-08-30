@@ -26,7 +26,7 @@ const FinalPromise: React.FC = () => {
   };
 
   return (
-    <div className="relative flex flex-col min-h-[85vh] justify-between py-4 overflow-hidden">
+    <div className="relative flex flex-col min-h-full justify-between py-4 pb-20 sm:pb-24">
       <div className="absolute inset-0 pointer-events-none">
         {Array.from({ length: 16 }).map((_, i) => (
           <motion.span
@@ -45,15 +45,15 @@ const FinalPromise: React.FC = () => {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6 }}
-        className="relative z-10 text-left"
+        className="relative z-10 text-left my-auto"
       >
-        <div className="w-14 h-14 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center mb-5">
+        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center mb-4 sm:mb-5">
           <Flame className="w-6 h-6 text-primary" />
         </div>
-        <h1 className="text-4xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
+        <h1 className="text-3xl sm:text-4xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
           {data.ringName ? <>Welcome, <span className="text-primary">{data.ringName}</span>.</> : <>You're <span className="text-primary">verified</span>.</>}
         </h1>
-        <p className="text-white/50 mt-5 text-sm leading-relaxed font-semibold pr-4">
+        <p className="text-white/50 mt-4 sm:mt-5 text-xs sm:text-sm leading-relaxed font-semibold pr-4">
           Identity confirmed. Your Tactical Protocol is waiting — the only thing left is to walk
           through the door and start.
         </p>
@@ -63,12 +63,12 @@ const FinalPromise: React.FC = () => {
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2, duration: 0.6 }}
-        className="relative z-10 mt-10 flex flex-col gap-4"
+        className="relative z-10 mt-6 sm:mt-10 flex flex-col gap-3 sm:gap-4"
       >
         <button
           onClick={handleLaunch}
           disabled={launching}
-          className="btn-primary w-full h-[75px] text-xl font-black italic uppercase tracking-wider flex items-center justify-center gap-2 disabled:opacity-60 shadow-[0_10px_40px_rgba(226,255,59,0.25)]"
+          className="btn-primary w-full h-14 sm:h-16 text-lg sm:text-xl font-black italic uppercase tracking-wider flex items-center justify-center gap-2 disabled:opacity-60 shadow-[0_10px_40px_rgba(226,255,59,0.25)]"
         >
           {launching ? 'ENTERING THE RING...' : (
             <>

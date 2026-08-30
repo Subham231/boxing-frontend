@@ -482,7 +482,7 @@ export default function FreestyleAnalysis(): JSX.Element {
      RENDER
   ───────────────────────────────────────────────────────────── */
   return (
-    <div className="flex flex-col min-h-[85vh] justify-between py-2">
+    <div className="flex flex-col min-h-full justify-between py-2 pb-20 sm:pb-24">
       <AnimatePresence>
         {permissionNotice && (
           <motion.div
