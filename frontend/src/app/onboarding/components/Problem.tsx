@@ -1,13 +1,13 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useRef } from 'react';
 import { useOnboarding } from '@/context/OnboardingContext';
-import { Camera, Upload, ChevronRight, UserCircle2, Sparkles, Check } from 'lucide-react';
+import { Camera, Upload, ChevronRight, UserCircle2, Sparkles, Flame, Check } from 'lucide-react';
 import { checkPhoneExists } from '@/lib/firebase-auth';
 
 const RING_NAME_SUGGESTIONS = ['TITAN', 'SHADOW', 'VIPER', 'THUNDER', 'IRONCLAD', 'STRIKER'];
-const PROFESSION_SUGGESTIONS = ['Engineer', 'Student', 'Athlete', 'Entrepreneur', 'Doctor', 'Coach'];
-const AGE_PRESETS = [18, 21, 24, 27, 30, 35, 40];
+const PROFESSION_SUGGESTIONS = ['Student', 'Engineer', 'Athlete', 'Entrepreneur', 'Doctor', 'Coach', 'Artist', 'Other'];
+const PROMISE_SUGGESTIONS = ['DISCIPLINE', 'RELENTLESS', 'CHAMPION', 'UNSTOPPABLE', 'WARRIOR', 'FOCUS'];
 
 const Identity: React.FC = () => {
     const { data, updateData, nextStep, prevStep } = useOnboarding();
@@ -28,7 +28,6 @@ const Identity: React.FC = () => {
                 video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
                 audio: false,
             });
-            // Poll briefly in case the video element hasn't committed to DOM yet
             let videoEl: HTMLVideoElement | null = null;
             const deadline = Date.now() + 1500;
             while (Date.now() < deadline) {
@@ -38,13 +37,11 @@ const Identity: React.FC = () => {
             if (!videoEl) { stream.getTracks().forEach(t => t.stop()); alert('Camera preview could not start. Try again.'); return; }
             videoEl.srcObject = stream;
             setCameraActive(true);
-            // Wait for metadata then play
             await new Promise<void>(resolve => {
                 videoEl!.onloadedmetadata = () => resolve();
-                // safety timeout
                 setTimeout(resolve, 1000);
             });
-            try { await videoEl.play(); } catch { /* autoplay may be blocked; still shows preview */ }
+            try { await videoEl.play(); } catch {}
         } catch (err: any) {
             const n = err?.name || '';
             if (n === 'NotAllowedError' || n === 'PermissionDeniedError') {
@@ -96,14 +93,41 @@ const Identity: React.FC = () => {
 
     const handleSignUp = async () => {
         setSignupError(null);
-        const name = (data.ringName || 'TITAN').trim();
-        const phone = data.phone.trim();
-        if (!name || !phone) {
-            setSignupError('Please enter your ring name and phone number to continue.');
+        const name = (data.ringName || '').trim();
+        const age = Number(data.age) || 0;
+        const profession = (data.profession || '').trim();
+        const promiseWord = (data.promiseWord || '').trim();
+        const phone = (data.phone || '').trim();
+
+        // 1. Name Validation: Mandatory, > 3 and < 20 limit
+        if (!name) {
+            setSignupError('Ring Name is mandatory. Please enter your name.');
+            return;
+        }
+        if (name.length < 3 || name.length > 20) {
+            setSignupError('Ring Name must be between 3 and 20 characters long.');
+            return;
+        }
+
+        // 2. Age Validation: Mandatory
+        if (!age || age < 10 || age > 100) {
+            setSignupError('Age is mandatory. Please select a valid age.');
+            return;
+        }
+
+        // 3. Promise Word Validation: Mandatory
+        if (!promiseWord || promiseWord.length < 2) {
+            setSignupError('Promise Word is mandatory. Choose or enter your commitment word.');
+            return;
+        }
+
+        // 4. Phone Validation: Mandatory
+        if (!phone || phone === '+91') {
+            setSignupError('Phone number is mandatory.');
             return;
         }
         if (!/^\+[1-9]\d{7,14}$/.test(phone)) {
-            setSignupError('Enter your phone number in international format, e.g. +919876543210.');
+            setSignupError('Enter your phone number in valid international format, e.g. +919876543210.');
             return;
         }
 
@@ -116,64 +140,78 @@ const Identity: React.FC = () => {
                 return;
             }
 
-            updateData({ ringName: name, phone });
+            updateData({ 
+                ringName: name, 
+                age: age,
+                profession: profession || 'Fighter',
+                promiseWord: promiseWord.toUpperCase(),
+                phone 
+            });
             nextStep();
+        } catch (e: any) {
+            setSignupError(e?.message || 'Could not verify phone number. Please try again.');
         } finally {
             setCheckingPhone(false);
         }
     };
 
     return (
-        <div className="flex flex-col min-h-full justify-between py-2 pb-20 sm:pb-24">
-            <header className="text-left mb-3 sm:mb-4">
-                <div className="text-[10px] font-black tracking-[3px] text-primary uppercase mb-1.5 sm:mb-2">FIGHTER PROFILE</div>
+        <div className="flex flex-col min-h-full justify-between py-2 pb-6 max-w-md mx-auto w-full">
+            <header className="text-left mb-2">
+                <div className="flex items-center gap-1.5 mb-1 text-[9px] font-black text-primary uppercase tracking-widest">
+                    <Sparkles size={12} />
+                    <span>STEP 01 ?" FIGHTER PROFILE</span>
+                </div>
                 <h1 className="text-2xl sm:text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
-                    Set up your <span className="text-primary">identity</span>.
+                    Setup your <span className="text-primary">Identity</span>
                 </h1>
-                <p className="text-white/50 mt-1.5 sm:mt-2 text-xs sm:text-sm leading-relaxed font-semibold">
-                    Customize your fighter handle, age and profession or tap a recommended tag.
+                <p className="text-white/60 text-xs mt-1 font-semibold leading-relaxed">
+                    Set up your athlete credentials to personalize your AI training protocol.
                 </p>
             </header>
 
-            <main className="flex-1 flex flex-col gap-4 py-1">
-                {/* Avatar Section */}
-                <div className="flex flex-col gap-2">
-                    {/* Large camera preview when active */}
+            <main className="flex-1 flex flex-col gap-3.5 my-auto overflow-y-auto pr-0.5">
+                {/* Photo / Avatar Capture */}
+                <div className="flex flex-col gap-1.5">
+                    <label className="text-[9px] font-black tracking-widest text-primary uppercase flex items-center justify-between">
+                        <span>Profile Picture (Optional)</span>
+                    </label>
+
                     {cameraActive ? (
-                        <div className="relative w-full rounded-3xl overflow-hidden bg-black border-2 border-primary shadow-[0_0_25px_rgba(226,255,59,0.2)]" style={{ aspectRatio: '4/3' }}>
-                            <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
-                            <div className="absolute inset-0 flex flex-col items-center justify-end p-4 gap-2 bg-gradient-to-t from-black/60 to-transparent">
+                        <div className="relative rounded-2xl overflow-hidden border border-primary/50 bg-black aspect-video flex flex-col items-center justify-center">
+                            <video ref={videoRef} playsInline muted className="w-full h-full object-cover -scale-x-100" />
+                            <div className="absolute bottom-2 flex items-center gap-3">
                                 <button
                                     type="button"
                                     onClick={capturePhoto}
-                                    className="w-16 h-16 rounded-full bg-primary border-4 border-white shadow-[0_0_20px_rgba(226,255,59,0.5)] flex items-center justify-center active:scale-95 transition-transform"
+                                    className="w-14 h-14 rounded-full bg-primary border-4 border-white shadow-[0_0_20px_rgba(226,255,59,0.5)] flex items-center justify-center active:scale-95 transition-transform"
                                 >
-                                    <Camera size={24} className="text-black" />
+                                    <Camera size={20} className="text-black" />
                                 </button>
-                                <button type="button" onClick={stopCamera} className="text-[9px] font-black text-white/60 uppercase tracking-wider">Cancel</button>
+                                <button type="button" onClick={stopCamera} className="text-[9px] font-black text-white/80 bg-black/60 px-2 py-1 rounded uppercase tracking-wider">Cancel</button>
                             </div>
                         </div>
                     ) : (
-                        <div className="flex items-center gap-3 p-3 rounded-2xl bg-white/[0.02] border border-white/5">
-                            <div className="relative w-16 h-16 rounded-full border-2 border-primary overflow-hidden shadow-[0_0_20px_rgba(var(--primary-rgb),0.25)] bg-white/5 flex items-center justify-center shrink-0">
+                        <div className="flex items-center gap-3 p-2.5 rounded-2xl bg-white/[0.02] border border-white/5">
+                            <div className="relative w-14 h-14 rounded-full border-2 border-primary overflow-hidden shadow-[0_0_15px_rgba(226,255,59,0.25)] bg-white/5 flex items-center justify-center shrink-0">
                                 {previewUrl ? (
                                     <img src={previewUrl} className="w-full h-full object-cover" alt="Preview" />
                                 ) : (
-                                    <UserCircle2 size={36} className="text-white/20" />
+                                    <UserCircle2 size={32} className="text-white/20" />
                                 )}
                             </div>
                             <div className="flex-1 flex gap-2">
                                 <button
                                     type="button"
                                     onClick={startCamera}
-                                    className="flex-1 py-2.5 px-3 rounded-xl border border-primary/50 bg-primary/10 text-primary font-bold text-[9px] tracking-wider flex items-center justify-center gap-1.5 hover:bg-primary/20 transition-all active:scale-95"
+                                    className="flex-1 py-2 px-2.5 rounded-xl border border-primary/50 bg-primary/10 text-primary font-bold text-[9px] tracking-wider flex items-center justify-center gap-1 hover:bg-primary/20 transition-all active:scale-95"
                                 >
-                                    <Camera size={12} /> {previewUrl ? 'RETAKE' : 'TAKE PHOTO'}
+                                    <Camera size={12} /> {previewUrl ? 'RETAKE' : 'CAMERA'}
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => fileInputRef.current?.click()}
-                                    className="flex-1 py-2.5 px-3 rounded-xl border border-white/10 text-white/80 font-bold text-[9px] tracking-wider flex items-center justify-center gap-1.5 hover:bg-white/5 transition-all active:scale-95"
+                                    className="flex-1 py-2 px-2.5 rounded-xl border border-white/10 text-white/80 font-bold text-[9px] tracking-wider flex items-center justify-center gap-1 hover:bg-white/5 transition-all active:scale-95"
                                 >
                                     <Upload size={12} /> GALLERY
                                 </button>
@@ -183,35 +221,39 @@ const Identity: React.FC = () => {
                     )}
                 </div>
 
-                {/* Form Fields & Interactive Menus */}
-                <div className="flex flex-col gap-3.5">
-                    {/* Ring Name */}
-                    <div className="flex flex-col gap-1.5">
+                {/* Form Fields Container */}
+                <div className="flex flex-col gap-3">
+                    {/* 1. Ring Name (MANDATORY: > 3 and < 20 limit) */}
+                    <div className="flex flex-col gap-1">
                         <div className="flex justify-between items-center">
                             <label className="text-[9px] font-black tracking-widest text-primary uppercase flex items-center gap-1">
-                                Ring Name <span className="text-[8px] text-white/40 font-bold">(RECOMMENDED: TITAN)</span>
+                                Ring Name <span className="text-[#E2FF3B]">*</span>
+                                <span className="text-[8px] text-white/40 font-bold">(3-20 CHARS MANDATORY)</span>
                             </label>
-                            <span className="text-[8px] bg-primary/20 text-primary font-black px-2 py-0.5 rounded-full uppercase">Most Picked</span>
+                            <span className="text-[8px] text-white/40 font-mono">
+                                {(data.ringName || '').length}/20
+                            </span>
                         </div>
                         <input
                             type="text"
-                            placeholder="e.g. TITAN"
+                            placeholder="ENTER YOUR RING NAME"
+                            maxLength={20}
                             value={data.ringName || ''}
                             onChange={(e) => {
                                 setSignupError(null);
                                 setExistingAccount(false);
                                 updateData({ ringName: e.target.value });
                             }}
-                            className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2.5 text-base font-black text-white outline-none focus:border-primary transition-all tracking-wider"
+                            className="w-full bg-black/50 border border-white/15 rounded-xl px-3 py-2.5 text-sm font-black text-white outline-none focus:border-primary transition-all tracking-wider uppercase placeholder:text-white/20"
                         />
-                        {/* Quick Presets */}
-                        <div className="flex flex-wrap gap-1.5 mt-0.5">
+                        {/* Quick Name Presets */}
+                        <div className="flex flex-wrap gap-1 mt-0.5">
                             {RING_NAME_SUGGESTIONS.map((preset) => (
                                 <button
                                     key={preset}
                                     type="button"
                                     onClick={() => updateData({ ringName: preset })}
-                                    className={`text-[8px] font-black px-2.5 py-1 rounded-lg border uppercase transition-all ${
+                                    className={`text-[8px] font-black px-2 py-0.5 rounded-md border uppercase transition-all ${
                                         data.ringName === preset
                                             ? 'bg-primary text-black border-primary'
                                             : 'bg-white/[0.03] border-white/10 text-white/60 hover:text-white'
@@ -223,32 +265,40 @@ const Identity: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Age & Profession Grid */}
-                    <div className="grid grid-cols-2 gap-3">
-                        {/* Age */}
-                        <div className="flex flex-col gap-1.5">
-                            <label className="text-[9px] font-black tracking-widest text-primary uppercase">Age</label>
+                    {/* 2. Age & Profession Grid */}
+                    <div className="grid grid-cols-2 gap-2.5">
+                        {/* Age (MANDATORY) */}
+                        <div className="flex flex-col gap-1">
+                            <label className="text-[9px] font-black tracking-widest text-primary uppercase">
+                                Age <span className="text-[#E2FF3B]">*</span>
+                            </label>
                             <select
                                 value={data.age || 25}
-                                onChange={(e) => updateData({ age: Number(e.target.value) })}
-                                className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm font-bold text-white outline-none focus:border-primary transition-all"
+                                onChange={(e) => {
+                                    setSignupError(null);
+                                    updateData({ age: Number(e.target.value) });
+                                }}
+                                className="w-full bg-black/50 border border-white/15 rounded-xl px-3 py-2 text-xs font-bold text-white outline-none focus:border-primary transition-all"
                             >
                                 {Array.from({ length: 65 }, (_, i) => i + 15).map((a) => (
                                     <option key={a} value={a} className="bg-zinc-900 text-white">
-                                        {a} Years
+                                        {a} Years Old
                                     </option>
                                 ))}
                             </select>
                         </div>
 
-                        {/* Profession */}
-                        <div className="flex flex-col gap-1.5">
-                            <label className="text-[9px] font-black tracking-widest text-primary uppercase">Profession</label>
+                        {/* Profession (OPTIONAL) */}
+                        <div className="flex flex-col gap-1">
+                            <label className="text-[9px] font-black tracking-widest text-white/60 uppercase">
+                                Profession <span className="text-[8px] text-white/30">(Optional)</span>
+                            </label>
                             <select
-                                value={data.profession || 'Engineer'}
+                                value={data.profession || ''}
                                 onChange={(e) => updateData({ profession: e.target.value })}
-                                className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm font-bold text-white outline-none focus:border-primary transition-all"
+                                className="w-full bg-black/50 border border-white/15 rounded-xl px-3 py-2 text-xs font-bold text-white outline-none focus:border-primary transition-all"
                             >
+                                <option value="" className="bg-zinc-900 text-white/50">Select (Optional)</option>
                                 {PROFESSION_SUGGESTIONS.map((prof) => (
                                     <option key={prof} value={prof} className="bg-zinc-900 text-white">
                                         {prof}
@@ -258,9 +308,50 @@ const Identity: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Phone Number */}
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-[9px] font-black tracking-widest text-primary uppercase">Phone Number</label>
+                    {/* 3. Promise Word (MANDATORY) */}
+                    <div className="flex flex-col gap-1">
+                        <div className="flex justify-between items-center">
+                            <label className="text-[9px] font-black tracking-widest text-primary uppercase flex items-center gap-1">
+                                <Flame size={11} className="text-primary" />
+                                <span>Sacred Promise Word <span className="text-[#E2FF3B]">*</span></span>
+                            </label>
+                            <span className="text-[8px] bg-primary/10 text-primary font-black px-1.5 py-0.5 rounded uppercase">Mandatory</span>
+                        </div>
+                        <input
+                            type="text"
+                            placeholder="e.g. RELENTLESS, DISCIPLINE"
+                            maxLength={20}
+                            value={data.promiseWord || ''}
+                            onChange={(e) => {
+                                setSignupError(null);
+                                updateData({ promiseWord: e.target.value.toUpperCase() });
+                            }}
+                            className="w-full bg-black/50 border border-white/15 rounded-xl px-3 py-2.5 text-sm font-black text-[#E2FF3B] outline-none focus:border-primary transition-all tracking-wider uppercase placeholder:text-white/20"
+                        />
+                        {/* Quick Promise Word Presets */}
+                        <div className="flex flex-wrap gap-1 mt-0.5">
+                            {PROMISE_SUGGESTIONS.map((word) => (
+                                <button
+                                    key={word}
+                                    type="button"
+                                    onClick={() => updateData({ promiseWord: word })}
+                                    className={`text-[8px] font-black px-2 py-0.5 rounded-md border uppercase transition-all ${
+                                        data.promiseWord === word
+                                            ? 'bg-primary text-black border-primary'
+                                            : 'bg-white/[0.03] border-white/10 text-white/60 hover:text-white'
+                                    }`}
+                                >
+                                    {word}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* 4. Phone Number (MANDATORY) */}
+                    <div className="flex flex-col gap-1">
+                        <label className="text-[9px] font-black tracking-widest text-primary uppercase">
+                            Phone Number <span className="text-[#E2FF3B]">*</span>
+                        </label>
                         <input
                             type="tel"
                             placeholder="+91..."
@@ -269,30 +360,32 @@ const Identity: React.FC = () => {
                                 setSignupError(null);
                                 updateData({ phone: e.target.value });
                             }}
-                            className="w-full bg-black/40 border border-white/10 rounded-xl px-3.5 py-2.5 text-base font-bold text-white outline-none focus:border-primary transition-all tracking-tight"
+                            className="w-full bg-black/50 border border-white/15 rounded-xl px-3 py-2 text-sm font-bold text-white outline-none focus:border-primary transition-all tracking-tight"
                         />
                     </div>
                 </div>
 
                 {signupError && (
-                    <p className={`text-[11px] font-bold text-center leading-relaxed ${existingAccount ? 'text-primary' : 'text-red-400'}`}>{signupError}</p>
+                    <div className={`p-2.5 rounded-xl border text-xs font-bold text-center leading-relaxed ${existingAccount ? 'bg-primary/10 border-primary text-primary' : 'bg-red-500/10 border-red-500/40 text-red-400'}`}>
+                        {signupError}
+                    </div>
                 )}
                 {existingAccount && (
-                    <button type="button" onClick={() => window.location.assign('/login')} className="btn-primary w-full h-12 flex items-center justify-center gap-2 text-sm">
-                        LOG IN TO EXISTING ACCOUNT <ChevronRight size={18} />
+                    <button type="button" onClick={() => window.location.assign('/login')} className="btn-primary w-full h-11 flex items-center justify-center gap-2 text-xs">
+                        LOG IN TO EXISTING ACCOUNT <ChevronRight size={16} />
                     </button>
                 )}
             </main>
 
-            <footer className="mt-4 flex flex-col gap-2.5">
+            <footer className="mt-3 flex flex-col gap-2">
                 <button
                     onClick={handleSignUp}
                     disabled={checkingPhone}
-                    className="btn-primary w-full h-14 flex items-center justify-center gap-2 text-sm disabled:opacity-50"
+                    className="btn-primary w-full h-12 flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider disabled:opacity-50 shadow-[0_0_20px_rgba(226,255,59,0.3)]"
                 >
-                    {checkingPhone ? 'CHECKING NUMBER...' : 'CONTINUE'} <ChevronRight size={18} />
+                    {checkingPhone ? 'CHECKING NUMBER...' : 'CONFIRM & CONTINUE'} <ChevronRight size={16} />
                 </button>
-                <button onClick={prevStep} className="text-[10px] font-black text-white/40 hover:text-white uppercase tracking-widest py-1 mx-auto">
+                <button onClick={prevStep} className="text-[10px] font-black text-white/40 hover:text-white uppercase tracking-widest py-0.5 mx-auto">
                     Back
                 </button>
             </footer>

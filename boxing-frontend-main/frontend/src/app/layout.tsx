@@ -1,5 +1,6 @@
-import type { Metadata, Viewport } from "next";
+﻿import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { ReferralCapture } from "@/components/ReferralCapture";
 
 export const metadata: Metadata = {
   title: "SPARAI - AI Combat & Boxing Coach",
@@ -28,7 +29,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {/* Load Space Grotesk at runtime — avoids build-time Google Fonts network failure */}
+        {/* Load Space Grotesk at runtime */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         {/* eslint-disable-next-line @next/next/no-page-custom-font */}
@@ -38,6 +39,7 @@ export default function RootLayout({
         />
       </head>
       <body className="font-sans antialiased bg-bg-dark text-white">
+        <ReferralCapture />
         {children}
       </body>
     </html>

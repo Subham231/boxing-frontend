@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -15,13 +15,13 @@ import { SparFreePromoModal } from '@/components/ui/SparFreePromoModal';
 import { PwaInstallModal } from '@/components/ui/PwaInstallModal';
 import { useFirebaseUser } from '@/lib/useFirebaseUser';
 
-// ─────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // PUBLIC marketing home page (sparai.in). Must stay a real, crawlable,
-// non-gated page — no auth check, no live personal data. The "phone
+// non-gated page â€” no auth check, no live personal data. The "phone
 // preview" below is a static, clearly-labeled DEMO MOCKUP of what the app
 // looks like once logged in. It is not the real /dashboard, and nothing
 // inside the actual app is touched by this file.
-// ─────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
@@ -37,9 +37,9 @@ const QUICK_ACTIONS = [
 ];
 
 const LEADERBOARD = [
-  { rank: '🥇', name: 'Ishaan R.' },
-  { rank: '🥈', name: 'Marcus T.' },
-  { rank: '🥉', name: 'Priya K.' },
+  { rank: 'ðŸ¥‡', name: 'Ishaan R.' },
+  { rank: 'ðŸ¥ˆ', name: 'Marcus T.' },
+  { rank: 'ðŸ¥‰', name: 'Priya K.' },
 ];
 
 const WEEKLY_RINGS = [
@@ -52,10 +52,10 @@ const MINI_STATS = [
   { label: 'Weekly Activity', value: '+14%' },
   { label: 'Analysis Score', value: '87/100' },
   { label: 'Training Time', value: '4h 20m' },
-  { label: 'Punch Trend', value: '↑ Sharper' },
+  { label: 'Punch Trend', value: 'â†‘ Sharper' },
 ];
 
-// Static demo content for the tabbed "Feature Deep Dive" section — every
+// Static demo content for the tabbed "Feature Deep Dive" section â€” every
 // feature gets its own dedicated tab per the spec, but data here is
 // illustrative/fixed since this is the public marketing page (no login).
 const DEEP_DIVE_TABS = [
@@ -74,7 +74,7 @@ const DEEP_DIVE_TABS = [
     id: 'planner', label: 'Planner', icon: CalendarDays,
     stats: [
       { k: 'Protocol', v: 'Speed & Power' },
-      { k: 'Week / Day', v: 'Week 3 · Day 4' },
+      { k: 'Week / Day', v: 'Week 3 Â· Day 4' },
       { k: 'Difficulty', v: 'Intermediate' },
       { k: 'Weekly Progress', v: '4 of 6 sessions' },
       { k: 'Generations Left', v: '2 this week' },
@@ -143,7 +143,7 @@ const DEEP_DIVE_TABS = [
   },
 ];
 
-// One row per major app feature — icon-based "visual" card + written
+// One row per major app feature â€” icon-based "visual" card + written
 // description, rendered one after another below the two previews above.
 const FEATURE_SHOWCASE = [
   {
@@ -154,10 +154,10 @@ const FEATURE_SHOWCASE = [
   {
     id: 'planner', icon: CalendarDays, image: '/images/promos/guru_tactics.jpg', title: 'Tactical Planner',
     description: "A weekly training protocol built around your goals and experience level — today's workout, this week's roadmap, and recovery days all mapped out for you.",
-    stat: { label: 'This Week', value: 'Day 4 of 6', sub: 'Week 3 · Intermediate' },
+    stat: { label: 'This Week', value: 'Day 4 of 6', sub: 'Week 3 • Intermediate' },
   },
   {
-    id: 'grind', icon: Flame, image: '/images/promos/vision_hud.jpg', title: 'Daily Grind',
+    id: 'grind', icon: Flame, image: '/images/promos/daily_grind.jpg', title: 'Daily Grind',
     description: "Every exercise for today broken into sets, reps, and rest time — check them off as you go and watch your completion bar fill in real time.",
     stat: { label: 'Today', value: '2 of 6 done', sub: '32 min estimated' },
   },
@@ -167,22 +167,22 @@ const FEATURE_SHOWCASE = [
     stat: { label: 'Current Skill', value: '64% complete', sub: 'Slip & Counter' },
   },
   {
-    id: 'reflex', icon: Activity, image: '/images/promos/spar_arena.jpg', title: 'Reflex Enhancer',
+    id: 'reflex', icon: Activity, image: '/images/promos/reflex_enhancer.jpg', title: 'Reflex Enhancer',
     description: 'Fast-paced reaction drills that sharpen how quickly you see and respond — your best time, weekly average, and rank against other fighters are all tracked automatically.',
     stat: { label: 'Personal Best', value: '198 ms', sub: 'Rank #12 this week' },
   },
   {
-    id: 'leaderboard', icon: Trophy, image: '/images/promos/spar_arena.jpg', title: 'Leaderboards',
+    id: 'leaderboard', icon: Trophy, image: '/images/promos/leaderboard_rank.jpg', title: 'Leaderboards',
     description: 'Separate rankings for overall training, reflex speed, and combo mastery, updated live each week — see exactly where you stand and who to chase.',
     stat: { label: 'Fighter Rank', value: '#47', sub: 'Season 4' },
   },
   {
-    id: 'analytics', icon: BarChart3, image: '/images/promos/vision_hud.jpg', title: 'Performance Analytics',
+    id: 'analytics', icon: BarChart3, image: '/images/promos/performance_analytics.jpg', title: 'Performance Analytics',
     description: "Weekly and monthly graphs of your training time, streaks, and analysis scores — so improvement isn't just a feeling, it's a number you can see move.",
     stat: { label: 'Performance Score', value: '87/100', sub: '+14% this week' },
   },
   {
-    id: 'subscription-feature', icon: Crown, image: '/images/promos/guru_tactics.jpg', title: 'Elite Subscription',
+    id: 'subscription-feature', icon: Crown, image: '/images/promos/elite_subscription.jpg', title: 'Elite Subscription',
     description: 'Unlock unlimited AI analyses, unlimited weekly planner regenerations, and premium Guru skills with an Elite membership — cancel anytime.',
     stat: { label: 'Elite Plan', value: 'Unlimited usage', sub: '18 days remaining' },
   },
@@ -216,7 +216,7 @@ const PRICING_PLANS = [
     features: ['3 AI Video Analyses / day', '3 Planner Generations / week', '3 Live Spars / day'] 
   },
   {
-    name: 'SparAI Elite 👑', 
+    name: 'SparAI Elite ðŸ‘‘', 
     price: '', 
     originalPrice: '',
     discountTag: '60% OFF',
@@ -227,16 +227,16 @@ const PRICING_PLANS = [
 ];
 
 const SECURITY_POINTS = [
-  { title: 'Phone-Only Sign-In', body: 'Firebase Phone Auth verifies you with a one-time code — Sparai never creates or stores a password.' },
+  { title: 'Phone-Only Sign-In', body: 'Firebase Phone Auth verifies you with a one-time code â€” Sparai never creates or stores a password.' },
   { title: 'Database & Encryption', body: 'Your profile and training data live in Supabase, encrypted at rest and in transit (TLS/SSL) between your device and our servers.' },
-  { title: 'Payments via Razorpay', body: 'Subscription payments are handled by Razorpay, a PCI-DSS compliant processor — Sparai never sees or stores your card details.' },
+  { title: 'Payments via Razorpay', body: 'Subscription payments are handled by Razorpay, a PCI-DSS compliant processor â€” Sparai never sees or stores your card details.' },
 ];
 
 const JOURNEY_STAGES = [
-  { id: 'day1', label: 'Day 1', body: 'Onboarding builds your profile — goals, experience, equipment — and your first training session is generated around you.' },
+  { id: 'day1', label: 'Day 1', body: 'Onboarding builds your profile â€” goals, experience, equipment â€” and your first training session is generated around you.' },
   { id: 'week1', label: 'Week 1', body: 'Your first AI form analyses land. You start seeing concretely what to fix, not just a feeling that something\u2019s off.' },
   { id: 'month1', label: 'Month 1', body: 'Reflex times trend down, technique scores trend up, and a full month of streak and session data starts telling a clear story.' },
-  { id: 'champion', label: 'Champion', body: 'Consistent training, tracked and adjusted week over week — the compounding result of training smarter, not just harder.' },
+  { id: 'champion', label: 'Champion', body: 'Consistent training, tracked and adjusted week over week â€” the compounding result of training smarter, not just harder.' },
 ];
 
 const JOURNEY_MILESTONES = ['Better Accuracy', 'Faster Reflexes', 'More Power', 'Better Technique', 'Higher Confidence'];
@@ -249,12 +249,12 @@ const AI_COACH_LINES = [
 ];
 
 const FIGHTER_TYPES = [
-  { id: 'beginner', label: 'Beginner', body: 'Start with fundamentals — stance, guard, and basic combinations — with a plan that scales up as your technique score improves.' },
+  { id: 'beginner', label: 'Beginner', body: 'Start with fundamentals â€” stance, guard, and basic combinations â€” with a plan that scales up as your technique score improves.' },
   { id: 'intermediate', label: 'Intermediate', body: 'Sharpen technique and combinations with tactical planning, form analysis, and reflex drills tuned to close specific gaps.' },
   { id: 'professional', label: 'Professional', body: 'Fine-tune power, accuracy, and consistency with detailed session-over-session analytics and unlimited AI analysis on Elite.' },
-  { id: 'fitness', label: 'Fitness Boxing', body: 'Use the Daily Grind and reflex drills for a structured, trackable workout — no competitive goals required.' },
+  { id: 'fitness', label: 'Fitness Boxing', body: 'Use the Daily Grind and reflex drills for a structured, trackable workout â€” no competitive goals required.' },
   { id: 'kickboxing', label: 'Kickboxing', body: 'Apply the same form-analysis and reflex training approach to kickboxing fundamentals and combinations.' },
-  { id: 'boxing', label: 'Boxing', body: 'The core Sparai experience — AI form analysis, tactical planning, Guru lessons, and leaderboard ranking built around boxing.' },
+  { id: 'boxing', label: 'Boxing', body: 'The core Sparai experience â€” AI form analysis, tactical planning, Guru lessons, and leaderboard ranking built around boxing.' },
 ];
 
 const AI_PIPELINE = [
@@ -266,7 +266,7 @@ const AI_PIPELINE = [
   { step: 'Creates Training Plan', body: 'Your plan adjusts to reinforce whatever needs the most work.' },
 ];
 
-// Honest, verifiable product facts — deliberately not invented usage/growth
+// Honest, verifiable product facts â€” deliberately not invented usage/growth
 // numbers (e.g. "5,000+ sessions"), since Sparai has no audited figures to
 // back those claims yet.
 const PRODUCT_FACTS = [
@@ -278,17 +278,17 @@ const PRODUCT_FACTS = [
 
 const WHY_PEOPLE_STAY = [
   { title: 'Clarity, not guesswork', body: 'You stop wondering what you\u2019re doing wrong and start seeing it, session by session.' },
-  { title: 'Reflexes that actually improve', body: 'Reaction-time drills are tracked, so faster hands aren\u2019t just a feeling — they\u2019re a number going down.' },
+  { title: 'Reflexes that actually improve', body: 'Reaction-time drills are tracked, so faster hands aren\u2019t just a feeling â€” they\u2019re a number going down.' },
   { title: 'A plan that adapts to you', body: 'Your weekly plan reflects your actual level and progress, not a generic template.' },
   { title: 'Discipline that compounds', body: 'Streaks and weekly tracking turn a few good sessions into a consistent habit.' },
 ];
 
 const FAQ_ITEMS = [
-  { q: 'How accurate is Sparai\u2019s AI analysis?', a: 'Sparai uses pose-detection technology to track 33 body landmarks per frame, scoring your technique, accuracy, and power based on your recorded video. It\u2019s a training aid to help you spot patterns — not a certified coaching replacement.' },
+  { q: 'How accurate is Sparai\u2019s AI analysis?', a: 'Sparai uses pose-detection technology to track 33 body landmarks per frame, scoring your technique, accuracy, and power based on your recorded video. It\u2019s a training aid to help you spot patterns â€” not a certified coaching replacement.' },
   { q: 'Do I need boxing experience to start?', a: 'No. Onboarding asks about your experience level and builds your plan around it, whether you\u2019re a complete beginner or training competitively.' },
-  { q: 'Can beginners use the AI Analysis feature?', a: 'Yes — it\u2019s designed to be useful at every level, from cleaning up basic stance and guard to refining advanced combinations.' },
+  { q: 'Can beginners use the AI Analysis feature?', a: 'Yes â€” it\u2019s designed to be useful at every level, from cleaning up basic stance and guard to refining advanced combinations.' },
   { q: 'How does the AI analysis actually work?', a: 'You record a short clip, Sparai\u2019s pose-detection model tracks your movement frame by frame, measures it against good technique, and returns a score with specific feedback.' },
-  { q: 'Can I cancel my subscription anytime?', a: 'Yes. Subscriptions can be cancelled at any time from your account — see our Refund Policy for details on billing.' },
+  { q: 'Can I cancel my subscription anytime?', a: 'Yes. Subscriptions can be cancelled at any time from your account â€” see our Refund Policy for details on billing.' },
 ];
 
 function Ring({ pct, strokeClass }: { pct: number; strokeClass: string }) {
@@ -576,8 +576,8 @@ export default function HomeContent() {
       {/* Interactive Mobile-Ready Free Spar & Deals Popup */}
       <SparFreePromoModal />
 
-      {/* ── Boxing-themed animated background — HOME PAGE ONLY ── */}
-      {/* NOTE: No overflow-hidden here — that clips the negatively-positioned orbs */}
+      {/* â”€â”€ Boxing-themed animated background â€” HOME PAGE ONLY â”€â”€ */}
+      {/* NOTE: No overflow-hidden here â€” that clips the negatively-positioned orbs */}
       <div className="pointer-events-none absolute inset-0" aria-hidden="true">
 
         {/* Ambient glow orbs */}
@@ -593,7 +593,7 @@ export default function HomeContent() {
           animate={{ x: [0, -32, 0], y: [0, -22, 0] }}
           transition={{ duration: 22, repeat: Infinity, ease: 'easeInOut' }}
         />
-        {/* Third orb — hidden on mobile to save GPU */}
+        {/* Third orb â€” hidden on mobile to save GPU */}
         <motion.div
           className="absolute bottom-[5%] left-[28%] w-[300px] h-[300px] rounded-full bg-primary/[0.10] blur-[70px] hidden sm:block"
           style={{ willChange: 'transform' }}
@@ -601,7 +601,7 @@ export default function HomeContent() {
           transition={{ duration: 26, repeat: Infinity, ease: 'easeInOut' }}
         />
 
-        {/* Static grid — zero CPU cost, purely decorative */}
+        {/* Static grid â€” zero CPU cost, purely decorative */}
         <div
           className="absolute inset-0 opacity-[0.03]"
           style={{
@@ -769,7 +769,7 @@ export default function HomeContent() {
           <div className="text-white/60 text-sm sm:text-base font-medium leading-relaxed max-w-2xl space-y-2">
             <p>Most fighters train hard. Very few train intelligently.</p>
             <p>Most athletes don&apos;t have access to a professional coach every single day.</p>
-            <p>Sparai bridges that gap with AI — watching your technique, studying your movement, measuring your progress, and guiding your improvement every day.</p>
+            <p>Sparai bridges that gap with AI â€” watching your technique, studying your movement, measuring your progress, and guiding your improvement every day.</p>
             <p className="text-white font-black">Instead of guessing what to improve, you&apos;ll know exactly what to improve.</p>
           </div>
         </motion.section>
@@ -810,7 +810,7 @@ export default function HomeContent() {
               <ul className="flex flex-col gap-2.5">
                 {['Random practice', 'No feedback on form', 'Slow, unclear improvement', 'Mistakes you never notice'].map((t) => (
                   <li key={t} className="flex items-start gap-2 text-sm text-white/50 font-medium">
-                    <span className="text-red-400 mt-0.5">✕</span> {t}
+                    <span className="text-red-400 mt-0.5">âœ•</span> {t}
                   </li>
                 ))}
               </ul>
@@ -828,7 +828,7 @@ export default function HomeContent() {
           </div>
         </motion.section>
 
-        {/* ── Phone-mockup dashboard preview (static demo data) ── */}
+        {/* â”€â”€ Phone-mockup dashboard preview (static demo data) â”€â”€ */}
         <motion.section
           initial="hidden"
           whileInView="show"
@@ -898,7 +898,7 @@ export default function HomeContent() {
               {/* Today's tactical protocol */}
               <div className="rounded-[20px] p-4 bg-white/[0.04] border border-white/10">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[9px] font-black uppercase tracking-widest text-white/50">Today · Week 3, Day 4</span>
+                  <span className="text-[9px] font-black uppercase tracking-widest text-white/50">Today Â· Week 3, Day 4</span>
                   <span className="text-[9px] font-black uppercase tracking-widest text-primary">Intermediate</span>
                 </div>
                 <p className="text-sm font-black uppercase mb-1">Speed & Combo Circuit</p>
@@ -940,14 +940,14 @@ export default function HomeContent() {
                     <Video className="w-3.5 h-3.5 text-primary" /> AI Analysis
                   </div>
                   <p className="text-lg font-black text-primary leading-none">87<span className="text-[9px] text-white/40 font-bold"> /100</span></p>
-                  <p className="text-[8px] font-bold uppercase tracking-wide text-white/40">Last session · +6% technique</p>
+                  <p className="text-[8px] font-bold uppercase tracking-wide text-white/40">Last session Â· +6% technique</p>
                 </div>
                 <div className="rounded-[20px] p-3 bg-white/[0.04] border border-white/10 flex flex-col gap-1.5">
                   <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-white/50 mb-0.5">
                     <Activity className="w-3.5 h-3.5 text-primary" /> Reflex
                   </div>
                   <p className="text-lg font-black text-primary leading-none">214<span className="text-[9px] text-white/40 font-bold"> ms</span></p>
-                  <p className="text-[8px] font-bold uppercase tracking-wide text-white/40">Best time · Rank #12 weekly</p>
+                  <p className="text-[8px] font-bold uppercase tracking-wide text-white/40">Best time Â· Rank #12 weekly</p>
                 </div>
               </div>
 
@@ -972,7 +972,7 @@ export default function HomeContent() {
                 <div>
                   <p className="text-[9px] font-black uppercase tracking-widest text-white/50 mb-1">AI Coach</p>
                   <p className="text-[11px] font-semibold text-white/80 leading-snug">
-                    &ldquo;Your jab accuracy improved 8% this week — one more session to hit Gold Rank.&rdquo;
+                    &ldquo;Your jab accuracy improved 8% this week â€” one more session to hit Gold Rank.&rdquo;
                   </p>
                 </div>
               </div>
@@ -1004,7 +1004,7 @@ export default function HomeContent() {
                     <GraduationCap className="w-3.5 h-3.5 text-primary" /> Guru
                   </div>
                   <p className="text-[10px] font-semibold text-white/80 leading-snug">Slip & Counter Fundamentals</p>
-                  <span className="text-[8px] font-bold uppercase tracking-widest text-white/40">Beginner · 9 min</span>
+                  <span className="text-[8px] font-bold uppercase tracking-widest text-white/40">Beginner Â· 9 min</span>
                 </div>
               </div>
 
@@ -1012,7 +1012,7 @@ export default function HomeContent() {
               <div className="rounded-[20px] p-4 bg-white/[0.04] border border-white/10 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center text-base">
-                    🏅
+                    ðŸ…
                   </div>
                   <div>
                     <p className="text-[9px] font-black uppercase tracking-widest text-white/50 mb-0.5">Latest Badge</p>
@@ -1026,7 +1026,7 @@ export default function HomeContent() {
               <div className="rounded-[20px] p-4 bg-gradient-to-br from-primary/10 to-transparent border border-primary/20 flex items-center justify-between">
                 <div>
                   <p className="text-[9px] font-black uppercase tracking-widest text-primary mb-1">Elite Plan</p>
-                  <p className="text-[10px] text-white/50 font-semibold">18 days remaining · Unlimited usage</p>
+                  <p className="text-[10px] text-white/50 font-semibold">18 days remaining Â· Unlimited usage</p>
                 </div>
                 <button className="h-8 px-3 rounded-xl bg-primary text-black text-[9px] font-black uppercase tracking-widest">
                   Manage
@@ -1050,7 +1050,7 @@ export default function HomeContent() {
             <h2 className="text-lg sm:text-xl font-black uppercase tracking-tight">Your personal AI coach</h2>
           </div>
           <p className="text-white/50 text-xs sm:text-sm font-medium mb-5 max-w-2xl">
-            Sparai isn&apos;t here to replace a coach — it&apos;s a coach that&apos;s available around the clock, giving you specific feedback after every session.
+            Sparai isn&apos;t here to replace a coach â€” it&apos;s a coach that&apos;s available around the clock, giving you specific feedback after every session.
           </p>
           <div className="flex flex-col gap-2.5 max-w-md">
             {AI_COACH_LINES.map((line, i) => (
@@ -1070,7 +1070,7 @@ export default function HomeContent() {
           </div>
         </motion.section>
 
-        {/* Feature deep-dive — every feature gets its own dedicated tab,
+        {/* Feature deep-dive â€” every feature gets its own dedicated tab,
             still static demo content, still no login required */}
         <motion.section
           id="explore"
@@ -1092,7 +1092,7 @@ export default function HomeContent() {
           <DeepDiveTabs />
         </motion.section>
 
-        {/* Feature-by-feature showcase — one section per app feature,
+        {/* Feature-by-feature showcase â€” one section per app feature,
             visual + written description, alternating sides */}
         <motion.section
           initial="hidden"
@@ -1147,7 +1147,7 @@ export default function HomeContent() {
           <AiPipeline />
         </motion.section>
 
-        {/* Data transparency — required for Google OAuth verification */}
+        {/* Data transparency â€” required for Google OAuth verification */}
         <motion.section
           initial="hidden"
           whileInView="show"
@@ -1161,7 +1161,7 @@ export default function HomeContent() {
           </h2>
           <p className="text-white/50 text-xs sm:text-sm font-medium mb-4 max-w-2xl">
             We only ask for what&apos;s needed to run the app. Here&apos;s exactly what we collect
-            and what it&apos;s used for — full detail is in our{' '}
+            and what it&apos;s used for â€” full detail is in our{' '}
             <Link href="/legal/privacy" className="text-primary underline underline-offset-2">Privacy Policy</Link>.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -1180,7 +1180,7 @@ export default function HomeContent() {
           </div>
         </motion.section>
 
-        {/* How it works — condensed */}
+        {/* How it works â€” condensed */}
         <motion.section
           initial="hidden"
           whileInView="show"
@@ -1193,8 +1193,8 @@ export default function HomeContent() {
             <Crown className="w-4 h-4 text-primary" /> How Sparai works
           </h2>
           <ol className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-white/60 text-xs sm:text-sm font-medium leading-relaxed">
-            <li className="rounded-xl bg-white/[0.03] border border-white/5 p-3"><span className="text-primary font-black">1.</span> Verify your number with a one-time code — no passwords.</li>
-            <li className="rounded-xl bg-white/[0.03] border border-white/5 p-3"><span className="text-primary font-black">2.</span> Tell us your goals — your program is built around you.</li>
+            <li className="rounded-xl bg-white/[0.03] border border-white/5 p-3"><span className="text-primary font-black">1.</span> Verify your number with a one-time code â€” no passwords.</li>
+            <li className="rounded-xl bg-white/[0.03] border border-white/5 p-3"><span className="text-primary font-black">2.</span> Tell us your goals â€” your program is built around you.</li>
             <li className="rounded-xl bg-white/[0.03] border border-white/5 p-3"><span className="text-primary font-black">3.</span> Train with guided sessions, AI form checks, reflex drills.</li>
             <li className="rounded-xl bg-white/[0.03] border border-white/5 p-3"><span className="text-primary font-black">4.</span> Track streaks and rank on the leaderboard, weekly.</li>
           </ol>
@@ -1239,7 +1239,7 @@ export default function HomeContent() {
         >
           <h2 className="text-lg sm:text-xl font-black uppercase tracking-tight mb-2">Real progress, not guesswork</h2>
           <p className="text-white/50 text-xs sm:text-sm font-medium mb-5 max-w-2xl">
-            What&apos;s actually inside the app — no invented numbers, just what Sparai does.
+            What&apos;s actually inside the app â€” no invented numbers, just what Sparai does.
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {PRODUCT_FACTS.map((f) => (
@@ -1268,7 +1268,7 @@ export default function HomeContent() {
           </div>
         </motion.section>
 
-        {/* Subscription plans — real pricing, matches /subscription exactly */}
+        {/* Subscription plans â€” real pricing, matches /subscription exactly */}
         <motion.section
           initial="hidden"
           whileInView="show"
@@ -1309,7 +1309,7 @@ export default function HomeContent() {
                       </span>
                     )}
                     <div className="flex items-baseline gap-1">
-                      <span className="text-xl font-black text-white">{launchReady ? (livePrices[plan.name] || plan.price) : '••••'}</span>
+                      <span className="text-xl font-black text-white">{launchReady ? (livePrices[plan.name] || plan.price) : 'â€¢â€¢â€¢â€¢'}</span>
                       {launchReady && <span className="text-[10px] font-bold text-white/40">{plan.period}</span>}
                     </div>
                   </div>
@@ -1345,13 +1345,13 @@ export default function HomeContent() {
             <div>
               <p className="text-xs font-black uppercase tracking-wide text-white/90">Refer 5 friends, get 14 days free</p>
               <p className="text-[11px] text-white/50 font-medium mt-0.5">
-                Share your referral code from the app — once 5 people sign up with it, you get a 14-day premium trial automatically.
+                Share your referral code from the app â€” once 5 people sign up with it, you get a 14-day premium trial automatically.
               </p>
             </div>
           </div>
         </motion.section>
 
-        {/* Security & Data — names the actual infra, for both users and
+        {/* Security & Data â€” names the actual infra, for both users and
             Google OAuth reviewers */}
         <motion.section
           initial="hidden"
@@ -1365,7 +1365,7 @@ export default function HomeContent() {
             <Lock className="w-4 h-4 text-primary" /> Your data is safe
           </h2>
           <p className="text-white/50 text-xs sm:text-sm font-medium mb-4 max-w-2xl">
-            Sparai is built on infrastructure that&apos;s encrypted by default — here&apos;s exactly what powers it.
+            Sparai is built on infrastructure that&apos;s encrypted by default â€” here&apos;s exactly what powers it.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {SECURITY_POINTS.map((point) => (
@@ -1419,7 +1419,7 @@ export default function HomeContent() {
 
         <footer className="py-8 border-t border-white/10 flex flex-col gap-5">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <p className="text-white/30 text-xs font-semibold">© {new Date().getFullYear()} Sparai. All rights reserved.</p>
+            <p className="text-white/30 text-xs font-semibold">Â© {new Date().getFullYear()} Sparai. All rights reserved.</p>
             <Link
               href="/onboarding"
               className="text-xs font-black uppercase tracking-widest text-white/50 hover:text-white flex items-center gap-1 transition-colors"
@@ -1429,13 +1429,13 @@ export default function HomeContent() {
           </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px] font-bold uppercase tracking-widest text-white/40">
             <Link href="/legal/privacy" className="hover:text-white transition-colors">Privacy Policy</Link>
-            <span className="text-white/15">•</span>
+            <span className="text-white/15">â€¢</span>
             <Link href="/legal/terms" className="hover:text-white transition-colors">Terms & Conditions</Link>
-            <span className="text-white/15">•</span>
+            <span className="text-white/15">â€¢</span>
             <Link href="/legal/security" className="hover:text-white transition-colors">Security</Link>
-            <span className="text-white/15">•</span>
+            <span className="text-white/15">â€¢</span>
             <Link href="/legal/refund" className="hover:text-white transition-colors">Refund Policy</Link>
-            <span className="text-white/15">•</span>
+            <span className="text-white/15">â€¢</span>
             <Link href="/legal/contact" className="hover:text-white transition-colors">Contact</Link>
           </div>
         </footer>

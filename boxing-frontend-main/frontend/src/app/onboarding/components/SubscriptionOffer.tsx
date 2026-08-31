@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -9,6 +9,7 @@ import { firebaseAuth } from '@/lib/firebase';
 import { applyReferralCode } from '@/lib/firebase-auth';
 import type { UserProfile } from '@/lib/firebase-auth';
 import { getUserProfile } from '@/lib/firebase-reflex';
+import { PENDING_REFERRAL_KEY } from '@/components/ReferralCapture';
 
 const SubscriptionOffer: React.FC = () => {
   const router = useRouter();
@@ -28,6 +29,19 @@ const SubscriptionOffer: React.FC = () => {
       if (!user) setProfileLoading(false);
     });
     return () => unsub();
+  }, []);
+
+  // Pre-fill referral code if saved from collaborator link
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const pending = localStorage.getItem(PENDING_REFERRAL_KEY);
+      if (pending && typeof pending === 'string') {
+        setReferralInput(pending.trim().toUpperCase());
+      }
+    } catch (err) {
+      console.warn('[SubscriptionOffer] Error reading pending referral:', err);
+    }
   }, []);
 
   // Pulls the profile (referral_code, referral_count, referral_bonus_5_claimed,
@@ -69,6 +83,12 @@ const SubscriptionOffer: React.FC = () => {
       // against Supabase server-side.
       await applyReferralCode(user, code);
       setReferralSuccess(true);
+
+      // Clean up saved referral from localStorage
+      try {
+        localStorage.removeItem(PENDING_REFERRAL_KEY);
+      } catch {}
+
       // Refresh so the progress bar / claimed state reflect the new referral.
       const fresh = await getUserProfile(user.uid);
       if (fresh) setProfile(fresh);
@@ -134,7 +154,7 @@ const SubscriptionOffer: React.FC = () => {
                     {rewardClaimed ? 'Reward claimed' : 'Refer 5 friends, get 30 days free'}
                   </span>
                 </span>
-                <span className="shrink-0 text-primary">{profileLoading ? '···' : `${progress} / 5`}</span>
+                <span className="shrink-0 text-primary">{profileLoading ? '...' : `${progress} / 5`}</span>
               </div>
               <div className="mt-1.5 h-2 rounded-full bg-white/10 overflow-hidden">
                 <div
@@ -159,7 +179,7 @@ const SubscriptionOffer: React.FC = () => {
 
               {referralSuccess ? (
                 <div className="flex-1 flex items-center justify-center rounded-xl border border-primary/20 bg-primary/10 px-2 py-3 text-center text-[9px] font-black uppercase tracking-[0.06em] text-primary leading-snug">
-                  Applied — trial active
+                  Applied ✓ trial active
                 </div>
               ) : (
                 <>
@@ -170,7 +190,7 @@ const SubscriptionOffer: React.FC = () => {
                       setReferralInput(e.target.value.toUpperCase());
                       setReferralError(null);
                     }}
-                    placeholder="Friend’s code"
+                    placeholder="Friend's code"
                     maxLength={8}
                     className="w-full min-w-0 bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-xs font-bold text-white outline-none focus:border-primary placeholder:text-white/25 tracking-[0.12em] uppercase"
                   />
@@ -200,7 +220,7 @@ const SubscriptionOffer: React.FC = () => {
               </div>
               <div className="flex-1 flex items-center justify-between gap-2 bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 min-h-[42px]">
                 {profileLoading ? (
-                  <span className="text-sm font-black text-white/30 tracking-[3px]">••••••</span>
+                  <span className="text-sm font-black text-white/30 tracking-[3px]">•••••••</span>
                 ) : (
                   <span className="text-sm font-black text-white tracking-[2px] truncate">
                     {profile?.referral_code ?? '—'}
