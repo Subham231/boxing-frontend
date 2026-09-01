@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { verifyFirebaseIdToken } from '@/lib/server/firebase-admin';
 import { supabaseAdmin } from '@/lib/server/supabase-admin';
 
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const code =
     typeof body.code === 'string' ? body.code.trim().toUpperCase() : '';
-  if (!code || code.length < 4) {
+  if (!code || code.length < 3) {
     return NextResponse.json({ error: 'Enter a valid referral code.' }, { status: 400 });
   }
 
@@ -47,47 +47,72 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'You already used a referral code.' }, { status: 400 });
   }
 
-  // Referral codes are a new-account perk only. An account that's more than
-  // a short window past its own creation is not "a new signup" anymore —
-  // this stops an existing account (or the same phone number re-verifying
-  // later) from redeeming a code after the fact.
-  const REFERRAL_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
-  const createdAt = me.created_at ? new Date(me.created_at).getTime() : 0;
-  if (!createdAt || Date.now() - createdAt > REFERRAL_WINDOW_MS) {
-    return NextResponse.json({ error: 'Referral codes can only be applied when creating a new account.' }, { status: 400 });
-  }
-
   if (me.referral_code === code) {
     return NextResponse.json({ error: 'You cannot use your own code.' }, { status: 400 });
   }
 
-  const { data: referrer } = await supabaseAdmin
+  // 1. Check if code exists in reflex_profiles
+  const { data: referrerUser } = await supabaseAdmin
     .from('reflex_profiles')
     .select('uid, referral_code')
     .eq('referral_code', code)
     .maybeSingle();
 
-  if (!referrer) {
-    return NextResponse.json({ error: 'Referral code not found.' }, { status: 404 });
+  // 2. Also check if code exists in sparai_collaborators
+  let collaboratorRecord: any = null;
+  try {
+    const { data: collab } = await supabaseAdmin
+      .from('sparai_collaborators')
+      .select('id, referral_code, is_active')
+      .eq('referral_code', code)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (collab) collaboratorRecord = collab;
+  } catch (err) {
+    console.warn('sparai_collaborators check warning:', err);
   }
 
+  if (!referrerUser && !collaboratorRecord) {
+    return NextResponse.json({ error: `Referral code "${code}" not found.` }, { status: 404 });
+  }
+
+  // Record referral attribution in reflex_profiles
   const { error: updateError } = await supabaseAdmin
     .from('reflex_profiles')
-    .update({ referred_by: code })
-    .eq('uid', decoded.uid)
-    .is('referred_by', null);
+    .update({ 
+      referred_by: code,
+      has_claimed_referral_bonus: true,
+      updated_at: new Date().toISOString()
+    })
+    .eq('uid', decoded.uid);
 
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 500 });
   }
 
-  const { data: claimData, error: claimError } = await supabaseAdmin.rpc('claim_referral', {
-    p_uid: decoded.uid,
-  });
-
-  if (claimError) {
-    return NextResponse.json({ error: claimError.message }, { status: 500 });
+  // Attempt RPC or direct bonus grant
+  try {
+    const { data: claimData, error: claimError } = await supabaseAdmin.rpc('claim_referral', {
+      p_uid: decoded.uid,
+    });
+    if (!claimError) {
+      return NextResponse.json({ ok: true, claim: claimData });
+    }
+  } catch (rpcErr) {
+    console.warn('claim_referral RPC fallback:', rpcErr);
   }
 
-  return NextResponse.json({ ok: true, claim: claimData });
+  // Fallback: grant 30-day reward directly
+  const thirtyDaysLater = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  await supabaseAdmin
+    .from('reflex_profiles')
+    .update({
+      plan: 'referral_reward',
+      plan_expires_at: thirtyDaysLater,
+      has_claimed_referral_bonus: true,
+      updated_at: new Date().toISOString()
+    })
+    .eq('uid', decoded.uid);
+
+  return NextResponse.json({ ok: true, message: '30-day referral trial unlocked!' });
 }

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -30,8 +30,26 @@ const SubscriptionOffer: React.FC = () => {
     return () => unsub();
   }, []);
 
-  // Pulls the profile (referral_code, referral_count, referral_bonus_5_claimed,
-  // plan/plan_expires_at) straight from Supabase via /api/reflex/me.
+  // Auto-fill referral input from localStorage or URL if user arrived via a collaborator's shared link
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const pendingCode = localStorage.getItem('sparai_pending_referral');
+      if (pendingCode && pendingCode.trim()) {
+        setReferralInput(pendingCode.trim().toUpperCase());
+      } else {
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlRef = urlParams.get('ref') || urlParams.get('referral');
+        if (urlRef && urlRef.trim()) {
+          setReferralInput(urlRef.trim().toUpperCase());
+        }
+      }
+    } catch (err) {
+      console.warn('Could not read pending referral code:', err);
+    }
+  }, []);
+
+  // Pulls the profile straight from Supabase via /api/reflex/me.
   useEffect(() => {
     if (!uid) return;
     let mounted = true;
@@ -40,6 +58,10 @@ const SubscriptionOffer: React.FC = () => {
       if (mounted) {
         setProfile(data);
         setProfileLoading(false);
+        if (data?.referred_by) {
+          setReferralSuccess(true);
+          setReferralInput(data.referred_by);
+        }
       }
     });
     return () => {
@@ -65,10 +87,12 @@ const SubscriptionOffer: React.FC = () => {
     setReferralError(null);
     setReferralLoading(true);
     try {
-      // Writes through /api/reflex/apply-referral, which validates the code
-      // against Supabase server-side.
+      // Writes through /api/reflex/apply-referral, which validates against both reflex_profiles and sparai_collaborators
       await applyReferralCode(user, code);
       setReferralSuccess(true);
+      try {
+        localStorage.removeItem('sparai_pending_referral');
+      } catch {}
       // Refresh so the progress bar / claimed state reflect the new referral.
       const fresh = await getUserProfile(user.uid);
       if (fresh) setProfile(fresh);
@@ -98,7 +122,7 @@ const SubscriptionOffer: React.FC = () => {
         <h1 className="mt-2 text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
           Choose your <span className="text-primary">edge</span>
         </h1>
-        <p className="mt-2 text-white/50 text-sm leading-relaxed font-semibold">
+        <p className="mt-2 text-xs font-semibold leading-relaxed text-white/50">
           Use your referral code to unlock the first 30 days, or pick a plan and set up your training stack.
         </p>
       </header>
@@ -134,7 +158,7 @@ const SubscriptionOffer: React.FC = () => {
                     {rewardClaimed ? 'Reward claimed' : 'Refer 5 friends, get 30 days free'}
                   </span>
                 </span>
-                <span className="shrink-0 text-primary">{profileLoading ? '···' : `${progress} / 5`}</span>
+                <span className="shrink-0 text-primary">{profileLoading ? '...' : `${progress} / 5`}</span>
               </div>
               <div className="mt-1.5 h-2 rounded-full bg-white/10 overflow-hidden">
                 <div
@@ -159,7 +183,7 @@ const SubscriptionOffer: React.FC = () => {
 
               {referralSuccess ? (
                 <div className="flex-1 flex items-center justify-center rounded-xl border border-primary/20 bg-primary/10 px-2 py-3 text-center text-[9px] font-black uppercase tracking-[0.06em] text-primary leading-snug">
-                  Applied — trial active
+                  Applied — 30-day trial active
                 </div>
               ) : (
                 <>
@@ -170,7 +194,7 @@ const SubscriptionOffer: React.FC = () => {
                       setReferralInput(e.target.value.toUpperCase());
                       setReferralError(null);
                     }}
-                    placeholder="Friend’s code"
+                    placeholder="Friend's code"
                     maxLength={8}
                     className="w-full min-w-0 bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-xs font-bold text-white outline-none focus:border-primary placeholder:text-white/25 tracking-[0.12em] uppercase"
                   />
@@ -181,7 +205,7 @@ const SubscriptionOffer: React.FC = () => {
                     type="button"
                     onClick={handleApplyReferral}
                     disabled={referralLoading || !referralInput.trim()}
-                    className="mt-2 w-full h-10 rounded-xl bg-primary text-black text-[9px] font-black uppercase tracking-[0.12em] disabled:opacity-50"
+                    className="mt-2 w-full h-10 rounded-xl bg-primary text-black text-[9px] font-black uppercase tracking-[0.12em] disabled:opacity-50 active:scale-95 transition-transform"
                   >
                     {referralLoading ? 'Applying...' : 'Apply'}
                   </button>
