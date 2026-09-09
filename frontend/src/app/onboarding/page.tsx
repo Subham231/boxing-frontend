@@ -10,6 +10,7 @@ import { ensureUserProfile } from '@/lib/firebase-auth';
 import { cacheProfileLocally } from '@/lib/profile-client';
 
 import Welcome from './components/Welcome';
+import FreestyleAnalysis from './components/FreestyleAnalysis';
 import Motivation from './components/Motivation';
 import FutureSelf from './components/FutureSelf';
 import BoxingMindset from './components/BoxingMindset';
@@ -61,9 +62,10 @@ const OnboardingFlow: React.FC = () => {
         }
     }, [isLoaded, router]);
 
-    // Deterministic 18-step psychological funnel
+    // Deterministic 19-step psychological funnel
     const screens = useMemo(() => [
         <Welcome key="welcome" />,
+        <FreestyleAnalysis key="freestyle-analysis" />,
         <Motivation key="motivation" />,
         <FutureSelf key="future-self" />,
         <BoxingMindset key="boxing-mindset" />,

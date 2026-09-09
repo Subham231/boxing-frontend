@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
@@ -208,7 +209,6 @@ export default function FreestyleAnalysis(): JSX.Element {
     smoothAngR.current = smoothAngR.current===0 ? median : smoothAngR.current + ALPHA*(median-smoothAngR.current);
     const sa = smoothAngR.current;
 
-    const dt = lastTsR.current ? now - lastTsR.current : 33;
     let av = 0;
     if (prevAngTsR.current !== null) {
       const dtS = (now - prevAngTsR.current) / 1000;
@@ -471,8 +471,11 @@ export default function FreestyleAnalysis(): JSX.Element {
         Math.round((powerScore+stanceScore+rotationScore+Math.round(avgKnee)+Math.round(avgWt)+Math.round(avgFt))/6);
 
       const res: MiniAnalysisResult = { totalScore, powerScore, stanceScore, reflexScore:0, rotationScore, punchCount:total, peakVelocity:peakV, avgVelocity:avgV };
-      // Persist for AnalysisMeritsReveal
-      try { localStorage.setItem('sparai_mini_analysis', JSON.stringify(res)); } catch {}
+      // Persist for AnalysisMeritsReveal and subsequent profile reveal
+      try {
+        localStorage.setItem('sparai_mini_analysis', JSON.stringify(res));
+        localStorage.setItem('boxing_onboarding_analysis_result', JSON.stringify(res));
+      } catch {}
       setResult(res);
       setStage('results');
     }, 2400);
@@ -515,18 +518,24 @@ export default function FreestyleAnalysis(): JSX.Element {
                 </p>
               </header>
 
-              {/* Compact steps — 2 lines each max */}
-              <div className="flex flex-col gap-2">
-                {[
-                  { n:'1', text:'Stand 6–8 ft away at 45° angle to camera' },
-                  { n:'2', text:'Full upper body (head to waist) must be visible' },
-                  { n:'3', text:'Throw real punches freely for 30 seconds' },
-                ].map(s => (
-                  <div key={s.n} className="flex items-center gap-3 px-3 py-2.5 rounded-2xl bg-white/[0.03] border border-white/[0.06]">
-                    <div className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/30 flex items-center justify-center text-primary font-black text-sm shrink-0">{s.n}</div>
-                    <span className="text-[11px] font-semibold text-white/70 leading-snug">{s.text}</span>
-                  </div>
-                ))}
+              {/* Camera Setup Guide matching real paid vision mode */}
+              <div className="bg-black/40 border border-primary/25 rounded-2xl sm:rounded-3xl overflow-hidden">
+                <video
+                  src="/vision/setup-guide.mp4"
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="w-full aspect-video object-cover bg-black"
+                />
+                <div className="p-3 bg-black/70 backdrop-blur-md">
+                  <p className="text-[11px] font-bold text-white/90 leading-relaxed">
+                    Stand at a <span className="text-primary font-black">45&deg; angle</span> to your camera — not straight-on — with your <span className="text-primary font-black">whole body in frame</span>, head to feet.
+                  </p>
+                  <p className="text-[9px] text-white/50 font-semibold leading-relaxed mt-1">
+                    Gives the neural vision engine a clear side-on view of your rotation, footwork, speed, and guard.
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -535,7 +544,7 @@ export default function FreestyleAnalysis(): JSX.Element {
                 onClick={() => setStage('setup')}
                 className="btn-primary w-full h-14 flex items-center justify-center gap-2 text-sm font-black italic tracking-wider shadow-[0_0_25px_rgba(226,255,59,0.3)]"
               >
-                SET UP CAMERA <Play className="w-4 h-4 fill-current" />
+                POSITION CAMERA & START <Play className="w-4 h-4 fill-current" />
               </button>
               <button
                 onClick={() => { nextStep(); }}
@@ -730,65 +739,62 @@ export default function FreestyleAnalysis(): JSX.Element {
               </div>
             ) : (
               <>
-                {/* Unlocked scores */}
-                <div className="grid grid-cols-2 gap-2.5">
-                  {/* Total Score - hero */}
-                  <div className="col-span-2 p-4 rounded-3xl border border-primary/50 bg-gradient-to-br from-primary/20 to-primary/5 shadow-[0_0_30px_rgba(226,255,59,0.2)] flex items-center gap-4">
-                    <div className="flex flex-col">
-                      <span className="text-[9px] font-black uppercase tracking-wider text-primary">TOTAL COMBAT SCORE</span>
-                      <div className="flex items-end gap-1.5 mt-0.5">
-                        <span className="text-5xl font-black text-white leading-none">{result.totalScore}</span>
-                        <span className="text-sm font-bold text-white/40 mb-1">/100</span>
-                      </div>
-                      <span className="text-[8px] font-bold text-white/60 uppercase mt-1">
-                        {result.totalScore>=75?'HIGH POTENTIAL FIGHTER':result.totalScore>=50?'DEVELOPING COMBATANT':'BASELINE ESTABLISHED'}
-                      </span>
+                {/* ── 1 UNLOCKED MERIT ───────────────────────── */}
+                <div className="p-4 rounded-3xl border border-primary/50 bg-gradient-to-br from-primary/20 via-primary/5 to-black/80 shadow-[0_0_30px_rgba(226,255,59,0.2)] flex items-center justify-between">
+                  <div className="flex flex-col">
+                    <span className="text-[9px] font-black uppercase tracking-wider text-primary">MERIT 1 UNLOCKED · COMBAT SCORE</span>
+                    <div className="flex items-end gap-1.5 mt-1">
+                      <span className="text-5xl font-black text-white leading-none">{result.totalScore}</span>
+                      <span className="text-sm font-bold text-white/40 mb-1">/100</span>
                     </div>
-                    <div className="ml-auto flex flex-col items-center">
-                      <div className="w-16 h-16 rounded-full border-2 border-primary/40 flex items-center justify-center" style={{background:`conic-gradient(#e2ff3b ${result.totalScore*3.6}deg, rgba(226,255,59,0.08) 0deg)`}}>
-                        <div className="w-12 h-12 rounded-full bg-black flex items-center justify-center">
-                          <span className="text-sm font-black text-primary">{result.totalScore}%</span>
-                        </div>
+                    <span className="text-[8px] font-bold text-white/70 uppercase mt-1">
+                      {result.totalScore >= 75 ? 'HIGH POTENTIAL FIGHTER' : result.totalScore >= 50 ? 'DEVELOPING COMBATANT' : 'BASELINE ESTABLISHED'}
+                    </span>
+                  </div>
+                  <div className="flex flex-col items-center">
+                    <div className="w-16 h-16 rounded-full border-2 border-primary/40 flex items-center justify-center" style={{background:`conic-gradient(#e2ff3b ${result.totalScore*3.6}deg, rgba(226,255,59,0.08) 0deg)`}}>
+                      <div className="w-12 h-12 rounded-full bg-black flex items-center justify-center">
+                        <span className="text-sm font-black text-primary">{result.totalScore}%</span>
                       </div>
                     </div>
-                  </div>
-
-                  <div className="p-3.5 rounded-2xl border border-white/10 bg-black/40">
-                    <span className="text-[8px] font-black uppercase tracking-wider text-white/50 block">PUNCH POWER</span>
-                    <span className="text-2xl font-black text-primary">{result.powerScore}<span className="text-xs text-white/40 font-bold">/100</span></span>
-                    <span className="text-[7px] text-white/40 font-bold uppercase block mt-0.5">Peak {result.peakVelocity}°/s</span>
-                  </div>
-
-                  <div className="p-3.5 rounded-2xl border border-white/10 bg-black/40">
-                    <span className="text-[8px] font-black uppercase tracking-wider text-white/50 block">BODY MECHANICS</span>
-                    <span className="text-2xl font-black text-white">{result.rotationScore}<span className="text-xs text-white/40 font-bold">/100</span></span>
-                    <span className="text-[7px] text-white/40 font-bold uppercase block mt-0.5">{result.punchCount} punches tracked</span>
                   </div>
                 </div>
 
-                {/* Locked section — teaser */}
-                <div className="relative rounded-3xl border border-white/10 bg-black/40 p-4 overflow-hidden">
-                  <div className="flex items-center justify-between mb-2.5">
-                    <span className="text-[9px] font-black uppercase tracking-wider text-white/40">ADVANCED METRICS</span>
-                    <span className="text-[7px] font-black text-primary/70 uppercase">COMPLETE ONBOARDING</span>
+                {/* ── 2 LOCKED & BLURRED MERITS ────────────────── */}
+                <div className="relative rounded-3xl border border-white/15 bg-black/60 p-4 overflow-hidden">
+                  {/* Top Notice Banner */}
+                  <div className="mb-3 px-3 py-2 rounded-2xl bg-primary/10 border border-primary/30 flex items-center justify-center gap-2 text-center shadow-[0_0_15px_rgba(226,255,59,0.15)]">
+                    <Lock className="w-4 h-4 text-primary shrink-0" />
+                    <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-primary">
+                      TO UNLOCK OTHER MERITS, COMPLETE THE ONBOARDING
+                    </span>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 filter blur-[4px] select-none pointer-events-none opacity-30">
-                    <div className="p-2.5 rounded-xl bg-white/5 border border-white/5">
-                      <span className="text-[7px] text-white/40 uppercase block">STRIKE ACCURACY</span>
-                      <span className="text-base font-black text-white">91.4%</span>
+
+                  {/* Blurred Cards: Power & Reflex */}
+                  <div className="grid grid-cols-2 gap-2.5 filter blur-[6px] select-none pointer-events-none opacity-25">
+                    <div className="p-3.5 rounded-2xl border border-white/10 bg-white/5">
+                      <span className="text-[8px] font-black uppercase tracking-wider text-white/50 block">MERIT 2 · PUNCH POWER</span>
+                      <span className="text-2xl font-black text-white">{result.powerScore || 82}<span className="text-xs text-white/40 font-bold">/100</span></span>
+                      <span className="text-[7px] text-white/40 font-bold uppercase block mt-0.5">Peak {result.peakVelocity || 640}°/s</span>
                     </div>
-                    <div className="p-2.5 rounded-xl bg-white/5 border border-white/5">
-                      <span className="text-[7px] text-white/40 uppercase block">KINETIC CHAIN</span>
-                      <span className="text-base font-black text-white">482 PSI</span>
+
+                    <div className="p-3.5 rounded-2xl border border-white/10 bg-white/5">
+                      <span className="text-[8px] font-black uppercase tracking-wider text-white/50 block">MERIT 3 · REFLEX SPEED</span>
+                      <span className="text-2xl font-black text-white">88<span className="text-xs text-white/40 font-bold">/100</span></span>
+                      <span className="text-[7px] text-white/40 font-bold uppercase block mt-0.5">Reaction: 240ms</span>
                     </div>
                   </div>
-                  <div className="absolute inset-0 bg-black/80 backdrop-blur-[2px] flex flex-col items-center justify-center p-3 text-center">
-                    <div className="w-9 h-9 rounded-full bg-primary/15 border border-primary/40 flex items-center justify-center mb-2 shadow-[0_0_15px_rgba(226,255,59,0.3)]">
+
+                  {/* Lock Overlay Content */}
+                  <div className="absolute inset-x-0 bottom-0 top-14 bg-gradient-to-t from-black via-black/85 to-transparent flex flex-col items-center justify-center p-4 text-center">
+                    <div className="w-9 h-9 rounded-full bg-primary/15 border border-primary/40 flex items-center justify-center mb-1.5 shadow-[0_0_15px_rgba(226,255,59,0.3)]">
                       <Lock className="w-4 h-4 text-primary" />
                     </div>
-                    <span className="text-[10px] font-black uppercase tracking-wide text-white">2 MORE COMBAT MERITS LOCKED</span>
-                    <p className="text-[9px] font-semibold text-white/60 mt-1 max-w-[240px] leading-snug">
-                      Finish the remaining questions to unlock your Strike Accuracy & Kinetic Power breakdown.
+                    <span className="text-[11px] font-black uppercase tracking-wider text-white">
+                      POWER & REFLEX ANALYSIS LOCKED
+                    </span>
+                    <p className="text-[9px] font-semibold text-white/60 mt-1 max-w-[270px] leading-snug">
+                      Complete your profile & verify your account to unlock your Kinetic Power & Reflex Speed analysis.
                     </p>
                   </div>
                 </div>
@@ -800,7 +806,7 @@ export default function FreestyleAnalysis(): JSX.Element {
                 onClick={nextStep}
                 className="btn-primary w-full h-14 flex items-center justify-center gap-2 text-sm font-black italic tracking-wider shadow-[0_0_25px_rgba(226,255,59,0.3)]"
               >
-                CONTINUE ONBOARDING <ChevronRight size={18} />
+                CONTINUE ONBOARDING (2 MERITS LOCKED) <ChevronRight size={18} />
               </button>
             </div>
           </motion.div>

@@ -106,7 +106,7 @@ function serializeOnboarding(data: OnboardingData): Record<string, unknown> {
 
 const OnboardingContext = createContext<OnboardingContextType | undefined>(undefined);
 
-const TOTAL_STEPS = 18;
+const TOTAL_STEPS = 19;
 
 export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [currentStep, setCurrentStep] = useState(1);
@@ -215,7 +215,7 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     // running a second, separate auth implementation.
     const goToStep = (step: number) => {
         persistProgress();
-        setCurrentStep(prev => {
+        setCurrentStep(() => {
             const next = Math.max(1, Math.min(step, totalSteps + 1));
             if (typeof window !== 'undefined') {
                 localStorage.setItem('boxing_onboarding_step', String(next));
