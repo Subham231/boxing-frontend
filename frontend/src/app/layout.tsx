@@ -1,4 +1,4 @@
-﻿import type { Metadata, Viewport } from "next";
+import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import { Suspense } from "react";
 import { Analytics } from "@vercel/analytics/next";
@@ -9,9 +9,22 @@ export const metadata: Metadata = {
   title: "SPARAI - AI Combat & Boxing Coach",
   description: "High-performance AI boxing coach, reflex enhancer, and weekly training roadmap. Sharpen form and reaction with real-time computer vision analysis.",
   manifest: "/manifest.json",
+  icons: {
+    icon: [
+      { url: "/logo.jpg", type: "image/jpeg" },
+    ],
+    shortcut: "/logo.jpg",
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
+  openGraph: {
+    images: [{ url: "/logo.jpg" }],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
+    startupImage: "/logo.jpg",
   },
   other: {
     "mobile-web-app-capable": "yes",
