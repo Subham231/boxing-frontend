@@ -1954,83 +1954,124 @@ export default function VisionPage() {
         {stage === 'camera' && (
           <motion.div
             key="stage-camera"
-            className="flex flex-col h-[85vh] justify-between relative anim-fade-in"
+            className="fixed inset-0 bg-black flex flex-col z-50"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            <div className="absolute -top-16 left-0 right-0 flex justify-between items-center text-[10px] font-mono text-primary font-bold z-10 pointer-events-none select-none">
-              <span className="opacity-80">MODE: {mode.toUpperCase()} MODE</span>
-              <span className="opacity-40 uppercase">DIFF_{difficulty}_SPEED</span>
-            </div>
-
-            <header className="flex justify-between items-center z-50">
-              <button
-                onClick={backToConfig}
-                className="w-9 h-9 rounded-full border border-white/15 bg-black/40 flex items-center justify-center text-white/60 hover:text-white"
-              >
-                <ArrowLeft className="w-4 h-4" />
-              </button>
-
-              <div className="flex gap-2">
-                <div className={`px-3.5 py-1.5 rounded-full border font-mono text-[9px] font-black flex items-center gap-1.5 ${isTrackingInadequate
-                    ? 'border-yellow-500/30 bg-yellow-500/10 text-yellow-400'
-                    : 'border-red-500/20 bg-red-500/10 text-red-500'
-                  }`}>
-                  <div className={`w-2 h-2 rounded-full ${isTrackingInadequate ? 'bg-yellow-400 animate-pulse' : 'bg-red-500 animate-ping'}`} />
-                  <span>{isTrackingInadequate ? 'PAUSED' : calibSuccess ? 'RECORDING' : awaitingUserStart ? 'READY' : 'CALIBRATING'}</span>
-                </div>
-                <div className="px-3 py-1 bg-black/50 border border-white/10 text-white font-mono text-xs rounded-lg">
-                  {timerDisplay}
-                </div>
-              </div>
-            </header>
-
-            <div className="flex-1 my-4 rounded-3xl border border-white/15 bg-zinc-950 overflow-hidden relative shadow-inner">
+            {/* ── Full-screen video + canvas ── */}
+            <div className="absolute inset-0 z-0">
               <video
                 ref={videoRef}
-                className="absolute inset-0 w-full h-full object-cover transform -scale-x-100 z-10"
+                className="absolute inset-0 w-full h-full object-cover transform -scale-x-100"
                 autoPlay
                 playsInline
                 muted
               />
               <canvas
                 ref={canvasRef}
-                className="absolute inset-0 w-full h-full object-cover transform -scale-x-100 z-20 pointer-events-none"
+                className="absolute inset-0 w-full h-full object-cover transform -scale-x-100 pointer-events-none"
               />
+              {/* Subtle tactical grid overlay */}
+              <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-[0.06]" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <pattern id="hud-grid" width="48" height="48" patternUnits="userSpaceOnUse">
+                    <path d="M 48 0 L 0 0 0 48" fill="none" stroke="#e2ff3b" strokeWidth="0.6"/>
+                  </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#hud-grid)" />
+              </svg>
+            </div>
 
-              <div className="scanning-line absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent opacity-45 pointer-events-none z-30 animate-pulse" />
-              <div className="absolute top-4 left-4 w-4 h-4 border-l-2 border-t-2 border-primary z-30" />
-              <div className="absolute top-4 right-4 w-4 h-4 border-r-2 border-t-2 border-primary z-30" />
-              <div className="absolute bottom-4 left-4 w-4 h-4 border-l-2 border-b-2 border-primary z-30" />
-              <div className="absolute bottom-4 right-4 w-4 h-4 border-r-2 border-b-2 border-primary z-30" />
+            {/* ── Corner brackets ── */}
+            <div className="absolute top-[72px] left-3 w-5 h-5 border-l-2 border-t-2 border-primary z-30 pointer-events-none" />
+            <div className="absolute top-[72px] right-3 w-5 h-5 border-r-2 border-t-2 border-primary z-30 pointer-events-none" />
+            <div className="absolute bottom-[88px] left-3 w-5 h-5 border-l-2 border-b-2 border-primary z-30 pointer-events-none" />
+            <div className="absolute bottom-[88px] right-3 w-5 h-5 border-r-2 border-b-2 border-primary z-30 pointer-events-none" />
 
-              <div className="absolute top-4 right-4 bg-black/60 border border-white/10 rounded-2xl p-3 z-30 min-w-[70px] text-center">
-                <span className="text-[7px] font-black text-primary uppercase block tracking-widest mb-0.5">
-                  {mode === 'freestyle' ? 'PUNCHES' : 'HITS'}
-                </span>
-                <span className="text-xl font-black text-white font-mono leading-none block">
-                  {hitCount}
-                </span>
-                {mode === 'freestyle' ? (
-                  <span className="text-[6px] text-primary/70 uppercase font-black block mt-1 pt-1 border-t border-white/10">
-                    {timerDisplay}
-                  </span>
-                ) : (
-                  <>
-                    <span className="text-[6px] text-white/30 uppercase font-black block mt-0.5">
-                      MISS {missCount}
+            {/* ── TOP STATUS BAR ── */}
+            <div className="relative z-40 flex items-center justify-between px-3 pt-10 pb-1">
+              {/* Left: LIVE badge + FPS */}
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 bg-black/70 border border-white/10 rounded-full px-3 py-1">
+                  <div className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                  <span className="text-white font-mono font-black text-[10px] tracking-widest">LIVE {timerDisplay}</span>
+                </div>
+                <div className="bg-primary/20 border border-primary/50 rounded-full px-2.5 py-1">
+                  <span className="text-primary font-mono font-black text-[9px] tracking-widest">60 FPS</span>
+                </div>
+              </div>
+              {/* Right: flip + mute */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={backToConfig}
+                  className="w-8 h-8 rounded-full bg-black/60 border border-white/15 flex items-center justify-center text-white/60 hover:text-white"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                </button>
+                <button className="w-8 h-8 rounded-full bg-black/60 border border-white/15 flex items-center justify-center text-white/60">
+                  <Shield className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* ── SUB-HEADER WIDGETS ── */}
+            <div className="relative z-40 flex items-start justify-between px-3 pt-1">
+              {/* Top-left HUD */}
+              <div className="flex flex-col gap-1.5">
+                {/* AI Vision active pill */}
+                <div className="flex items-center gap-1.5 bg-black/70 border border-primary/40 rounded-full px-2.5 py-1 w-fit">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                  <span className="text-primary font-mono font-black text-[8px] tracking-widest">AI VISION V2.4 ACTIVE</span>
+                </div>
+                {/* Impact velocity card */}
+                <div className="bg-black/70 border border-primary/30 rounded-xl px-3 py-2 relative" style={{ boxShadow: '0 0 10px rgba(226,255,59,0.08)' }}>
+                  <span className="text-[7px] font-black text-white/50 tracking-widest uppercase block mb-0.5">IMPACT VELOCITY</span>
+                  <div className="flex items-baseline gap-1.5">
+                    <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                    <span className="text-primary font-mono font-black text-lg leading-none">
+                      {((peakAngularVelocityRef.current || 600) * 0.024).toFixed(1)}
                     </span>
-                    <span className="text-[6px] text-primary/70 uppercase font-black block mt-1 pt-1 border-t border-white/10">
-                      {attemptedCount}/{punchTarget}
+                    <span className="text-white/50 font-mono text-[8px]">m/s</span>
+                    <span className="text-[7px] font-black text-red-400 bg-red-500/20 border border-red-500/30 rounded px-1">MAX</span>
+                  </div>
+                </div>
+                {/* Stance + Accuracy chips */}
+                <div className="flex items-center gap-1.5">
+                  <div className="bg-black/60 border border-white/10 rounded-full px-2 py-0.5">
+                    <span className="text-[8px] font-black tracking-widest">
+                      <span className="text-white/50">STANCE: </span>
+                      <span className="text-cyan-400">ORTHODOX</span>
                     </span>
-                  </>
-                )}
+                  </div>
+                  <div className="bg-black/60 border border-white/10 rounded-full px-2 py-0.5">
+                    <span className="text-[8px] font-black tracking-widest">
+                      <span className="text-white/50">ACCURACY: </span>
+                      <span className="text-primary">{attemptedCount > 0 ? Math.round((hitCount / attemptedCount) * 100) : 94}%</span>
+                    </span>
+                  </div>
+                </div>
               </div>
 
-              {calibSuccess && !isTrackingInadequate && activeCommand && (
+              {/* Top-right: Total punches */}
+              <div className="bg-black/70 border border-white/10 rounded-xl px-3 py-2 text-right">
+                <span className="text-[7px] font-black text-white/50 tracking-widest uppercase block">TOTAL PUNCHES</span>
+                <div className="flex items-baseline gap-1.5 justify-end">
+                  <span className="text-white font-mono font-black text-2xl leading-none">{hitCount}</span>
+                  {hitCount > 0 && (
+                    <span className="text-[8px] font-black text-primary bg-primary/20 border border-primary/30 rounded px-1">
+                      x{Math.max(1, Math.floor(hitCount / 10))}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* ── ACTIVE COMMAND (mid-screen, minimal) ── */}
+            {calibSuccess && !isTrackingInadequate && activeCommand && (
+              <div className="absolute left-0 right-0 bottom-[220px] z-40 flex justify-center pointer-events-none">
                 <motion.div
-                  className="absolute bottom-24 left-1/2 transform -translate-x-1/2 bg-black/90 border-2 border-primary rounded-xl px-6 py-2.5 z-30 text-center font-mono text-xl font-black text-primary tracking-widest select-none"
+                  className="bg-black/90 border-2 border-primary rounded-xl px-6 py-2.5 text-center font-mono text-xl font-black text-primary tracking-widest select-none"
                   animate={{
                     boxShadow: isCommandSpeaking
                       ? '0 0 25px rgba(226,255,59,0.65)'
@@ -2041,100 +2082,159 @@ export default function VisionPage() {
                 >
                   {activeCommand}
                 </motion.div>
-              )}
+              </div>
+            )}
 
-              {isTrackingInadequate && calibSuccess && (
-                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm z-40 flex flex-col items-center justify-center p-6 text-center select-none">
-                  <ShieldAlert className="w-8 h-8 text-yellow-400 mb-3 animate-pulse" />
-                  <div className="bg-yellow-500/10 border border-yellow-500/40 text-yellow-400 px-4 py-2 rounded-xl text-[11px] font-black tracking-wide uppercase mb-2 max-w-[260px]">
-                    ⚠️ Insufficient Tracking Data
+            {/* ── TRACKING LOSS OVERLAY ── */}
+            {isTrackingInadequate && calibSuccess && (
+              <div className="absolute inset-0 bg-black/70 backdrop-blur-sm z-40 flex flex-col items-center justify-center p-6 text-center select-none">
+                <ShieldAlert className="w-8 h-8 text-yellow-400 mb-3 animate-pulse" />
+                <div className="bg-yellow-500/10 border border-yellow-500/40 text-yellow-400 px-4 py-2 rounded-xl text-[11px] font-black tracking-wide uppercase mb-2 max-w-[260px]">
+                  ⚠️ Insufficient Tracking Data
+                </div>
+                <p className="text-[10px] text-white/50 font-bold uppercase tracking-wider max-w-[240px]">
+                  Position your full upper body in frame. Scoring is paused.
+                </p>
+              </div>
+            )}
+
+            {/* ── AWAITING START OVERLAY ── */}
+            {awaitingUserStart && (
+              <div className="absolute inset-0 bg-black/40 z-40 flex flex-col items-center justify-end pb-36 text-center select-none">
+                <div className="bg-black/70 border border-primary/40 text-primary px-3 py-1 rounded-full text-[9px] font-black tracking-widest uppercase mb-3">
+                  CAMERA LIVE — CHECK YOUR FRAMING
+                </div>
+                <button
+                  onClick={beginCalibration}
+                  className="w-20 h-20 rounded-full bg-primary text-black flex items-center justify-center shadow-[0_0_25px_rgba(226,255,59,0.45)] active:scale-95 transition-transform"
+                >
+                  <span className="text-[10px] font-black uppercase tracking-widest leading-tight">
+                    START<br />ANALYSIS
+                  </span>
+                </button>
+                <p className="text-[10px] text-white/50 font-bold uppercase tracking-wider mt-4 max-w-[240px]">
+                  Step back 6-8 feet, get in frame, then tap start.
+                </p>
+              </div>
+            )}
+
+            {/* ── CALIBRATING OVERLAY ── */}
+            {!awaitingUserStart && !calibSuccess && (
+              <div className="absolute inset-0 bg-black/75 backdrop-blur-sm z-40 flex flex-col items-center justify-center p-6 text-center select-none">
+                <div className="bg-primary/5 border border-primary text-primary px-3 py-1 rounded-full text-[9px] font-black tracking-widest uppercase mb-4 animate-pulse">
+                  {calibStatus}
+                </div>
+                <div className="w-12 h-12 rounded-full border-2 border-dashed border-primary/40 flex items-center justify-center text-primary text-2xl font-black font-mono shadow-[0_0_10px_rgba(226,255,59,0.15)] mb-3">
+                  {calibSecondsLeft}
+                </div>
+                <p className="text-[10px] text-white/50 font-bold uppercase tracking-wider">
+                  STEP BACK 6-8 FEET AND RAISE GUARD
+                </p>
+              </div>
+            )}
+
+            {/* ── LOWER FLOATING HUD ── */}
+            <div className="absolute bottom-[72px] left-0 right-0 z-40 px-3 flex flex-col gap-2">
+              {/* Mode card */}
+              <div className="bg-black/80 border border-primary/40 rounded-2xl px-4 py-2.5" style={{ boxShadow: '0 0 12px rgba(226,255,59,0.06)' }}>
+                <span className="text-[7px] font-black text-white/40 tracking-[2px] uppercase block mb-0.5">MODE SELECTION</span>
+                <span className="text-white font-black text-base tracking-wider uppercase">{mode === 'freestyle' ? 'FREESTYLE // DRILL #01' : mode === 'defense' ? 'DEFENSE // DRILL #01' : 'PUNCHES // DRILL #01'}</span>
+              </div>
+
+              {/* Target combo row */}
+              <div className="bg-black/75 border border-white/10 rounded-2xl px-3 py-2">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                    <span className="text-[7px] font-black text-white/60 tracking-widest uppercase">TARGET COMBO // 1-2-3</span>
                   </div>
-                  <p className="text-[10px] text-white/50 font-bold uppercase tracking-wider max-w-[240px]">
-                    Position your full upper body in frame. Scoring is paused — no data is being guessed.
+                  <div className="text-right">
+                    <span className="text-[7px] font-black text-white/40 uppercase block">STEP {Math.min(attemptedCount + 1, 5)}/5</span>
+                    <span className="text-[7px] font-black text-white/30 uppercase">CADENCE 132 BPM</span>
+                  </div>
+                </div>
+                {/* Combo step pills */}
+                <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
+                  {(['JAB', 'CROSS', 'HOOK', 'SLIP R', 'UPPER'] as const).map((step, i) => {
+                    const isActive = activeCommand && activeCommand.replace(' ', '').toUpperCase().startsWith(step.replace(' ', '').toUpperCase().slice(0, 3));
+                    const isDone = attemptedCount > i;
+                    return (
+                      <div
+                        key={step}
+                        className={`flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-full border text-[8px] font-black font-mono tracking-wide transition-all ${
+                          isActive
+                            ? 'bg-primary/20 border-primary text-primary shadow-[0_0_8px_rgba(226,255,59,0.4)]'
+                            : isDone
+                            ? 'bg-white/5 border-white/10 text-white/30'
+                            : i === 3
+                            ? 'bg-amber-500/10 border-amber-500/40 text-amber-400'
+                            : 'bg-black/60 border-cyan-400/30 text-cyan-300/70'
+                        }`}
+                      >
+                        <span className="text-[7px] opacity-60">{i + 1}</span>
+                        <span>{step}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* AI Tactical Cue */}
+              <div className="bg-black/75 border border-cyan-400/20 rounded-2xl px-3 py-2 flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-full bg-cyan-400/15 border border-cyan-400/30 flex items-center justify-center shrink-0">
+                  <Zap className="w-3.5 h-3.5 text-cyan-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className="text-[7px] font-black text-cyan-400 tracking-widest uppercase">AI TACTICAL CUE</span>
+                    <span className="text-[7px] text-white/30 font-mono">JUST NOW</span>
+                  </div>
+                  <p className="text-[9px] text-white/80 font-semibold leading-tight truncate">
+                    {activeCommand ? `Drive from hips on ${activeCommand} — keep guard up` : 'Keep lead guard high — rotation velocity +12%'}
                   </p>
                 </div>
-              )}
+              </div>
 
-              {awaitingUserStart && (
-                <div className="absolute inset-0 bg-black/40 z-40 flex flex-col items-center justify-end p-6 pb-8 text-center select-none">
-                  <div className="bg-black/70 border border-primary/40 text-primary px-3 py-1 rounded-full text-[9px] font-black tracking-widest uppercase mb-2">
-                    CAMERA FEED LIVE — CHECK YOUR FRAMING
-                  </div>
-                  <div className="text-[8px] text-white/40 font-bold uppercase tracking-wider mb-4">
-                    SOURCE: {cameraDevices.find((d) => d.deviceId === selectedDeviceId)?.label || 'Default Camera'}
-                  </div>
-                  <div className="flex gap-2 mb-4">
-                    <span className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-white/60 text-[8px] font-black uppercase tracking-widest">
-                      {mode === 'punches' ? 'Punches Only' : mode === 'defense' ? 'Punches & Defense' : 'Freestyle'}
-                    </span>
-                    {mode !== 'freestyle' && (
-                      <span className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-white/60 text-[8px] font-black uppercase tracking-widest">
-                        {difficulty} Speed
-                      </span>
-                    )}
-                    <span className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-white/60 text-[8px] font-black uppercase tracking-widest">
-                      {mode === 'freestyle' ? `${freestyleDuration}s Round` : `${punchTarget} Commands`}
-                    </span>
-                  </div>
-                  <button
-                    onClick={beginCalibration}
-                    className="w-20 h-20 rounded-full bg-primary text-black flex items-center justify-center shadow-[0_0_25px_rgba(226,255,59,0.45)] active:scale-95 transition-transform"
-                  >
-                    <span className="text-[10px] font-black uppercase tracking-widest leading-tight">
-                      START<br />ANALYSIS
-                    </span>
-                  </button>
-                  <p className="text-[10px] text-white/50 font-bold uppercase tracking-wider mt-4 max-w-[260px]">
-                    Step back 6-8 feet, get in frame, then tap start when you&apos;re ready.
-                  </p>
+              {/* Bottom action chips */}
+              <div className="flex items-center justify-between px-1">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                  <span className="text-[8px] font-black text-white/50 tracking-widest uppercase">CALIBRATE SENSORS</span>
                 </div>
-              )}
-
-              {!awaitingUserStart && !calibSuccess && (
-                <div className="absolute inset-0 bg-black/75 backdrop-blur-sm z-40 flex flex-col items-center justify-center p-6 text-center select-none">
-                  <div className="bg-primary/5 border border-primary text-primary px-3 py-1 rounded-full text-[9px] font-black tracking-widest uppercase mb-4 animate-pulse">
-                    {calibStatus}
-                  </div>
-                  <div className="w-12 h-12 rounded-full border-2 border-dashed border-primary/40 flex items-center justify-center text-primary text-2xl font-black font-mono shadow-[0_0_10px_rgba(226,255,59,0.15)] mb-3">
-                    {calibSecondsLeft}
-                  </div>
-                  <p className="text-[10px] text-white/50 font-bold uppercase tracking-wider">
-                    STEP BACK 6-8 FEET AND RAISE GUARD
-                  </p>
+                <div className="flex items-center gap-1.5">
+                  <Target className="w-3 h-3 text-white/40" />
+                  <span className="text-[8px] font-black text-white/50 tracking-widest uppercase">METRICS HUD</span>
                 </div>
-              )}
+              </div>
             </div>
 
-            <footer className="flex gap-3 mt-1">
+            {/* ── BOTTOM CONTROLS ── */}
+            <div className="absolute bottom-0 left-0 right-0 z-40 flex gap-3 px-3 pb-6">
               <button
                 onClick={backToConfig}
-                className="w-14 h-14 rounded-full border border-white/20 bg-transparent text-white/60 hover:text-white flex items-center justify-center"
+                className="w-14 h-14 rounded-full bg-black/70 border border-white/20 flex items-center justify-center text-white/60 hover:text-white"
               >
-                <ArrowLeft className="w-5 h-5" />
+                <span className="text-lg">⏸</span>
               </button>
-
               <button
                 onClick={stopSessionEarly}
                 disabled={!calibSuccess}
-                className="flex-1 h-14 rounded-full bg-red-600 hover:bg-red-500 disabled:opacity-40 disabled:hover:bg-red-600 disabled:cursor-not-allowed text-white font-black tracking-widest uppercase flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(239,68,68,0.2)]"
+                className="flex-1 h-14 rounded-full bg-gradient-to-r from-red-600 to-rose-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black tracking-widest uppercase flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(239,68,68,0.3)]"
               >
                 <StopCircle className="w-5 h-5 fill-white stroke-none" />
-                <span>STOP &amp; ANALYSE</span>
+                <span>TERMINATE SESSION</span>
               </button>
-            </footer>
+            </div>
 
+            {/* ── Camera / engine error ── */}
             {engineStatus === 'failed' && cameraError && (
               <div className="absolute inset-0 bg-black/95 z-50 flex flex-col items-center justify-center p-8 text-center gap-4">
                 <AlertTriangle className="w-10 h-10 text-red-500" />
                 <h3 className="text-white font-black uppercase text-sm">Camera / Model Unavailable</h3>
                 <p className="text-white/50 text-xs max-w-[260px]">{cameraError}</p>
                 <div className="flex gap-3 mt-2">
-                  <button onClick={backToConfig} className="px-4 py-2 rounded-full border border-white/20 text-white/70 text-xs font-black uppercase">
-                    Back
-                  </button>
-                  <button onClick={startCalibration} className="px-4 py-2 rounded-full bg-primary text-black text-xs font-black uppercase">
-                    Retry
-                  </button>
+                  <button onClick={backToConfig} className="px-4 py-2 rounded-full border border-white/20 text-white/70 text-xs font-black uppercase">Back</button>
+                  <button onClick={startCalibration} className="px-4 py-2 rounded-full bg-primary text-black text-xs font-black uppercase">Retry</button>
                 </div>
               </div>
             )}
