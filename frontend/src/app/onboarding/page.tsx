@@ -10,108 +10,27 @@ import { ensureUserProfile } from '@/lib/firebase-auth';
 import { cacheProfileLocally } from '@/lib/profile-client';
 
 import Welcome from './components/Welcome';
-import TrainingProblem from './components/TrainingProblem';
-import Obstacle from './components/Obstacle';
-import FreestyleAnalysis from './components/FreestyleAnalysis';
-import FavoriteFighter from './components/FavoriteFighter';
 import Motivation from './components/Motivation';
 import FutureSelf from './components/FutureSelf';
-import CommitmentLevel from './components/CommitmentLevel';
 import BoxingMindset from './components/BoxingMindset';
 import Superpower from './components/Superpower';
-import FutureProgressPreview from './components/FutureProgressPreview';
-import FutureProgress from './components/FutureProgress';
-import TrainingCategories from './components/TrainingCategories';
-import StructuredProgram from './components/StructuredProgram';
-import PerformanceTracking from './components/PerformanceTracking';
-import Personalization from './components/Personalization';
-import DailyConsistency from './components/DailyConsistency';
-import Ecosystem from './components/Ecosystem';
-import JourneyStart from './components/JourneyStart';
-import Identity from './components/Problem';
+import Obstacle from './components/Obstacle';
+import ExperienceLevel from './components/ExperienceLevel';
+import SchedulePreference from './components/SchedulePreference';
+import GearCheck from './components/GearCheck';
+import FavoriteFighter from './components/FavoriteFighter';
+import CommitmentLevel from './components/CommitmentLevel';
 import Commitment from './components/Commitment';
+import Identity from './components/Problem';
 import PromiseStep from './components/Promise';
 import OtpVerification from './components/OtpVerification';
 import AnalysisMeritsReveal from './components/AnalysisMeritsReveal';
 import SubscriptionOffer from './components/SubscriptionOffer';
 import FinalPromise from './components/FinalPromise';
 
-const ONBOARDING_ORDER_KEY = 'boxing_onboarding_screen_order';
-
-/** Middle pool — interactive quiz + static pitch screens, shuffled each new run */
-const MIDDLE_SCREEN_IDS = [
-    'training-problem',
-    'obstacle',
-    'favorite-fighter',
-    'motivation',
-    'future-self',
-    'commitment-level',
-    'boxing-mindset',
-    'superpower',
-    'future-progress-preview',
-    'future-progress',
-    'training-categories',
-    'structured-program',
-    'performance-tracking',
-    'personalization',
-    'daily-consistency',
-    'ecosystem',
-] as const;
-
-type MiddleScreenId = (typeof MIDDLE_SCREEN_IDS)[number];
-
-function shuffleIds(ids: MiddleScreenId[]): MiddleScreenId[] {
-    const next = [...ids];
-    for (let i = next.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [next[i], next[j]] = [next[j], next[i]];
-    }
-    return next;
-}
-
-function isValidOrder(ids: unknown): ids is MiddleScreenId[] {
-    if (!Array.isArray(ids) || ids.length !== MIDDLE_SCREEN_IDS.length) return false;
-    const set = new Set(ids);
-    return MIDDLE_SCREEN_IDS.every((id) => set.has(id));
-}
-
-function getOrCreateMiddleOrder(): MiddleScreenId[] {
-    try {
-        const stored = JSON.parse(localStorage.getItem(ONBOARDING_ORDER_KEY) || 'null');
-        if (isValidOrder(stored)) return stored;
-    } catch {
-        /* ignore */
-    }
-    const order = shuffleIds([...MIDDLE_SCREEN_IDS]);
-    localStorage.setItem(ONBOARDING_ORDER_KEY, JSON.stringify(order));
-    return order;
-}
-
-const MIDDLE_COMPONENTS: Record<MiddleScreenId, React.ReactNode> = {
-    'training-problem': <TrainingProblem key="training-problem" />,
-    obstacle: <Obstacle key="obstacle" />,
-    'favorite-fighter': <FavoriteFighter key="favorite-fighter" />,
-    motivation: <Motivation key="motivation" />,
-    'future-self': <FutureSelf key="future-self" />,
-    'commitment-level': <CommitmentLevel key="commitment-level" />,
-    'boxing-mindset': <BoxingMindset key="boxing-mindset" />,
-    superpower: <Superpower key="superpower" />,
-    'future-progress-preview': <FutureProgressPreview key="future-progress-preview" />,
-    'future-progress': <FutureProgress key="future-progress" />,
-    'training-categories': <TrainingCategories key="training-categories" />,
-    'structured-program': <StructuredProgram key="structured-program" />,
-    'performance-tracking': <PerformanceTracking key="performance-tracking" />,
-    personalization: <Personalization key="personalization" />,
-    'daily-consistency': <DailyConsistency key="daily-consistency" />,
-    ecosystem: <Ecosystem key="ecosystem" />,
-};
-
 const OnboardingFlow: React.FC = () => {
     const router = useRouter();
-    const { currentStep, totalSteps, isLoaded, goToStep } = useOnboarding();
-    const [middleOrder, setMiddleOrder] = useState<MiddleScreenId[] | null>(null);
-    const loginModeHandled = useRef(false);
-
+    const { currentStep, totalSteps, isLoaded } = useOnboarding();
     const scrollContainerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -137,36 +56,32 @@ const OnboardingFlow: React.FC = () => {
 
     useEffect(() => {
         if (!isLoaded) return;
-        setMiddleOrder(getOrCreateMiddleOrder());
-    }, [isLoaded]);
-
-    useEffect(() => {
-        if (!isLoaded || !middleOrder) return;
         if (new URLSearchParams(window.location.search).get('mode') === 'login') {
             router.replace('/login');
         }
-    }, [isLoaded, middleOrder, router]);
+    }, [isLoaded, router]);
 
-    const screens = useMemo(() => {
-        if (!middleOrder) return [];
-        return [
-            <Welcome key="welcome" />,
-            <TrainingProblem key="training-problem" />,
-            <Obstacle key="obstacle" />,
-            <FreestyleAnalysis key="freestyle-analysis" />,
-            ...middleOrder
-                .filter((id) => id !== 'training-problem' && id !== 'obstacle')
-                .map((id) => MIDDLE_COMPONENTS[id]),
-            <JourneyStart key="journey" />,
-            <Commitment key="commitment" />,
-            <Identity key="identity" />,
-            <PromiseStep key="promise" />,
-            <OtpVerification key="otp" />,
-            <AnalysisMeritsReveal key="merits-reveal" />,
-            <SubscriptionOffer key="subscription" />,
-            <FinalPromise key="finalpromise" />,
-        ];
-    }, [middleOrder]);
+    // Deterministic 18-step psychological funnel
+    const screens = useMemo(() => [
+        <Welcome key="welcome" />,
+        <Motivation key="motivation" />,
+        <FutureSelf key="future-self" />,
+        <BoxingMindset key="boxing-mindset" />,
+        <Superpower key="superpower" />,
+        <Obstacle key="obstacle" />,
+        <ExperienceLevel key="experience-level" />,
+        <SchedulePreference key="schedule" />,
+        <GearCheck key="gear-check" />,
+        <FavoriteFighter key="favorite-fighter" />,
+        <CommitmentLevel key="commitment-level" />,
+        <Commitment key="commitment" />,
+        <Identity key="identity" />,
+        <PromiseStep key="promise" />,
+        <OtpVerification key="otp" />,
+        <AnalysisMeritsReveal key="merits-reveal" />,
+        <SubscriptionOffer key="subscription" />,
+        <FinalPromise key="finalpromise" />,
+    ], []);
 
     const percent = Math.min(100, Math.round((currentStep / totalSteps) * 100));
 
@@ -175,14 +90,14 @@ const OnboardingFlow: React.FC = () => {
         const remaining = totalSteps - currentStep;
         if (currentStep === 1) return 'Getting Started';
         if (remaining === 0 || currentStep >= totalSteps) return 'Final Step — Entering Ring!';
-        if (remaining <= 3) return `Almost there! Just ${remaining} more to go`;
+        if (remaining <= 2) return `Almost there! Just ${remaining} more to go`;
         if (percent >= 80) return 'Nearly Done — Finalizing Protocol';
-        if (percent >= 50 && percent < 60) return 'Halfway there, fighter!';
-        if (percent >= 25 && percent < 35) return 'Building your combat profile...';
+        if (percent >= 50 && percent < 65) return 'Halfway there, fighter!';
+        if (percent >= 25 && percent < 40) return 'Building your combat profile...';
         return null;
     }, [currentStep, totalSteps, percent]);
 
-    if (!isLoaded || !middleOrder) {
+    if (!isLoaded) {
         return (
             <div className="fixed inset-0 flex h-[100dvh] w-screen flex-col items-center justify-center overflow-hidden bg-bg-dark p-6 gap-4 scrollbar-hide">
                 <Loader2 className="w-10 h-10 text-primary animate-spin" />

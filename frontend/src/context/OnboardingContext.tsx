@@ -106,7 +106,7 @@ function serializeOnboarding(data: OnboardingData): Record<string, unknown> {
 
 const OnboardingContext = createContext<OnboardingContextType | undefined>(undefined);
 
-const TOTAL_STEPS = 26;
+const TOTAL_STEPS = 18;
 
 export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [currentStep, setCurrentStep] = useState(1);

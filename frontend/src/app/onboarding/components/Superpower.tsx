@@ -27,10 +27,11 @@ const Superpower: React.FC = () => {
       <header className="text-left mb-4 sm:mb-6">
         <StepBadge />
         <h1 className="text-2xl sm:text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
-          What's your training <span className="text-primary">superpower</span>?
+          Every fighter has an advantage. <br />
+          <span className="text-primary">What&apos;s yours?</span>
         </h1>
         <p className="text-white/50 mt-2.5 sm:mt-4 text-xs sm:text-sm leading-relaxed font-semibold">
-          Every fighter has a trait that sets them apart. What's yours?
+          Identify the natural weapon you rely on when the pressure rises.
         </p>
       </header>
 

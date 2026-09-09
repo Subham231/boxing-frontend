@@ -7,15 +7,16 @@ import { useOnboarding } from '@/context/OnboardingContext';
 import StepBadge from './StepBadge';
 
 const FUTURES = [
-  { icon: Swords, label: 'Looking Like A Real Fighter', tag: 'Most Popular' },
-  { icon: Zap, label: 'Faster & More Explosive', tag: 'Top Choice' },
-  { icon: Flame, label: 'Leaner & Peak Stamina', tag: 'Recommended' },
-  { icon: Brain, label: 'Unshakeable Discipline', tag: 'High Impact' },
+  { icon: Zap, label: 'Faster & more explosive', tag: 'High Velocity', desc: 'Explosive snap & speed' },
+  { icon: Swords, label: 'Look & move like a fighter', tag: 'Fighter Physique', desc: 'Conditioned & agile' },
+  { icon: Heart, label: 'Unbreakable stamina', tag: 'Iron Lungs', desc: 'Endless energy in later rounds' },
+  { icon: Brain, label: 'Sharper fight IQ', tag: 'Ring General', desc: 'Anticipate & counter cleanly' },
+  { icon: Flame, label: 'Unshakeable discipline', tag: 'Mindset', desc: 'Show up no matter what' },
 ];
 
 const FutureSelf: React.FC = () => {
   const { data, updateData, nextStep, prevStep } = useOnboarding();
-  const [selected, setSelected] = useState<string>(data.futureSelf || 'Looking Like A Real Fighter');
+  const [selected, setSelected] = useState<string>(data.futureSelf || 'Look & move like a fighter');
 
   const handleSelect = (label: string) => {
     setSelected(label);
@@ -27,14 +28,14 @@ const FutureSelf: React.FC = () => {
       <header className="text-left mb-4 sm:mb-6">
         <StepBadge />
         <h1 className="text-2xl sm:text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
-          Imagine yourself <span className="text-primary">6 months</span> from now.
+          Picture yourself <span className="text-primary">90 days</span> from now.
         </h1>
-        <p className="text-white/50 mt-2.5 sm:mt-4 text-xs sm:text-sm leading-relaxed font-semibold">
-          If you stay consistent, what would success look like?
+        <p className="text-white/70 mt-2.5 sm:mt-3 text-xs sm:text-sm font-semibold">
+          What would make you proud?
         </p>
       </header>
 
-      <main className="flex-1 grid grid-cols-2 gap-2.5 sm:gap-3 content-start relative my-auto">
+      <main className="flex-1 flex flex-col gap-2.5 sm:gap-3 content-start relative my-auto">
         {FUTURES.map((f) => {
           const active = selected === f.label;
           const Icon = f.icon;
@@ -42,21 +43,28 @@ const FutureSelf: React.FC = () => {
             <motion.button
               key={f.label}
               type="button"
-              whileTap={{ scale: 0.96 }}
+              whileTap={{ scale: 0.98 }}
               onClick={() => handleSelect(f.label)}
-              className={`relative flex flex-col items-center justify-between p-3 sm:p-3.5 rounded-3xl border text-center transition-all duration-300 ${
+              className={`relative flex items-center justify-between p-3 sm:p-3.5 rounded-2xl sm:rounded-3xl border text-left transition-all duration-300 ${
                 active ? 'bg-primary/10 border-primary shadow-[0_0_20px_rgba(226,255,59,0.2)]' : 'bg-black/30 border-white/5 hover:border-white/10'
               }`}
             >
+              <div className="flex items-center gap-3">
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${active ? 'bg-primary text-black' : 'bg-white/5 text-primary/70'}`}>
+                  <Icon className="w-4 h-4" strokeWidth={2.25} />
+                </div>
+                <div>
+                  <span className={`text-xs sm:text-sm font-black uppercase block leading-tight ${active ? 'text-primary' : 'text-white'}`}>{f.label}</span>
+                  <span className="text-[9px] text-white/40 font-medium">{f.desc}</span>
+                </div>
+              </div>
               {f.tag && (
-                <span className={`text-[7px] font-black uppercase px-2 py-0.5 rounded-full mb-1 ${
+                <span className={`text-[7px] font-black uppercase px-2 py-0.5 rounded-full shrink-0 ${
                   active ? 'bg-primary text-black' : 'bg-white/5 text-white/40 border border-white/5'
                 }`}>
                   {f.tag}
                 </span>
               )}
-              <Icon className={`w-5 h-5 sm:w-6 sm:h-6 my-1 ${active ? 'text-primary' : 'text-primary/40'}`} strokeWidth={2.25} />
-              <span className={`text-[10px] font-black uppercase leading-tight ${active ? 'text-primary' : 'text-white/70'}`}>{f.label}</span>
             </motion.button>
           );
         })}
@@ -68,9 +76,9 @@ const FutureSelf: React.FC = () => {
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="text-center text-[11px] font-bold text-primary/80 italic mt-3"
+            className="text-center text-xs sm:text-sm font-black text-primary italic mt-3 tracking-wide"
           >
-            Every workout moves you closer to this version of yourself.
+            &ldquo;Hold that version of yourself in your mind.&rdquo;
           </motion.p>
         )}
       </AnimatePresence>

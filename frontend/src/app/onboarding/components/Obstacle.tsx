@@ -2,69 +2,72 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronRight, Clock, BatteryLow, Map, TrendingDown, RefreshCw, HeartPulse } from 'lucide-react';
+import { ChevronRight, Target, Zap, Battery, Footprints, Flame, RefreshCw, Shield, HelpCircle } from 'lucide-react';
 import { useOnboarding } from '@/context/OnboardingContext';
 import StepBadge from './StepBadge';
 
-const OBSTACLES = [
-  { icon: Clock, label: 'Lack of Time', tag: 'Most Common', response: "We'll build a plan that fits your real schedule, not the other way around." },
-  { icon: BatteryLow, label: 'Lack of Motivation', tag: 'Recommended Focus', response: "Consistency beats motivation — small daily wins keep you moving even on low days." },
-  { icon: Map, label: 'No Clear Structure', tag: 'Best Choice', response: "That's exactly what a Tactical Protocol solves — structure instead of guesswork." },
-  { icon: TrendingDown, label: 'Inconsistent Results', tag: 'High Impact', response: 'Progress you can track is progress you can trust.' },
+const WEAKNESSES = [
+  { icon: Target, label: 'My technique', tag: 'High Priority', response: "Clean mechanics create effortless power and defense. We'll refine your fundamentals round by round." },
+  { icon: Zap, label: 'My speed', tag: 'Reflex Drills', response: "Hand speed and twitch reactions are trained, not born. High-cadence drills will unlock your snap." },
+  { icon: Battery, label: 'My conditioning', tag: 'Engine Focus', response: "Fatigue makes cowards of us all. We will build an engine that outlasts any opponent." },
+  { icon: Footprints, label: 'My footwork', tag: 'Ring General', response: "Boxing is fought with the feet first. Master angles, pivots, and distance control." },
+  { icon: Flame, label: 'My power', tag: 'Kinetic Chain', response: "True knockout leverage starts in the ground and hips. We will sharpen your kinetic chain." },
+  { icon: RefreshCw, label: 'My consistency', tag: 'Most Common', response: "Discipline beats motivation. Daily manageable bites build habits that never crumble." },
+  { icon: Shield, label: 'My confidence', tag: 'Mental Armor', response: "Confidence comes from repetition. As your form becomes second nature, so will your confidence." },
+  { icon: HelpCircle, label: "I'm not sure yet", tag: 'Full Audit', response: "That's why SparAI exists. Your AI vision analysis will uncover your strengths and blind spots automatically." },
 ];
 
 const Obstacle: React.FC = () => {
   const { data, updateData, nextStep, prevStep } = useOnboarding();
-  const [selected, setSelected] = useState<string>(data.biggestObstacle || 'Lack of Time');
+  const [selected, setSelected] = useState<string>(data.biggestObstacle || 'My technique');
 
   const handleSelect = (label: string) => {
     setSelected(label);
     updateData({ biggestObstacle: label });
   };
 
-  const active = OBSTACLES.find((o) => o.label === selected);
+  const active = WEAKNESSES.find((w) => w.label === selected);
 
   return (
     <div className="flex flex-col min-h-full justify-between py-2 pb-20 sm:pb-24">
-      <header className="text-left mb-4 sm:mb-6">
+      <header className="text-left mb-3 sm:mb-5">
         <StepBadge />
         <h1 className="text-2xl sm:text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
-          What's held you back <span className="text-primary">before</span>?
+          What&apos;s holding your <span className="text-primary">boxing back</span>?
         </h1>
-        <p className="text-white/50 mt-2.5 sm:mt-4 text-xs sm:text-sm leading-relaxed font-semibold">
-          Be honest with yourself. Understanding the obstacle is the first step to beating it.
+        <p className="text-white/60 mt-2 text-xs sm:text-sm font-semibold">
+          Diagnose your primary friction point so SparAI can target it directly in your protocol.
         </p>
       </header>
 
-      <main className="flex-1 flex flex-col gap-2.5 sm:gap-3 my-auto">
-        {OBSTACLES.map((o) => {
-          const isActive = selected === o.label;
-          const Icon = o.icon;
+      <main className="flex-1 grid grid-cols-2 gap-2 sm:gap-2.5 content-start my-auto">
+        {WEAKNESSES.map((w) => {
+          const isActive = selected === w.label;
+          const Icon = w.icon;
           return (
             <motion.button
-              key={o.label}
+              key={w.label}
               type="button"
               whileTap={{ scale: 0.98 }}
-              onClick={() => handleSelect(o.label)}
-              className={`relative flex items-center justify-between p-3.5 sm:p-4 rounded-3xl border text-left transition-all duration-300 ${
+              onClick={() => handleSelect(w.label)}
+              className={`relative flex flex-col items-start justify-between p-3 rounded-2xl border text-left transition-all duration-300 ${
                 isActive ? 'bg-primary/10 border-primary shadow-[0_0_15px_rgba(226,255,59,0.15)]' : 'bg-black/30 border-white/5 hover:border-white/10'
               }`}
             >
-              <div className="flex items-center gap-3 sm:gap-3.5">
-                <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-primary' : 'text-primary/40'}`} strokeWidth={2.25} />
-                <span className={`text-xs sm:text-sm font-black uppercase ${isActive ? 'text-primary' : 'text-white'}`}>{o.label}</span>
+              <div className="flex items-center justify-between w-full mb-1">
+                <Icon className={`w-4 h-4 ${isActive ? 'text-primary' : 'text-primary/40'}`} strokeWidth={2.25} />
+                {w.tag && (
+                  <span className={`text-[7px] font-black uppercase px-1.5 py-0.5 rounded-full ${
+                    isActive ? 'bg-primary text-black' : 'bg-white/5 text-white/40 border border-white/5'
+                  }`}>
+                    {w.tag}
+                  </span>
+                )}
               </div>
-              {o.tag && (
-                <span className={`text-[8px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
-                  isActive ? 'bg-primary text-black' : 'bg-white/5 text-white/40 border border-white/10'
-                }`}>
-                  {o.tag}
-                </span>
-              )}
+              <span className={`text-xs font-black uppercase leading-tight ${isActive ? 'text-primary' : 'text-white'}`}>{w.label}</span>
             </motion.button>
           );
         })}
-
         <AnimatePresence mode="wait">
           {active && (
             <motion.div
@@ -72,9 +75,9 @@ const Obstacle: React.FC = () => {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="glass-card p-3.5 sm:p-4 rounded-3xl border-primary/20 bg-primary/[0.04] mt-1"
+              className="glass-card p-3 rounded-2xl border-primary/20 bg-primary/[0.04] mt-2 text-center"
             >
-              <p className="text-xs italic text-white/70 font-semibold leading-relaxed">{active.response}</p>
+              <p className="text-[11px] italic text-primary/80 font-semibold leading-snug">{active.response}</p>
             </motion.div>
           )}
         </AnimatePresence>

@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -9,6 +9,7 @@ import {
   Flame, Trophy, ChevronRight, Video, CalendarDays,
   Swords, Activity, BarChart3, Crown, Bell, Star, User,
   Play, GraduationCap, Sparkles, ShieldCheck, Check, Lock, Gift,
+  Download, Smartphone,
 } from 'lucide-react';
 import HomeCta from './HomeCta';
 import { SparFreePromoModal } from '@/components/ui/SparFreePromoModal';
@@ -573,10 +574,7 @@ export default function HomeContent() {
 
   return (
     <div className="relative min-h-screen bg-[#08080A] text-white font-sans overflow-x-hidden">
-      {/* Interactive Mobile-Ready Free Spar & Deals Popup */}
-      <SparFreePromoModal />
-
-      {/* â”€â”€ Boxing-themed animated background â€” HOME PAGE ONLY â”€â”€ */}
+      {/* ── Boxing-themed animated background — HOME PAGE ONLY ── */}
       {/* NOTE: No overflow-hidden here â€” that clips the negatively-positioned orbs */}
       <div className="pointer-events-none absolute inset-0" aria-hidden="true">
 
@@ -694,7 +692,15 @@ export default function HomeContent() {
             <span className="text-[8px] font-bold uppercase tracking-widest text-white/40 hidden sm:block">AI Boxing Coach App</span>
           </div>
         </div>
-        <nav className="flex items-center gap-3 sm:gap-5 text-[9px] sm:text-xs font-bold uppercase tracking-widest text-white/50">
+        <nav className="flex items-center gap-2.5 sm:gap-4 text-[9px] sm:text-xs font-bold uppercase tracking-widest text-white/50">
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('open-pwa-install'))}
+            className="flex items-center gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full bg-primary/15 border border-primary/40 text-primary hover:bg-primary/25 transition-all text-[9px] font-black tracking-wider shadow-[0_0_12px_rgba(226,255,59,0.2)] active:scale-95 cursor-pointer"
+          >
+            <Download className="w-3 h-3" />
+            <span>INSTALL APP</span>
+          </button>
           <Link href="/legal/privacy" className="hover:text-white transition-colors">Privacy</Link>
           <Link href="/legal/terms" className="hover:text-white transition-colors">Terms</Link>
           <Link href="/legal/security" className="hidden sm:inline hover:text-white transition-colors">Security</Link>
@@ -729,9 +735,22 @@ export default function HomeContent() {
                 <Play className="w-3.5 h-3.5 fill-current" /> See How It Works
               </a>
             </div>
-            <Link href="/legal/privacy" className="text-[11px] font-bold text-white/40 hover:text-white/70 underline underline-offset-2 transition-colors">
-              Read our Privacy Policy
-            </Link>
+
+            {/* Quick Web App Shortcut Trigger */}
+            <div className="flex items-center gap-2 flex-wrap text-[10px] font-bold text-white/50">
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent('open-pwa-install'))}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white/80 hover:text-white transition-all active:scale-95 text-[10px] font-black uppercase tracking-wider"
+              >
+                <Smartphone className="w-3 h-3 text-primary" />
+                <span>Add App Shortcut to Home Screen</span>
+              </button>
+              <span className="text-white/20 hidden sm:inline">·</span>
+              <Link href="/legal/privacy" className="text-[10px] font-semibold text-white/40 hover:text-white/70 transition-colors">
+                Privacy Policy
+              </Link>
+            </div>
           </div>
 
           <div className="relative min-h-[330px] sm:min-h-[390px] w-full max-w-xl mx-auto lg:mx-0">

@@ -58,22 +58,30 @@ export function PwaInstallModal() {
 
       window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
-      // Non-overlapping check: wait for free promo modal to finish or 2.5 seconds
+      // Manual open trigger from anywhere in the app
+      const handleManualOpen = () => {
+        setIsVisible(true);
+        setShowGuideModal(true);
+      };
+      window.addEventListener('open-pwa-install', handleManualOpen);
+
+      // Non-overlapping check: wait for free promo modal to finish or reveal
       const timer = setInterval(() => {
         const hasDismissedPwa = localStorage.getItem(PWA_DISMISSED_KEY);
         if (hasDismissedPwa) return;
 
-        // Check if free promo modal key is stored or modal is closed
+        // Check if free promo modal is active in DOM
         const promoElement = document.querySelector('[data-free-promo-active="true"]');
         if (!promoElement) {
           setIsVisible(true);
           clearInterval(timer);
         }
-      }, 1500);
+      }, 1000);
 
       return () => {
         window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
         window.removeEventListener('appinstalled', handleAppInstalled);
+        window.removeEventListener('open-pwa-install', handleManualOpen);
         clearInterval(timer);
       };
     }
@@ -102,7 +110,7 @@ export function PwaInstallModal() {
 
   return (
     <>
-      {/* Sleek Non-Overlapping Bottom Floating Banner */}
+      {/* Sleek Non-Overlapping Floating Install Banner (Positioned above mobile sticky CTA) */}
       <AnimatePresence>
         {isVisible && !showGuideModal && (
           <motion.div
@@ -110,7 +118,7 @@ export function PwaInstallModal() {
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 100, opacity: 0 }}
             transition={{ type: 'spring', damping: 25, stiffness: 250 }}
-            className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-md z-[80] bg-[#12160d]/95 border-2 border-primary/40 rounded-2xl p-4 shadow-[0_0_40px_rgba(226,255,59,0.25)] backdrop-blur-xl text-white"
+            className="fixed bottom-24 sm:bottom-6 left-3 right-3 sm:left-auto sm:right-6 sm:max-w-md z-[95] bg-[#12160d]/95 border-2 border-primary/40 rounded-2xl p-4 shadow-[0_0_40px_rgba(226,255,59,0.25)] backdrop-blur-xl text-white"
           >
             <button
               onClick={handleDismiss}

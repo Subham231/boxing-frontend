@@ -9,8 +9,8 @@ import StepBadge from './StepBadge';
 const MINDSETS = [
   { icon: Brain, label: 'Tactical Thinker', tag: 'Most Picked', quote: 'I outsmart opponents with timing.' },
   { icon: Swords, label: 'Aggressive Finisher', tag: 'High Power', quote: 'I push the pace and land heavy.' },
-  { icon: Zap, label: 'Speed Specialist', tag: 'Recommended', quote: 'I rely on movement, slips and angles.' },
-  { icon: Target, label: 'Precision Counter', tag: 'Elite Choice', quote: 'I make them miss and pay instantly.' },
+  { icon: Zap, label: 'Speed Specialist', tag: 'Recommended', quote: 'I rely on movement, slips & angles.' },
+  { icon: Target, label: 'Precision Counter', tag: 'Elite Choice', quote: 'I make them miss and pay.' },
 ];
 
 const BoxingMindset: React.FC = () => {
@@ -27,8 +27,11 @@ const BoxingMindset: React.FC = () => {
       <header className="text-left mb-4 sm:mb-6">
         <StepBadge />
         <h1 className="text-2xl sm:text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
-          Which mindset describes <span className="text-primary">you best</span>?
+          What&apos;s your <span className="text-primary">fighting style</span>?
         </h1>
+        <p className="text-white/50 mt-2.5 sm:mt-4 text-xs sm:text-sm leading-relaxed font-semibold">
+          Select the combat mindset that best describes who you want to become in the ring.
+        </p>
       </header>
 
       <main className="flex-1 flex flex-col gap-2.5 my-auto">

@@ -7,12 +7,12 @@ import { useOnboarding } from '@/context/OnboardingContext';
 import StepBadge from './StepBadge';
 
 const DRIVERS = [
-  { icon: Swords, label: 'Become a Better Boxer', tag: 'Most Popular' },
-  { icon: Dumbbell, label: 'Get Stronger & Lean', tag: 'Recommended' },
-  { icon: Target, label: 'Build Iron Discipline', tag: 'Best Choice' },
-  { icon: Sparkles, label: 'Gain Fighting Confidence', tag: 'High Impact' },
-  { icon: Trophy, label: 'Prepare For Sparring', tag: 'Pro Focus' },
-  { icon: Shield, label: 'Learn Self Defense', tag: 'Essential' },
+  { icon: Swords, label: 'Become a better boxer', tag: 'Most Popular' },
+  { icon: Dumbbell, label: 'Get stronger & leaner', tag: 'Recommended' },
+  { icon: Target, label: 'Build iron discipline', tag: 'Best Choice' },
+  { icon: Sparkles, label: 'Gain fighting confidence', tag: 'High Impact' },
+  { icon: Trophy, label: 'Prepare for sparring', tag: 'Pro Focus' },
+  { icon: Shield, label: 'Learn self-defense', tag: 'Essential' },
 ];
 
 const MAX_SELECT = 3;
@@ -20,7 +20,7 @@ const MAX_SELECT = 3;
 const Motivation: React.FC = () => {
   const { data, updateData, nextStep, prevStep } = useOnboarding();
   const [selected, setSelected] = useState<string[]>(
-    data.motivations && data.motivations.length > 0 ? data.motivations : ['Become a Better Boxer', 'Get Stronger & Lean']
+    data.motivations && data.motivations.length > 0 ? data.motivations : ['Become a better boxer', 'Get stronger & leaner']
   );
 
   const toggle = (label: string) => {
@@ -43,10 +43,10 @@ const Motivation: React.FC = () => {
       <header className="text-left mb-4 sm:mb-6">
         <StepBadge />
         <h1 className="text-2xl sm:text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
-          Why are you starting <span className="text-primary">this journey</span>?
+          Why are you stepping into <span className="text-primary">the ring</span>?
         </h1>
         <p className="text-white/50 mt-2.5 sm:mt-4 text-xs sm:text-sm leading-relaxed font-semibold">
-          There is no wrong answer. Choose up to 3 things that motivate you most.
+          Choose up to 3 drivers that push you forward.
         </p>
       </header>
 

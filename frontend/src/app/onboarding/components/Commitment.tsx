@@ -17,10 +17,10 @@ const Commitment: React.FC = () => {
             <header className="text-left mb-4 sm:mb-6">
                 <StepBadge />
                 <h1 className="text-2xl sm:text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
-                    The <span className="text-primary">Commitment</span>.
+                    Give yourself <span className="text-primary">one word</span> to remember.
                 </h1>
                 <p className="text-white/50 mt-2.5 sm:mt-4 text-xs sm:text-sm leading-relaxed font-semibold">
-                    Training is 10% physical, 90% mental. Define the word that will guide you when the rounds get tough.
+                    Training is 10% physical, 90% mental. Define the sacred word that will anchor you when the rounds get tough.
                 </p>
             </header>
 
