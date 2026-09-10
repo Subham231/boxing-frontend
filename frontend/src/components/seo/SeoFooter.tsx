@@ -82,18 +82,18 @@ export function SeoFooter() {
                 </Link>
               </li>
               <li>
+                <Link href="/features/reflex-trainer" className="hover:text-primary transition-colors flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-primary" /> Reflex Trainer
+                </Link>
+              </li>
+              <li>
+                <Link href="/features/workout-planner" className="hover:text-primary transition-colors">
+                  Smart Workout Planner
+                </Link>
+              </li>
+              <li>
                 <Link href="/features" className="hover:text-primary transition-colors">
                   All Platform Features
-                </Link>
-              </li>
-              <li>
-                <Link href="/reflex" className="hover:text-primary transition-colors">
-                  Interactive Reflex Drill
-                </Link>
-              </li>
-              <li>
-                <Link href="/planner" className="hover:text-primary transition-colors">
-                  Smart Workout Planner
                 </Link>
               </li>
               <li>
@@ -116,8 +116,18 @@ export function SeoFooter() {
                 </Link>
               </li>
               <li>
-                <Link href="/blog/boxing-training-at-home" className="hover:text-primary transition-colors">
-                  Boxing Training at Home
+                <Link href="/blog/boxing-defense-techniques" className="hover:text-primary transition-colors">
+                  Defense & Slips Guide
+                </Link>
+              </li>
+              <li>
+                <Link href="/blog/heavy-bag-workout-routines" className="hover:text-primary transition-colors">
+                  Heavy Bag Routines
+                </Link>
+              </li>
+              <li>
+                <Link href="/blog/boxing-footwork-drills" className="hover:text-primary transition-colors">
+                  Boxing Footwork Drills
                 </Link>
               </li>
               <li>

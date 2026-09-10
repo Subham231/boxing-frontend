@@ -1451,11 +1451,19 @@ export default function HomeContent() {
             <span className="text-white/20">•</span>
             <Link href="/features/ai-video-analysis" className="hover:text-primary transition-colors">AI Video Analysis</Link>
             <span className="text-white/20">•</span>
-            <Link href="/blog" className="hover:text-primary transition-colors">Boxing Guides & Workouts</Link>
+            <Link href="/features/reflex-trainer" className="hover:text-primary transition-colors">Reflex Trainer</Link>
+            <span className="text-white/20">•</span>
+            <Link href="/features/workout-planner" className="hover:text-primary transition-colors">Workout Planner</Link>
+            <span className="text-white/20">•</span>
+            <Link href="/blog" className="hover:text-primary transition-colors">Boxing Guides</Link>
             <span className="text-white/20">•</span>
             <Link href="/blog/boxing-for-beginners" className="hover:text-primary transition-colors">Beginners Guide</Link>
             <span className="text-white/20">•</span>
-            <Link href="/blog/boxing-training-at-home" className="hover:text-primary transition-colors">Home Training</Link>
+            <Link href="/blog/boxing-defense-techniques" className="hover:text-primary transition-colors">Defense & Slips</Link>
+            <span className="text-white/20">•</span>
+            <Link href="/blog/heavy-bag-workout-routines" className="hover:text-primary transition-colors">Heavy Bag</Link>
+            <span className="text-white/20">•</span>
+            <Link href="/blog/boxing-footwork-drills" className="hover:text-primary transition-colors">Footwork</Link>
             <span className="text-white/20">•</span>
             <Link href="/blog/shadow-boxing-workout" className="hover:text-primary transition-colors">Shadow Boxing</Link>
           </div>

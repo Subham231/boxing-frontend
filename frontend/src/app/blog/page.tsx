@@ -88,6 +88,36 @@ export default function BlogIndexPage() {
       featured: false,
       date: 'March 2026',
     },
+    {
+      slug: '/blog/boxing-defense-techniques',
+      title: 'Boxing Defense Techniques: Slips, Rolls, Pulls & Guard Styles',
+      description: 'Master head movement, slipping straight punches, rolling under hooks, and compare High Guard vs Philly Shell.',
+      readTime: '8 min read',
+      tag: 'Defense',
+      icon: Target,
+      featured: false,
+      date: 'March 2026',
+    },
+    {
+      slug: '/blog/heavy-bag-workout-routines',
+      title: 'Heavy Bag Workout Routines: The 8-Round Fighter Protocol',
+      description: 'Championship 8-round punching bag circuits designed for knockout power, combination endurance, and wrist safety.',
+      readTime: '7 min read',
+      tag: 'Power & Bag',
+      icon: Home,
+      featured: false,
+      date: 'March 2026',
+    },
+    {
+      slug: '/blog/boxing-footwork-drills',
+      title: 'Boxing Footwork Drills: Master Balance, Pivots & Ring Generalship',
+      description: 'Learn step-and-slide mechanics, 90-degree front foot pivots, corner box drills, and cutting off the ring.',
+      readTime: '6 min read',
+      tag: 'Footwork',
+      icon: Target,
+      featured: false,
+      date: 'March 2026',
+    },
   ];
 
   return (
