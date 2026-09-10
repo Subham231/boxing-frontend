@@ -6,7 +6,11 @@ import { ReferralCapture } from "@/components/ReferralCapture";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "SPARAI - AI Combat & Boxing Coach",
+  metadataBase: new URL("https://sparai.in"),
+  title: {
+    default: "SPARAI - AI Combat & Boxing Coach",
+    template: "%s | SparAI",
+  },
   description: "High-performance AI boxing coach, reflex enhancer, and weekly training roadmap. Sharpen form and reaction with real-time computer vision analysis.",
   manifest: "/manifest.json",
   icons: {
@@ -19,7 +23,33 @@ export const metadata: Metadata = {
     ],
   },
   openGraph: {
-    images: [{ url: "/logo.jpg" }],
+    title: "SPARAI - AI Combat & Boxing Coach",
+    description: "High-performance AI boxing coach, reflex enhancer, and weekly training roadmap. Sharpen form and reaction with real-time computer vision analysis.",
+    url: "https://sparai.in",
+    siteName: "SparAI",
+    images: [{ url: "/logo.jpg", width: 1080, height: 1080, alt: "SparAI AI Combat Coach" }],
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "SPARAI - AI Combat & Boxing Coach",
+    description: "High-performance AI boxing coach, reflex enhancer, and weekly training roadmap. Sharpen form and reaction with real-time computer vision analysis.",
+    images: ["/logo.jpg"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
+  verification: {
+    google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION || undefined,
   },
   appleWebApp: {
     capable: true,

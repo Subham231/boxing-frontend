@@ -1446,15 +1446,28 @@ export default function HomeContent() {
               Open the app <ChevronRight size={14} />
             </Link>
           </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-semibold text-white/70">
+            <Link href="/features" className="hover:text-primary transition-colors">Features</Link>
+            <span className="text-white/20">•</span>
+            <Link href="/features/ai-video-analysis" className="hover:text-primary transition-colors">AI Video Analysis</Link>
+            <span className="text-white/20">•</span>
+            <Link href="/blog" className="hover:text-primary transition-colors">Boxing Guides & Workouts</Link>
+            <span className="text-white/20">•</span>
+            <Link href="/blog/boxing-for-beginners" className="hover:text-primary transition-colors">Beginners Guide</Link>
+            <span className="text-white/20">•</span>
+            <Link href="/blog/boxing-training-at-home" className="hover:text-primary transition-colors">Home Training</Link>
+            <span className="text-white/20">•</span>
+            <Link href="/blog/shadow-boxing-workout" className="hover:text-primary transition-colors">Shadow Boxing</Link>
+          </div>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px] font-bold uppercase tracking-widest text-white/40">
             <Link href="/legal/privacy" className="hover:text-white transition-colors">Privacy Policy</Link>
-            <span className="text-white/15">â€¢</span>
+            <span className="text-white/15">•</span>
             <Link href="/legal/terms" className="hover:text-white transition-colors">Terms & Conditions</Link>
-            <span className="text-white/15">â€¢</span>
+            <span className="text-white/15">•</span>
             <Link href="/legal/security" className="hover:text-white transition-colors">Security</Link>
-            <span className="text-white/15">â€¢</span>
+            <span className="text-white/15">•</span>
             <Link href="/legal/refund" className="hover:text-white transition-colors">Refund Policy</Link>
-            <span className="text-white/15">â€¢</span>
+            <span className="text-white/15">•</span>
             <Link href="/legal/contact" className="hover:text-white transition-colors">Contact</Link>
           </div>
         </footer>
