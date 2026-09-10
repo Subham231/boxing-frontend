@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
 import { twMerge } from 'tailwind-merge';
-import { Flame, ChevronDown, Lock } from 'lucide-react';
+import { Flame, ChevronDown, Lock, X } from 'lucide-react';
 import { useRankState } from '@/lib/rank-client';
 import {
   ExploreDiamond,
@@ -16,7 +16,7 @@ import {
   CalendarNeonIcon,
   UserNeonIcon,
 } from '@/components/ui/NeonIcons';
-import { FreeSparringTutorial, TUTORIAL_STORAGE_KEY } from './FreeSparringTutorial';
+import { useFreeSparringTutorial, TUTORIAL_STORAGE_KEY } from './FreeSparringTutorial';
 
 export function BottomNav() {
   const pathname = usePathname();
@@ -26,6 +26,8 @@ export function BottomNav() {
 
   const [menuOpen, setMenuOpen] = useState(false);
   const exploreRef = useRef<HTMLDivElement>(null);
+
+  const { tutorialStep, dismissTutorial } = useFreeSparringTutorial(menuOpen);
 
   const leftNavItems = [
     { label: 'HOME', icon: HomeNeonIcon, href: '/dashboard' },
@@ -56,9 +58,7 @@ export function BottomNav() {
       const el = exploreRef.current;
       if (!el) return;
       if (e.target instanceof Node && !el.contains(e.target)) {
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(TUTORIAL_STORAGE_KEY, 'true');
-        }
+        dismissTutorial();
         setMenuOpen(false);
       }
     };
@@ -68,27 +68,24 @@ export function BottomNav() {
       document.removeEventListener('mousedown', onPointer);
       document.removeEventListener('touchstart', onPointer);
     };
-  }, [menuOpen]);
+  }, [menuOpen, dismissTutorial]);
 
   const go = (href: string) => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(TUTORIAL_STORAGE_KEY, 'true');
-    }
+    dismissTutorial();
     setMenuOpen(false);
     router.push(href);
   };
 
   const handleToggleExplore = () => {
-    if (menuOpen && typeof window !== 'undefined') {
-      // User clicked explore while open -> closing it ends the tutorial permanently
-      localStorage.setItem(TUTORIAL_STORAGE_KEY, 'true');
+    if (menuOpen) {
+      dismissTutorial();
     }
     setMenuOpen((o) => !o);
   };
 
   return (
     <>
-      {/* Full-screen Dark Blurred Backdrop with Glowing Animated Cyber Grid */}
+      {/* Full-screen Dark Blurred Backdrop with Glowing Tactical Cyber Grid */}
       <AnimatePresence>
         {menuOpen && (
           <motion.div
@@ -96,35 +93,19 @@ export function BottomNav() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.28 }}
+            transition={{ duration: 0.22 }}
             onClick={() => {
-              if (typeof window !== 'undefined') {
-                localStorage.setItem(TUTORIAL_STORAGE_KEY, 'true');
-              }
+              dismissTutorial();
               setMenuOpen(false);
             }}
             className="fixed inset-0 z-[995] bg-black/85 backdrop-blur-md pointer-events-auto overflow-hidden"
             aria-hidden="true"
           >
-            {/* Animated Glowing Cyber Tactical Grid */}
-            <motion.div
-              initial={{ opacity: 0, scale: 1.04 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 1.04 }}
-              transition={{ duration: 0.35 }}
-              className="absolute inset-0 pointer-events-none"
-            >
-              {/* Dynamic Scrolling Cyber Grid Pattern */}
-              <motion.div
-                animate={{
-                  backgroundPosition: ['0px 0px', '0px 36px'],
-                }}
-                transition={{
-                  duration: 2.2,
-                  repeat: Infinity,
-                  ease: 'linear',
-                }}
-                className="absolute inset-0"
+            {/* GPU-Optimized Glowing Cyber Tactical Grid */}
+            <div className="absolute inset-0 pointer-events-none transform-gpu">
+              {/* Static GPU-cached Grid Pattern */}
+              <div
+                className="absolute inset-0 opacity-70"
                 style={{
                   backgroundImage: `
                     linear-gradient(to right, rgba(226, 255, 59, 0.16) 1px, transparent 1px),
@@ -137,16 +118,8 @@ export function BottomNav() {
               />
 
               {/* Glowing Grid Intersection Points */}
-              <motion.div
-                animate={{
-                  backgroundPosition: ['0px 0px', '0px 36px'],
-                }}
-                transition={{
-                  duration: 2.2,
-                  repeat: Infinity,
-                  ease: 'linear',
-                }}
-                className="absolute inset-0 filter drop-shadow-[0_0_8px_rgba(226,255,59,0.85)]"
+              <div
+                className="absolute inset-0 filter drop-shadow-[0_0_6px_rgba(226,255,59,0.7)] opacity-80"
                 style={{
                   backgroundImage: `radial-gradient(circle at 1px 1px, rgba(226, 255, 59, 0.7) 1.5px, transparent 0)`,
                   backgroundSize: '36px 36px',
@@ -155,33 +128,9 @@ export function BottomNav() {
                 }}
               />
 
-              {/* Sweeping Glowing Laser Scanline */}
-              <motion.div
-                animate={{
-                  top: ['-5%', '105%'],
-                }}
-                transition={{
-                  duration: 3.6,
-                  repeat: Infinity,
-                  ease: 'easeInOut',
-                }}
-                className="absolute left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[#E2FF3B] to-transparent shadow-[0_0_18px_#E2FF3B,0_0_36px_#E2FF3B] opacity-80 pointer-events-none"
-              />
-
               {/* Ambient Breathing Tactical Lime Glow radiating from bottom */}
-              <motion.div
-                animate={{
-                  scale: [1, 1.15, 1],
-                  opacity: [0.4, 0.65, 0.4],
-                }}
-                transition={{
-                  duration: 3,
-                  repeat: Infinity,
-                  ease: 'easeInOut',
-                }}
-                className="absolute left-1/2 bottom-0 -translate-x-1/2 translate-y-1/4 w-[650px] h-[550px] rounded-full bg-gradient-to-t from-[#E2FF3B]/35 via-[#E2FF3B]/12 to-transparent blur-3xl pointer-events-none"
-              />
-            </motion.div>
+              <div className="absolute left-1/2 bottom-0 -translate-x-1/2 translate-y-1/4 w-[600px] h-[500px] rounded-full bg-gradient-to-t from-[#E2FF3B]/30 via-[#E2FF3B]/10 to-transparent blur-3xl pointer-events-none opacity-80" />
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -190,9 +139,6 @@ export function BottomNav() {
         ref={exploreRef}
         className="fixed bottom-0 left-0 right-0 z-[999] pointer-events-none select-none flex flex-col items-center"
       >
-        {/* Free Sparring Interactive Tutorial with Holographic Finger */}
-        <FreeSparringTutorial menuOpen={menuOpen} />
-
         {/* Floating Combat Protocols Tray (Shown when Explore is opened) */}
         <AnimatePresence>
           {menuOpen && (
@@ -207,7 +153,6 @@ export function BottomNav() {
               <div className="relative rounded-[28px] border border-white/10 bg-[#060904]/96 backdrop-blur-2xl px-3 pt-3 pb-4 shadow-[0_20px_60px_rgba(0,0,0,0.95),0_0_35px_rgba(226,255,59,0.15)] flex flex-col items-center overflow-hidden">
                 {/* Tactical Radar Concentric Circles & Crosshairs */}
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  {/* Concentric rings */}
                   <div className="absolute left-1/2 bottom-0 -translate-x-1/2 translate-y-1/2 w-[220px] h-[220px] rounded-full border border-[#E2FF3B]/15 pointer-events-none" />
                   <div className="absolute left-1/2 bottom-0 -translate-x-1/2 translate-y-1/2 w-[320px] h-[320px] rounded-full border border-[#E2FF3B]/10 pointer-events-none" />
                   <div className="absolute left-1/2 bottom-0 -translate-x-1/2 translate-y-1/2 w-[420px] h-[420px] rounded-full border border-[#E2FF3B]/[0.06] pointer-events-none" />
@@ -230,6 +175,30 @@ export function BottomNav() {
                   {/* Bottom Center Radial Glow */}
                   <div className="absolute left-1/2 bottom-0 -translate-x-1/2 translate-y-1/3 w-[180px] h-[140px] rounded-full bg-[#E2FF3B]/25 blur-2xl pointer-events-none" />
                 </div>
+
+                {/* Step 2 Tutorial Guidance Banner: Tap Sparring for Free */}
+                {tutorialStep === 'sparring' && (
+                  <div className="w-[min(90vw,310px)] pointer-events-auto mb-2.5 flex items-center justify-between gap-2 px-3.5 py-1.5 rounded-full bg-[#180e05]/95 border border-orange-500/70 shadow-[0_0_25px_rgba(249,115,22,0.45)] backdrop-blur-xl relative z-30 animate-in fade-in zoom-in duration-200">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="relative flex h-2 w-2 shrink-0">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-400" />
+                      </span>
+                      <span className="text-[10.5px] font-black uppercase tracking-wide text-amber-300 truncate">
+                        Select Sparring — 100% Free!
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={dismissTutorial}
+                      aria-label="Skip Tutorial"
+                      className="shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/15 hover:bg-white/25 text-[9px] font-black text-white uppercase tracking-wider transition-colors cursor-pointer"
+                    >
+                      <span>Skip</span>
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
 
                 {/* Header: Combat Protocols Pill Button */}
                 <button
@@ -297,6 +266,25 @@ export function BottomNav() {
 
                   {/* SPARRING COLUMN */}
                   <div className="flex flex-col items-center gap-2 w-full max-w-[144px] relative">
+                    {/* Step 2 Tutorial Pointer (Anchored directly over SPARRING card) */}
+                    {tutorialStep === 'sparring' && (
+                      <div className="absolute -top-11 left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none z-40">
+                        <motion.div
+                          animate={{ y: [0, 8, 0] }}
+                          transition={{ duration: 0.85, repeat: Infinity, ease: 'easeInOut' }}
+                          className="flex flex-col items-center -space-y-2.5 filter drop-shadow-[0_0_12px_rgba(249,115,22,0.95)]"
+                        >
+                          <ChevronDown className="w-6 h-6 text-orange-400/70" />
+                          <ChevronDown className="w-7 h-7 text-orange-400" />
+                        </motion.div>
+                        <motion.div
+                          animate={{ scale: [0.85, 1.25, 0.85], opacity: [0.5, 0.95, 0.5] }}
+                          transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
+                          className="absolute top-5 w-20 h-20 rounded-2xl border-2 border-orange-500 shadow-[0_0_25px_#EA580C] pointer-events-none"
+                        />
+                      </div>
+                    )}
+
                     {/* FREE Pill Badge */}
                     <div className="flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-[#101b08] border border-[#E2FF3B]/80 shadow-[0_0_12px_rgba(226,255,59,0.5)]">
                       <span className="w-2 h-2 rounded-full bg-[#84CC16] shadow-[0_0_6px_#84CC16] shrink-0" />
@@ -375,6 +363,53 @@ export function BottomNav() {
 
           {/* Center: Elevated Hexagon Explore Button */}
           <div className="relative -top-4 flex flex-col items-center justify-center">
+            {/* Step 1 Tutorial Callout and Concentric Pointer */}
+            {tutorialStep === 'explore' && !menuOpen && (
+              <>
+                {/* Concentric Pulsing Touch Ring around Explore Hexagon */}
+                <motion.div
+                  animate={{ scale: [0.92, 1.34, 0.92], opacity: [0.55, 1, 0.55] }}
+                  transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[68px] h-[68px] rounded-full border-2 border-[#E2FF3B] shadow-[0_0_25px_#E2FF3B] pointer-events-none z-30"
+                />
+
+                {/* Callout Card & Chevrons directly centered over Explore */}
+                <div className="absolute bottom-full mb-3.5 left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none z-[1001] w-max max-w-[min(90vw,290px)]">
+                  {/* Callout Card */}
+                  <div className="w-full pointer-events-auto mb-2 flex items-center justify-between gap-2 px-3.5 py-1.5 rounded-full bg-[#0a1205]/95 border border-[#E2FF3B]/80 shadow-[0_0_25px_rgba(226,255,59,0.5)] backdrop-blur-xl animate-in fade-in zoom-in duration-200">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="relative flex h-2 w-2 shrink-0">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#E2FF3B] opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-[#E2FF3B]" />
+                      </span>
+                      <span className="text-[10.5px] font-black uppercase tracking-wide text-[#E2FF3B] truncate">
+                        Tap Explore for Free Sparring
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={dismissTutorial}
+                      aria-label="Skip Tutorial"
+                      className="shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/15 hover:bg-white/25 text-[9px] font-black text-white uppercase tracking-wider transition-colors cursor-pointer"
+                    >
+                      <span>Skip</span>
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+
+                  {/* Glowing Tactical Pointer (Animated Chevrons pointing straight down to Explore) */}
+                  <motion.div
+                    animate={{ y: [0, 8, 0] }}
+                    transition={{ duration: 0.85, repeat: Infinity, ease: 'easeInOut' }}
+                    className="flex flex-col items-center -space-y-2.5 filter drop-shadow-[0_0_12px_rgba(226,255,59,0.95)]"
+                  >
+                    <ChevronDown className="w-6 h-6 text-[#E2FF3B]/70" />
+                    <ChevronDown className="w-7 h-7 text-[#E2FF3B]" />
+                  </motion.div>
+                </div>
+              </>
+            )}
+
             {/* Powerful Aura behind hexagon */}
             <div
               className={twMerge(

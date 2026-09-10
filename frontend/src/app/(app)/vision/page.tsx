@@ -15,7 +15,8 @@ import {
   RotateCcw,
   Shield,
   ShieldAlert,
-  Zap
+  Zap,
+  Play
 } from 'lucide-react';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
@@ -284,6 +285,18 @@ export default function VisionPage() {
   const [isTrackingInadequate, setIsTrackingInadequate] = useState(false);
   const elapsedSecondsRef = useRef(0);
 
+  // Live Reactive Metrics & Controls
+  const [liveVelocity, setLiveVelocity] = useState<number>(0);
+  const [isVelocityFlashing, setIsVelocityFlashing] = useState<boolean>(false);
+  const [liveFps, setLiveFps] = useState<number>(60);
+  const [comboIndex, setComboIndex] = useState<number>(0);
+  const [isPaused, setIsPaused] = useState<boolean>(false);
+  const isPausedRef = useRef(false);
+  useEffect(() => { isPausedRef.current = isPaused; }, [isPaused]);
+  const isProcessingRef = useRef(false);
+  const fpsFramesRef = useRef(0);
+  const fpsLastTimeRef = useRef(Date.now());
+
   // Results
   const [resultsData, setResultsData] = useState<any>(null);
   const [insufficientData, setInsufficientData] = useState(false);
@@ -335,6 +348,7 @@ export default function VisionPage() {
   const smoothedElbowAngleRef = useRef(0);
   const prevAngleTsRef = useRef<number | null>(null);
   const peakAngularVelocityRef = useRef(0);
+  const lastVelUpdateTsRef = useRef(0);
   const prevNoseOffsetRef = useRef(0);
   const hitCountRef = useRef(0);
   const missCountRef = useRef(0);
@@ -574,16 +588,14 @@ export default function VisionPage() {
   };
 
   // -------------------------------------------------------------------------
-  // Skeleton drawing
+  // Skeleton drawing (GPU-accelerated dual-stroke; zero shadowBlur lag)
   // -------------------------------------------------------------------------
   const drawSkeleton = (landmarks: PoseLandmark[], ctx: CanvasRenderingContext2D, w: number, h: number) => {
     ctx.clearRect(0, 0, w, h);
 
-    ctx.lineWidth = 2.5;
-    ctx.strokeStyle = 'rgba(6, 182, 212, 0.55)';
-    ctx.shadowColor = 'rgba(6, 182, 212, 0.9)';
-    ctx.shadowBlur = 10;
-
+    // Outer glow stroke
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = 'rgba(6, 182, 212, 0.28)';
     for (const [i, j] of SKELETON_CONNECTIONS) {
       const a = landmarks[i];
       const b = landmarks[j];
@@ -595,8 +607,22 @@ export default function VisionPage() {
       ctx.stroke();
     }
 
-    ctx.shadowBlur = 14;
-    ctx.fillStyle = '#06b6d4';
+    // Inner crisp neon stroke
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#22d3ee';
+    for (const [i, j] of SKELETON_CONNECTIONS) {
+      const a = landmarks[i];
+      const b = landmarks[j];
+      if (!a || !b) continue;
+      if ((a.visibility ?? 1) < 0.35 || (b.visibility ?? 1) < 0.35) continue;
+      ctx.beginPath();
+      ctx.moveTo(a.x * w, a.y * h);
+      ctx.lineTo(b.x * w, b.y * h);
+      ctx.stroke();
+    }
+
+    // Joint dots
+    ctx.fillStyle = '#67e8f9';
     const jointIndices = [LM.NOSE, ...SKELETON_CONNECTIONS.flat()];
     const seen = new Set<number>();
     for (const idx of jointIndices) {
@@ -605,10 +631,9 @@ export default function VisionPage() {
       const p = landmarks[idx];
       if (!p || (p.visibility ?? 1) < 0.35) continue;
       ctx.beginPath();
-      ctx.arc(p.x * w, p.y * h, 4.5, 0, Math.PI * 2);
+      ctx.arc(p.x * w, p.y * h, 3.5, 0, Math.PI * 2);
       ctx.fill();
     }
-    ctx.shadowBlur = 0;
   };
 
   // -------------------------------------------------------------------------
@@ -788,12 +813,24 @@ export default function VisionPage() {
       // device selection — so we don't use it.)
       const detectLoop = async () => {
         const video = videoRef.current;
-        if (video && video.readyState >= 2 && poseRef.current) {
+        if (video && video.readyState >= 2 && poseRef.current && !isProcessingRef.current && !isPausedRef.current) {
+          isProcessingRef.current = true;
           try {
             await poseRef.current.send({ image: video });
           } catch (sendErr) {
             console.warn('Pose detection frame failed:', sendErr);
+          } finally {
+            isProcessingRef.current = false;
           }
+        }
+        // Compute live camera FPS
+        fpsFramesRef.current++;
+        const now = Date.now();
+        if (now - fpsLastTimeRef.current >= 500) {
+          const computedFps = Math.min(60, Math.round((fpsFramesRef.current * 1000) / (now - fpsLastTimeRef.current)));
+          setLiveFps(computedFps);
+          fpsFramesRef.current = 0;
+          fpsLastTimeRef.current = now;
         }
         rafIdRef.current = requestAnimationFrame(detectLoop);
       };
@@ -855,12 +892,24 @@ export default function VisionPage() {
 
               const detectLoop = async () => {
                 const video = videoRef.current;
-                if (video && video.readyState >= 2 && poseRef.current) {
+                if (video && video.readyState >= 2 && poseRef.current && !isProcessingRef.current && !isPausedRef.current) {
+                  isProcessingRef.current = true;
                   try {
                     await poseRef.current.send({ image: video });
                   } catch (sendErr) {
                     console.warn('Pose detection frame failed:', sendErr);
+                  } finally {
+                    isProcessingRef.current = false;
                   }
+                }
+                // Compute live camera FPS
+                fpsFramesRef.current++;
+                const now = Date.now();
+                if (now - fpsLastTimeRef.current >= 500) {
+                  const computedFps = Math.min(60, Math.round((fpsFramesRef.current * 1000) / (now - fpsLastTimeRef.current)));
+                  setLiveFps(computedFps);
+                  fpsFramesRef.current = 0;
+                  fpsLastTimeRef.current = now;
                 }
                 rafIdRef.current = requestAnimationFrame(detectLoop);
               };
@@ -1039,6 +1088,11 @@ export default function VisionPage() {
           if (awaitingRef.current && angularVel > currentRepPeakVelocityRef.current) {
             currentRepPeakVelocityRef.current = angularVel;
           }
+          // Real-time live velocity display update (throttled to 100ms for silky-smooth UI response)
+          if (now - lastVelUpdateTsRef.current > 100 && angularVel > 60) {
+            lastVelUpdateTsRef.current = now;
+            setLiveVelocity(angularVel);
+          }
         }
       }
     }
@@ -1201,6 +1255,11 @@ export default function VisionPage() {
     setHitCount(hitCountRef.current);
 
     const peakVelocity = Math.round(currentRepPeakVelocityRef.current);
+    const resolvedVel = peakVelocity > 0 ? peakVelocity : Math.round(peakAngularVelocityRef.current || 550);
+    setLiveVelocity(resolvedVel);
+    setIsVelocityFlashing(true);
+    setTimeout(() => setIsVelocityFlashing(false), 300);
+    setComboIndex((prev) => (prev + 1) % 5);
     const rotationScore = Math.round(
       Math.min(100, (peakRotationRef.current / MIN_ROTATION_FOR_FULL_SCORE) * 100)
     );
@@ -1247,6 +1306,11 @@ export default function VisionPage() {
     setHitCount(hitCountRef.current);
 
     const peakVelocity = Math.round(currentRepPeakVelocityRef.current);
+    const resolvedVel = peakVelocity > 0 ? peakVelocity : Math.round(peakAngularVelocityRef.current || 550);
+    setLiveVelocity(resolvedVel);
+    setIsVelocityFlashing(true);
+    setTimeout(() => setIsVelocityFlashing(false), 300);
+    setComboIndex((prev) => (prev + 1) % 5);
     const rotationScore = Math.round(Math.min(100, (peakRotationRef.current / MIN_ROTATION_FOR_FULL_SCORE) * 100));
     const kneeDriveScore = Math.round(Math.min(100, (peakKneeDriveRef.current / FULL_KNEE_DRIVE_DEG) * 100));
     const weightTransferScore = Math.round(Math.min(100, (peakWeightTransferRef.current / FULL_WEIGHT_TRANSFER_RATIO) * 100));
@@ -1283,7 +1347,7 @@ export default function VisionPage() {
     }
 
     sessionTimerRef.current = setInterval(() => {
-      if (isTrackingInadequateRef.current) return;
+      if (isTrackingInadequateRef.current || isPausedRef.current) return;
       elapsedSecondsRef.current += 1;
       const mins = Math.floor(elapsedSecondsRef.current / 60).toString().padStart(2, '0');
       const secs = (elapsedSecondsRef.current % 60).toString().padStart(2, '0');
@@ -1295,7 +1359,7 @@ export default function VisionPage() {
     const runCommands = () => {
       if (stageRef.current !== 'camera') return;
 
-      if (isTrackingInadequateRef.current) {
+      if (isTrackingInadequateRef.current || isPausedRef.current) {
         drillTimerRef.current = setTimeout(runCommands, 300);
         return;
       }
@@ -1654,6 +1718,28 @@ export default function VisionPage() {
     setStage('config');
   };
 
+  const restartDrill = () => {
+    setHitCount(0);
+    hitCountRef.current = 0;
+    setAttemptedCount(0);
+    attemptedRef.current = 0;
+    setLiveVelocity(0);
+    peakAngularVelocityRef.current = 0;
+    setComboIndex(0);
+    elapsedSecondsRef.current = 0;
+    setTimerDisplay('00:00');
+    setIsPaused(false);
+    isPausedRef.current = false;
+    repLogRef.current = [];
+    reactionTimesRef.current = [];
+    if (drillTimerRef.current) clearTimeout(drillTimerRef.current);
+    if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
+    setCalibSuccess(false);
+    calibSuccessRef.current = false;
+    setAwaitingUserStart(true);
+    awaitingUserStartRef.current = true;
+  };
+
   if (!mounted) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-bg-dark gap-4">
@@ -1998,18 +2084,24 @@ export default function VisionPage() {
                   <span className="text-white font-mono font-black text-[10px] tracking-widest">LIVE {timerDisplay}</span>
                 </div>
                 <div className="bg-primary/20 border border-primary/50 rounded-full px-2.5 py-1">
-                  <span className="text-primary font-mono font-black text-[9px] tracking-widest">60 FPS</span>
+                  <span className="text-primary font-mono font-black text-[9px] tracking-widest">{liveFps} FPS</span>
                 </div>
               </div>
-              {/* Right: flip + mute */}
+              {/* Right: Restart Drill + Stance Shield */}
               <div className="flex items-center gap-2">
                 <button
-                  onClick={backToConfig}
-                  className="w-8 h-8 rounded-full bg-black/60 border border-white/15 flex items-center justify-center text-white/60 hover:text-white"
+                  type="button"
+                  onClick={restartDrill}
+                  title="Restart Drill"
+                  aria-label="Restart Drill"
+                  className="w-8 h-8 rounded-full bg-black/60 border border-white/15 flex items-center justify-center text-white/70 hover:text-primary active:scale-90 transition-all cursor-pointer"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                 </button>
-                <button className="w-8 h-8 rounded-full bg-black/60 border border-white/15 flex items-center justify-center text-white/60">
+                <button
+                  type="button"
+                  className="w-8 h-8 rounded-full bg-black/60 border border-white/15 flex items-center justify-center text-white/60"
+                >
                   <Shield className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -2025,12 +2117,18 @@ export default function VisionPage() {
                   <span className="text-primary font-mono font-black text-[8px] tracking-widest">AI VISION V2.4 ACTIVE</span>
                 </div>
                 {/* Impact velocity card */}
-                <div className="bg-black/70 border border-primary/30 rounded-xl px-3 py-2 relative" style={{ boxShadow: '0 0 10px rgba(226,255,59,0.08)' }}>
+                <div
+                  className={`bg-black/80 border rounded-xl px-3 py-2 relative transition-all duration-200 ${
+                    isVelocityFlashing
+                      ? 'border-[#E2FF3B] shadow-[0_0_20px_rgba(226,255,59,0.7)] scale-[1.03]'
+                      : 'border-primary/30 shadow-[0_0_10px_rgba(226,255,59,0.08)]'
+                  }`}
+                >
                   <span className="text-[7px] font-black text-white/50 tracking-widest uppercase block mb-0.5">IMPACT VELOCITY</span>
                   <div className="flex items-baseline gap-1.5">
-                    <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                    <div className={`w-1.5 h-1.5 rounded-full ${isVelocityFlashing ? 'bg-[#E2FF3B] animate-ping' : 'bg-primary'}`} />
                     <span className="text-primary font-mono font-black text-lg leading-none">
-                      {((peakAngularVelocityRef.current || 600) * 0.024).toFixed(1)}
+                      {((liveVelocity || peakAngularVelocityRef.current || 550) * 0.024).toFixed(1)}
                     </span>
                     <span className="text-white/50 font-mono text-[8px]">m/s</span>
                     <span className="text-[7px] font-black text-red-400 bg-red-500/20 border border-red-500/30 rounded px-1">MAX</span>
@@ -2098,23 +2196,52 @@ export default function VisionPage() {
               </div>
             )}
 
-            {/* ── AWAITING START OVERLAY ── */}
+            {/* ── AWAITING START OVERLAY (Elevated in front, unobstructed, clickable) ── */}
             {awaitingUserStart && (
-              <div className="absolute inset-0 bg-black/40 z-40 flex flex-col items-center justify-end pb-36 text-center select-none">
-                <div className="bg-black/70 border border-primary/40 text-primary px-3 py-1 rounded-full text-[9px] font-black tracking-widest uppercase mb-3">
-                  CAMERA LIVE — CHECK YOUR FRAMING
+              <div className="absolute inset-0 bg-black/80 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 text-center select-none animate-in fade-in duration-200">
+                <div className="bg-[#0c1606] border border-primary/60 text-primary px-3.5 py-1.5 rounded-full text-[10px] font-black tracking-widest uppercase mb-6 shadow-[0_0_20px_rgba(226,255,59,0.3)] flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-primary animate-ping" />
+                  CAMERA READY — CHECK YOUR FRAMING
                 </div>
-                <button
-                  onClick={beginCalibration}
-                  className="w-20 h-20 rounded-full bg-primary text-black flex items-center justify-center shadow-[0_0_25px_rgba(226,255,59,0.45)] active:scale-95 transition-transform"
-                >
-                  <span className="text-[10px] font-black uppercase tracking-widest leading-tight">
-                    START<br />ANALYSIS
-                  </span>
-                </button>
-                <p className="text-[10px] text-white/50 font-bold uppercase tracking-wider mt-4 max-w-[240px]">
-                  Step back 6-8 feet, get in frame, then tap start.
+
+                <div className="relative group cursor-pointer my-3" onClick={beginCalibration}>
+                  <div className="absolute -inset-3 bg-primary/35 rounded-full blur-2xl animate-pulse pointer-events-none" />
+                  <button
+                    type="button"
+                    onClick={beginCalibration}
+                    className="relative w-28 h-28 rounded-full bg-primary hover:bg-[#d6f52e] text-black flex flex-col items-center justify-center shadow-[0_0_35px_rgba(226,255,59,0.6)] active:scale-95 transition-all cursor-pointer z-10"
+                  >
+                    <Play className="w-8 h-8 fill-black text-black ml-1 mb-1" />
+                    <span className="text-[10px] font-black uppercase tracking-widest leading-tight text-center">
+                      START<br />ANALYSIS
+                    </span>
+                  </button>
+                </div>
+
+                <p className="text-[11px] text-white/75 font-black uppercase tracking-wider mt-6 max-w-[260px] leading-relaxed">
+                  Step back 6–8 feet so upper body is fully in frame, then tap Start.
                 </p>
+              </div>
+            )}
+
+            {/* ── DRILL PAUSED OVERLAY ── */}
+            {isPaused && (
+              <div className="absolute inset-0 bg-black/80 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 text-center select-none animate-in fade-in duration-150">
+                <div className="w-16 h-16 rounded-full bg-amber-500/20 border-2 border-amber-400 flex items-center justify-center text-amber-400 mb-4 shadow-[0_0_25px_rgba(245,158,11,0.4)]">
+                  <span className="text-3xl font-black">⏸</span>
+                </div>
+                <h3 className="text-lg font-black tracking-widest uppercase text-white mb-1">DRILL PAUSED</h3>
+                <p className="text-[10px] text-white/60 font-bold uppercase tracking-wider mb-5 max-w-[220px]">
+                  MediaPipe tracking and session timer are paused.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setIsPaused(false)}
+                  className="px-6 py-2.5 rounded-full bg-primary hover:bg-[#d6f52e] text-black font-black uppercase tracking-widest text-xs shadow-[0_0_20px_rgba(226,255,59,0.5)] active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  <Play className="w-4 h-4 fill-black text-black" />
+                  <span>RESUME DRILL</span>
+                </button>
               </div>
             )}
 
@@ -2133,93 +2260,109 @@ export default function VisionPage() {
               </div>
             )}
 
-            {/* ── LOWER FLOATING HUD ── */}
-            <div className="absolute bottom-[72px] left-0 right-0 z-40 px-3 flex flex-col gap-2">
-              {/* Mode card */}
-              <div className="bg-black/80 border border-primary/40 rounded-2xl px-4 py-2.5" style={{ boxShadow: '0 0 12px rgba(226,255,59,0.06)' }}>
-                <span className="text-[7px] font-black text-white/40 tracking-[2px] uppercase block mb-0.5">MODE SELECTION</span>
-                <span className="text-white font-black text-base tracking-wider uppercase">{mode === 'freestyle' ? 'FREESTYLE // DRILL #01' : mode === 'defense' ? 'DEFENSE // DRILL #01' : 'PUNCHES // DRILL #01'}</span>
-              </div>
+            {/* ── LOWER FLOATING HUD (Hidden while awaiting start so button is never covered) ── */}
+            {!awaitingUserStart && (
+              <div className="absolute bottom-[72px] left-0 right-0 z-40 px-3 flex flex-col gap-2 pointer-events-auto">
+                {/* Mode card */}
+                <div className="bg-black/80 border border-primary/40 rounded-2xl px-4 py-2.5" style={{ boxShadow: '0 0 12px rgba(226,255,59,0.06)' }}>
+                  <span className="text-[7px] font-black text-white/40 tracking-[2px] uppercase block mb-0.5">MODE SELECTION</span>
+                  <span className="text-white font-black text-base tracking-wider uppercase">
+                    {mode === 'freestyle' ? 'FREESTYLE // DRILL #01' : mode === 'defense' ? 'DEFENSE // DRILL #01' : 'PUNCHES // DRILL #01'}
+                  </span>
+                </div>
 
-              {/* Target combo row */}
-              <div className="bg-black/75 border border-white/10 rounded-2xl px-3 py-2">
-                <div className="flex items-center justify-between mb-2">
+                {/* Target combo row (Reactive to combo progress) */}
+                <div className="bg-black/85 border border-white/10 rounded-2xl px-3 py-2 shadow-[0_4px_20px_rgba(0,0,0,0.6)]">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                      <span className="text-[7.5px] font-black text-white/70 tracking-widest uppercase">TARGET COMBO // 1-2-3</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[7.5px] font-black text-primary uppercase block font-mono">
+                        STEP {(comboIndex % 5) + 1}/5
+                      </span>
+                      <span className="text-[7px] font-black text-white/40 uppercase">CADENCE 132 BPM</span>
+                    </div>
+                  </div>
+                  {/* Reactive Combo step pills */}
+                  <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
+                    {(['JAB', 'CROSS', 'HOOK', 'SLIP R', 'UPPER'] as const).map((step, i) => {
+                      const currentStepInCycle = comboIndex % 5;
+                      const isCurrent = currentStepInCycle === i;
+                      const isCompleted = currentStepInCycle > i;
+
+                      return (
+                        <div
+                          key={step}
+                          className={`flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-full border text-[8px] font-black font-mono tracking-wide transition-all duration-200 ${
+                            isCurrent
+                              ? 'bg-primary/25 border-primary text-primary shadow-[0_0_12px_rgba(226,255,59,0.5)] scale-105'
+                              : isCompleted
+                              ? 'bg-[#101e08]/90 border-[#84CC16]/60 text-[#84CC16]'
+                              : i === 3
+                              ? 'bg-amber-500/10 border-amber-500/30 text-amber-400/70'
+                              : 'bg-black/60 border-white/10 text-white/40'
+                          }`}
+                        >
+                          <span className="text-[7px] opacity-70">
+                            {isCompleted ? '✓' : i + 1}
+                          </span>
+                          <span>{step}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* AI Tactical Cue */}
+                <div className="bg-black/75 border border-cyan-400/20 rounded-2xl px-3 py-2 flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-full bg-cyan-400/15 border border-cyan-400/30 flex items-center justify-center shrink-0">
+                    <Zap className="w-3.5 h-3.5 text-cyan-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="text-[7px] font-black text-cyan-400 tracking-widest uppercase">AI TACTICAL CUE</span>
+                      <span className="text-[7px] text-white/30 font-mono">JUST NOW</span>
+                    </div>
+                    <p className="text-[9px] text-white/80 font-semibold leading-tight truncate">
+                      {activeCommand ? `Drive from hips on ${activeCommand} — keep guard up` : 'Keep lead guard high — rotation velocity +12%'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Bottom action chips */}
+                <div className="flex items-center justify-between px-1">
                   <div className="flex items-center gap-1.5">
                     <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                    <span className="text-[7px] font-black text-white/60 tracking-widest uppercase">TARGET COMBO // 1-2-3</span>
+                    <span className="text-[8px] font-black text-white/50 tracking-widest uppercase">CALIBRATE SENSORS</span>
                   </div>
-                  <div className="text-right">
-                    <span className="text-[7px] font-black text-white/40 uppercase block">STEP {Math.min(attemptedCount + 1, 5)}/5</span>
-                    <span className="text-[7px] font-black text-white/30 uppercase">CADENCE 132 BPM</span>
+                  <div className="flex items-center gap-1.5">
+                    <Target className="w-3 h-3 text-white/40" />
+                    <span className="text-[8px] font-black text-white/50 tracking-widest uppercase">METRICS HUD</span>
                   </div>
-                </div>
-                {/* Combo step pills */}
-                <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
-                  {(['JAB', 'CROSS', 'HOOK', 'SLIP R', 'UPPER'] as const).map((step, i) => {
-                    const isActive = activeCommand && activeCommand.replace(' ', '').toUpperCase().startsWith(step.replace(' ', '').toUpperCase().slice(0, 3));
-                    const isDone = attemptedCount > i;
-                    return (
-                      <div
-                        key={step}
-                        className={`flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-full border text-[8px] font-black font-mono tracking-wide transition-all ${
-                          isActive
-                            ? 'bg-primary/20 border-primary text-primary shadow-[0_0_8px_rgba(226,255,59,0.4)]'
-                            : isDone
-                            ? 'bg-white/5 border-white/10 text-white/30'
-                            : i === 3
-                            ? 'bg-amber-500/10 border-amber-500/40 text-amber-400'
-                            : 'bg-black/60 border-cyan-400/30 text-cyan-300/70'
-                        }`}
-                      >
-                        <span className="text-[7px] opacity-60">{i + 1}</span>
-                        <span>{step}</span>
-                      </div>
-                    );
-                  })}
                 </div>
               </div>
+            )}
 
-              {/* AI Tactical Cue */}
-              <div className="bg-black/75 border border-cyan-400/20 rounded-2xl px-3 py-2 flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-full bg-cyan-400/15 border border-cyan-400/30 flex items-center justify-center shrink-0">
-                  <Zap className="w-3.5 h-3.5 text-cyan-400" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-0.5">
-                    <span className="text-[7px] font-black text-cyan-400 tracking-widest uppercase">AI TACTICAL CUE</span>
-                    <span className="text-[7px] text-white/30 font-mono">JUST NOW</span>
-                  </div>
-                  <p className="text-[9px] text-white/80 font-semibold leading-tight truncate">
-                    {activeCommand ? `Drive from hips on ${activeCommand} — keep guard up` : 'Keep lead guard high — rotation velocity +12%'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Bottom action chips */}
-              <div className="flex items-center justify-between px-1">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                  <span className="text-[8px] font-black text-white/50 tracking-widest uppercase">CALIBRATE SENSORS</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <Target className="w-3 h-3 text-white/40" />
-                  <span className="text-[8px] font-black text-white/50 tracking-widest uppercase">METRICS HUD</span>
-                </div>
-              </div>
-            </div>
-
-            {/* ── BOTTOM CONTROLS ── */}
-            <div className="absolute bottom-0 left-0 right-0 z-40 flex gap-3 px-3 pb-6">
+            {/* ── BOTTOM CONTROLS (Pause and Terminate Session) ── */}
+            <div className="absolute bottom-0 left-0 right-0 z-40 flex gap-3 px-3 pb-6 pt-3 bg-gradient-to-t from-black via-black/80 to-transparent">
               <button
-                onClick={backToConfig}
-                className="w-14 h-14 rounded-full bg-black/70 border border-white/20 flex items-center justify-center text-white/60 hover:text-white"
+                type="button"
+                onClick={() => setIsPaused((prev) => !prev)}
+                title={isPaused ? 'Resume Session' : 'Pause Session'}
+                className={`w-14 h-14 rounded-full border flex items-center justify-center transition-all cursor-pointer ${
+                  isPaused
+                    ? 'bg-amber-500/20 border-amber-400 text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.5)] scale-105'
+                    : 'bg-black/80 border-white/20 text-white/80 hover:text-white active:scale-95'
+                }`}
               >
-                <span className="text-lg">⏸</span>
+                {isPaused ? <Play className="w-6 h-6 fill-current" /> : <span className="text-xl">⏸</span>}
               </button>
               <button
+                type="button"
                 onClick={stopSessionEarly}
-                disabled={!calibSuccess}
-                className="flex-1 h-14 rounded-full bg-gradient-to-r from-red-600 to-rose-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black tracking-widest uppercase flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(239,68,68,0.3)]"
+                className="flex-1 h-14 rounded-full bg-gradient-to-r from-red-600 to-rose-700 active:scale-[0.98] text-white font-black tracking-widest uppercase flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(239,68,68,0.4)] cursor-pointer"
               >
                 <StopCircle className="w-5 h-5 fill-white stroke-none" />
                 <span>TERMINATE SESSION</span>
