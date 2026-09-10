@@ -2,54 +2,57 @@
 
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, X } from 'lucide-react';
+import { ChevronDown, X, Sparkles } from 'lucide-react';
 
 export const TUTORIAL_STORAGE_KEY = 'sparai_free_sparring_tutorial_completed';
 
 interface FreeSparringTutorialProps {
   menuOpen: boolean;
+  onDismiss?: () => void;
 }
 
-export function FreeSparringTutorial({ menuOpen }: FreeSparringTutorialProps) {
+export function FreeSparringTutorial({ menuOpen, onDismiss }: FreeSparringTutorialProps) {
   const [tutorialStep, setTutorialStep] = useState<'idle' | 'explore' | 'sparring' | 'completed'>('idle');
+  const [hasOpenedOnce, setHasOpenedOnce] = useState(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    // Check if tutorial is forced via URL parameter for testing/demo
     const urlParams = new URLSearchParams(window.location.search);
     const forceTutorial = urlParams.get('tutorial') === 'true';
-
     const completed = localStorage.getItem(TUTORIAL_STORAGE_KEY) === 'true';
 
     if (forceTutorial || !completed) {
-      // Small initial delay after page loads to start the guided experience smoothly
       const timer = setTimeout(() => {
         setTutorialStep(menuOpen ? 'sparring' : 'explore');
-      }, 700);
+      }, 500);
       return () => clearTimeout(timer);
     } else {
       setTutorialStep('completed');
     }
   }, []);
 
-  // Synchronize tutorial step with menu open/close state
+  // Handle menu open & close behavior
   useEffect(() => {
     if (tutorialStep === 'completed' || tutorialStep === 'idle') return;
 
     if (menuOpen) {
+      setHasOpenedOnce(true);
       setTutorialStep('sparring');
+    } else if (hasOpenedOnce) {
+      // User closed the explore menu after opening it -> turn off tutorial completely per requirement
+      dismiss();
     } else {
       setTutorialStep('explore');
     }
-  }, [menuOpen]);
+  }, [menuOpen, hasOpenedOnce]);
 
-  const dismiss = (e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
+  const dismiss = () => {
     if (typeof window !== 'undefined') {
       localStorage.setItem(TUTORIAL_STORAGE_KEY, 'true');
     }
     setTutorialStep('completed');
+    if (onDismiss) onDismiss();
   };
 
   if (tutorialStep === 'completed' || tutorialStep === 'idle') {
@@ -59,147 +62,133 @@ export function FreeSparringTutorial({ menuOpen }: FreeSparringTutorialProps) {
   return (
     <div className="absolute inset-0 pointer-events-none z-[1000] overflow-visible">
       <AnimatePresence mode="wait">
+        {/* STEP 1: Pointing to Explore Button */}
         {tutorialStep === 'explore' && !menuOpen && (
           <motion.div
-            key="tutorial-step-explore"
-            initial={{ opacity: 0, y: 15 }}
+            key="tutorial-explore"
+            initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 10 }}
-            transition={{ duration: 0.35 }}
-            className="absolute bottom-24 left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none"
+            transition={{ duration: 0.25 }}
+            className="absolute bottom-24 left-1/2 -translate-x-1/2 w-full flex flex-col items-center pointer-events-none px-4"
           >
-            {/* Cyberpunk HUD Guidance Callout Tooltip */}
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ delay: 0.15, type: 'spring', stiffness: 400, damping: 25 }}
-              className="pointer-events-auto mb-2 flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#0a1306]/95 border border-[#E2FF3B]/60 shadow-[0_0_25px_rgba(226,255,59,0.45)] backdrop-blur-xl"
-            >
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#E2FF3B] opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#E2FF3B]" />
-              </span>
-              <Sparkles className="w-3.5 h-3.5 text-[#E2FF3B] shrink-0 animate-pulse" />
-              <span className="text-[10.5px] font-black uppercase tracking-wider text-[#E2FF3B] whitespace-nowrap">
-                Tap Explore for Free Sparring
-              </span>
+            {/* Responsively bounded callout card */}
+            <div className="w-[min(92vw,310px)] pointer-events-auto mb-3 flex items-center justify-between gap-2 px-3.5 py-2 rounded-full bg-[#0a1205]/95 border border-[#E2FF3B]/60 shadow-[0_0_25px_rgba(226,255,59,0.35)] backdrop-blur-xl">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="relative flex h-2 w-2 shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#E2FF3B] opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[#E2FF3B]" />
+                </span>
+                <span className="text-[11px] font-black uppercase tracking-wide text-[#E2FF3B] truncate">
+                  Tap Explore for Free Sparring
+                </span>
+              </div>
               <button
                 type="button"
                 onClick={dismiss}
                 aria-label="Skip Tutorial"
-                className="ml-1 pl-1.5 border-l border-white/20 text-[9.5px] font-bold text-white/50 hover:text-white uppercase transition-colors flex items-center gap-0.5 cursor-pointer"
+                className="shrink-0 flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/10 hover:bg-white/20 text-[10px] font-black text-white/90 uppercase tracking-wider transition-colors cursor-pointer"
               >
-                <X className="w-3 h-3" />
                 <span>Skip</span>
+                <X className="w-3 h-3" />
               </button>
-            </motion.div>
+            </div>
 
-            {/* Holographic Green Finger Projection Pointing & Tapping at Explore Button */}
+            {/* Glowing Tactical Pointer (Animated Chevrons pointing down to Explore) */}
             <div className="relative flex flex-col items-center">
               <motion.div
                 animate={{
-                  y: [0, 10, 0],
-                  scale: [1, 0.94, 1],
+                  y: [0, 8, 0],
                 }}
                 transition={{
-                  duration: 1.15,
+                  duration: 0.85,
                   repeat: Infinity,
                   ease: 'easeInOut',
                 }}
-                className="filter drop-shadow-[0_0_18px_rgba(226,255,59,0.9)] transform rotate-180"
+                className="flex flex-col items-center -space-y-2.5 filter drop-shadow-[0_0_10px_rgba(226,255,59,0.9)]"
               >
-                {/* Holographic Finger Image */}
-                <img
-                  src="/images/hologram-finger.png"
-                  alt="Tap Guide"
-                  className="w-14 h-24 object-contain"
-                />
+                <ChevronDown className="w-6 h-6 text-[#E2FF3B]/60" />
+                <ChevronDown className="w-7 h-7 text-[#E2FF3B]" />
               </motion.div>
 
-              {/* Glowing Touch Impact Ripple Emitting from Contact Point */}
+              {/* Pulsing Touch Ring over Explore Button */}
               <motion.div
                 animate={{
-                  scale: [0.5, 1.4],
-                  opacity: [0.9, 0],
+                  scale: [0.8, 1.35, 0.8],
+                  opacity: [0.5, 0.95, 0.5],
                 }}
                 transition={{
-                  duration: 1.15,
+                  duration: 1.2,
                   repeat: Infinity,
-                  ease: 'easeOut',
+                  ease: 'easeInOut',
                 }}
-                className="absolute -bottom-2 w-12 h-12 rounded-full border-2 border-[#E2FF3B] bg-[#E2FF3B]/20 pointer-events-none shadow-[0_0_20px_#E2FF3B]"
+                className="absolute -bottom-7 w-14 h-14 rounded-full border-2 border-[#E2FF3B] shadow-[0_0_20px_#E2FF3B] pointer-events-none"
               />
             </div>
           </motion.div>
         )}
 
+        {/* STEP 2: Pointing to Sparring Button (Inside Combat Protocols Tray) */}
         {tutorialStep === 'sparring' && menuOpen && (
           <motion.div
-            key="tutorial-step-sparring"
-            initial={{ opacity: 0, scale: 0.92 }}
+            key="tutorial-sparring"
+            initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.92 }}
-            transition={{ duration: 0.3 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.25 }}
             className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[min(94vw,348px)] flex flex-col items-center pointer-events-none"
           >
-            {/* Guidance HUD Callout floating above the Combat Protocols tray */}
-            <motion.div
-              initial={{ y: -10, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.1, duration: 0.25 }}
-              className="pointer-events-auto absolute -top-12 z-30 flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#180e05]/95 border border-orange-500/70 shadow-[0_0_25px_rgba(249,115,22,0.45)] backdrop-blur-xl"
-            >
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-400" />
-              </span>
-              <span className="text-[10.5px] font-black uppercase tracking-wider text-amber-300 whitespace-nowrap">
-                Tap Sparring — 100% Free!
-              </span>
+            {/* Responsively bounded callout card above tray */}
+            <div className="w-[min(92vw,310px)] pointer-events-auto absolute -top-12 z-30 flex items-center justify-between gap-2 px-3.5 py-2 rounded-full bg-[#180e05]/95 border border-orange-500/70 shadow-[0_0_25px_rgba(249,115,22,0.45)] backdrop-blur-xl">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="relative flex h-2 w-2 shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-400" />
+                </span>
+                <span className="text-[11px] font-black uppercase tracking-wide text-amber-300 truncate">
+                  Select Sparring — 100% Free!
+                </span>
+              </div>
               <button
                 type="button"
                 onClick={dismiss}
-                aria-label="Dismiss Tutorial"
-                className="ml-1 pl-1.5 border-l border-white/20 text-[9.5px] font-bold text-white/50 hover:text-white uppercase transition-colors flex items-center gap-0.5 cursor-pointer"
+                aria-label="Skip Tutorial"
+                className="shrink-0 flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/10 hover:bg-white/20 text-[10px] font-black text-white/90 uppercase tracking-wider transition-colors cursor-pointer"
               >
+                <span>Skip</span>
                 <X className="w-3 h-3" />
-                <span>Got it</span>
               </button>
-            </motion.div>
+            </div>
 
-            {/* Holographic Finger positioned over the SPARRING hexagon card (Right column) */}
-            <div className="absolute top-[88px] right-[18px] flex flex-col items-center pointer-events-none z-30">
+            {/* Glowing Tactical Pointer pointing down directly onto SPARRING card (Right column) */}
+            <div className="absolute top-[80px] right-[24px] flex flex-col items-center pointer-events-none z-30">
               <motion.div
                 animate={{
                   y: [0, 8, 0],
-                  scale: [1, 0.93, 1],
                 }}
                 transition={{
-                  duration: 1.1,
+                  duration: 0.85,
                   repeat: Infinity,
                   ease: 'easeInOut',
                 }}
-                className="filter drop-shadow-[0_0_18px_rgba(249,115,22,0.9)] transform rotate-180"
+                className="flex flex-col items-center -space-y-2.5 filter drop-shadow-[0_0_12px_rgba(249,115,22,0.95)]"
               >
-                <img
-                  src="/images/hologram-finger.png"
-                  alt="Tap Sparring"
-                  className="w-14 h-24 object-contain brightness-125 hue-rotate-[-35deg]"
-                />
+                <ChevronDown className="w-6 h-6 text-orange-400/60" />
+                <ChevronDown className="w-7 h-7 text-orange-400" />
               </motion.div>
 
-              {/* Glowing Amber Touch Impact Ripple */}
+              {/* Pulsing Touch Ring over SPARRING card */}
               <motion.div
                 animate={{
-                  scale: [0.5, 1.45],
-                  opacity: [0.95, 0],
+                  scale: [0.85, 1.25, 0.85],
+                  opacity: [0.5, 0.95, 0.5],
                 }}
                 transition={{
-                  duration: 1.1,
+                  duration: 1.2,
                   repeat: Infinity,
-                  ease: 'easeOut',
+                  ease: 'easeInOut',
                 }}
-                className="absolute -bottom-2 w-14 h-14 rounded-full border-2 border-orange-500 bg-orange-500/20 pointer-events-none shadow-[0_0_22px_#EA580C]"
+                className="absolute top-4 w-20 h-20 rounded-2xl border-2 border-orange-500 shadow-[0_0_25px_#EA580C] pointer-events-none"
               />
             </div>
           </motion.div>

@@ -55,7 +55,12 @@ export function BottomNav() {
     const onPointer = (e: MouseEvent | TouchEvent) => {
       const el = exploreRef.current;
       if (!el) return;
-      if (e.target instanceof Node && !el.contains(e.target)) setMenuOpen(false);
+      if (e.target instanceof Node && !el.contains(e.target)) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(TUTORIAL_STORAGE_KEY, 'true');
+        }
+        setMenuOpen(false);
+      }
     };
     document.addEventListener('mousedown', onPointer, { passive: true });
     document.addEventListener('touchstart', onPointer, { passive: true });
@@ -66,11 +71,19 @@ export function BottomNav() {
   }, [menuOpen]);
 
   const go = (href: string) => {
-    if (href === '/spar' && typeof window !== 'undefined') {
+    if (typeof window !== 'undefined') {
       localStorage.setItem(TUTORIAL_STORAGE_KEY, 'true');
     }
     setMenuOpen(false);
     router.push(href);
+  };
+
+  const handleToggleExplore = () => {
+    if (menuOpen && typeof window !== 'undefined') {
+      // User clicked explore while open -> closing it ends the tutorial permanently
+      localStorage.setItem(TUTORIAL_STORAGE_KEY, 'true');
+    }
+    setMenuOpen((o) => !o);
   };
 
   return (
@@ -84,7 +97,12 @@ export function BottomNav() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.28 }}
-            onClick={() => setMenuOpen(false)}
+            onClick={() => {
+              if (typeof window !== 'undefined') {
+                localStorage.setItem(TUTORIAL_STORAGE_KEY, 'true');
+              }
+              setMenuOpen(false);
+            }}
             className="fixed inset-0 z-[995] bg-black/85 backdrop-blur-md pointer-events-auto overflow-hidden"
             aria-hidden="true"
           >
@@ -378,7 +396,7 @@ export function BottomNav() {
               type="button"
               aria-label="Explore"
               aria-expanded={menuOpen}
-              onClick={() => setMenuOpen((o) => !o)}
+              onClick={handleToggleExplore}
               className="relative flex flex-col items-center cursor-pointer active:scale-95 transition-transform group"
             >
               {/* Hexagon Shell */}
