@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Loader2, Swords, Flag, Mic, MicOff, Settings, Volume2, VolumeX } from 'lucide-react';
 import { firebaseAuth } from '@/lib/firebase';
 import { supabase } from '@/lib/supabase';
-import { playVoiceEvent, preloadVoicePack } from '@/lib/voice-pack';
+import { playVoiceEvent, preloadVoicePack, unlockVoicePack } from '@/lib/voice-pack';
 
 type SparCommand = { command: string; kind: 'punch' | 'defense'; callAtMs: number };
 const PUNCH_EXTEND_DEG = 155;
@@ -86,6 +86,8 @@ export default function SparMatchClient() {
         if (typeof window === 'undefined' || !window.speechSynthesis) return;
         const u = new SpeechSynthesisUtterance(text);
         u.rate = 1.05;
+        u.volume = 1;
+        u.pitch = 1;
         window.speechSynthesis.cancel();
         window.speechSynthesis.speak(u);
       } catch { /* ignore */ }
@@ -93,6 +95,11 @@ export default function SparMatchClient() {
   };
 
   useEffect(() => { preloadVoicePack(); }, []);
+  useEffect(() => {
+    const unlock = () => unlockVoicePack();
+    window.addEventListener('pointerdown', unlock, { once: true });
+    return () => window.removeEventListener('pointerdown', unlock);
+  }, []);
 
   const cleanup = useCallback(() => {
     try {

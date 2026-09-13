@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { playVoiceEvent, preloadVoicePack } from '@/lib/voice-pack';
+import { playVoiceEvent, preloadVoicePack, unlockVoicePack } from '@/lib/voice-pack';
 import {
   Play,
   Pause,
@@ -310,7 +310,7 @@ function SessionTimerContent() {
         const ukVoice = voices.find(v => v.name.includes('Google UK') || v.lang === 'en-GB');
         if (ukVoice) utterance.voice = ukVoice;
         utterance.rate = 0.85;
-        utterance.pitch = 0.7;
+        utterance.pitch = 1.0;
         synthRef.current.speak(utterance);
       } catch {
         console.warn('Speech synthesis failed:', text);
@@ -319,6 +319,7 @@ function SessionTimerContent() {
   };
 
   const handleStart = () => {
+    unlockVoicePack();
     setPhase('prep');
     setTimeLeft(PREP_SECONDS);
     speakInstruction("Get ready. Next up: " + currentDrill?.name);

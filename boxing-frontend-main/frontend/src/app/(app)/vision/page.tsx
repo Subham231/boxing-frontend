@@ -24,7 +24,7 @@ import { completeSessionSecure } from '@/lib/rank-client';
 import { logVisionSession, getReflexTier } from '@/lib/session-log';
 import { firebaseAuth } from '@/lib/firebase';
 import { topSessionFlaws, summarizeTechniques, DetectedFlaw, FlawEngineRep } from '@/lib/coach/flawEngine';
-import { playVoiceEvent, preloadVoicePack } from '@/lib/voice-pack';
+import { playVoiceEvent, preloadVoicePack, unlockVoicePack } from '@/lib/voice-pack';
 
 // ---------------------------------------------------------------------------
 // Landmark indices we care about (MediaPipe Pose / BlazePose 33-point model)
@@ -120,6 +120,21 @@ function expectedTrajectoryFor(command: string): 'straight' | 'hook' | 'uppercut
   if (command === 'HOOK') return 'hook';
   if (command === 'UPPERCUT') return 'uppercut';
   return 'straight'; // JAB, CROSS
+}
+
+function tacticalCueForCommand(command: string, kind: 'punch' | 'defense'): string {
+  if (kind === 'defense') {
+    if (command === 'ROLL UNDER') return 'Sink through your knees and roll under the shot.';
+    if (command === 'SLIP LEFT' || command === 'SLIP RIGHT') return `Move your head off line on ${command} — keep your eyes forward.`;
+    return 'Keep your guard high and move your head, not just your shoulders.';
+  }
+  switch (command) {
+    case 'JAB': return 'Snap the jab straight out and return to guard.';
+    case 'CROSS': return 'Drive from the rear hip and let the back foot pivot.';
+    case 'HOOK': return 'Turn your torso through the hook and keep the elbow bent.';
+    case 'UPPERCUT': return 'Bend your knees and drive upward through the fist.';
+    default: return 'Keep your guard high and drive from the hips.';
+  }
 }
 
 type PoseLandmark = { x: number; y: number; z?: number; visibility?: number };
@@ -290,6 +305,7 @@ export default function VisionPage() {
   const [missCount, setMissCount] = useState(0);
   const [attemptedCount, setAttemptedCount] = useState(0);
   const [activeCommand, setActiveCommand] = useState('');
+  const [tacticalCue, setTacticalCue] = useState('Keep your guard high and stay light on your feet.');
   const [isCommandSpeaking, setIsCommandSpeaking] = useState(false);
   const [subscriptionChecking, setSubscriptionChecking] = useState(false);
   const [subscriptionError, setSubscriptionError] = useState<string | null>(null);
@@ -596,9 +612,8 @@ export default function VisionPage() {
           utterance.lang = voice.lang;
         }
         utterance.volume = 1.0;
-        const baseRate = difficultyRef.current === 'hard' ? 1.05 : difficultyRef.current === 'easy' ? 0.85 : 0.95;
-        utterance.rate = profile === 'steel' ? baseRate * 0.9 : profile === 'athena' ? baseRate * 1.08 : baseRate * 1.18;
-        utterance.pitch = profile === 'steel' ? 0.78 : profile === 'athena' ? 1.28 : 1.65;
+        utterance.rate = 0.95;
+        utterance.pitch = 1.0;
         let fired = false;
         const fireStart = () => {
           if (fired) return;
@@ -689,6 +704,7 @@ export default function VisionPage() {
   };
 
   const startCalibration = async () => {
+    unlockVoicePack();
     // Server-side entitlement + usage-limit check — the ONLY thing that can
     // actually grant an AI Video Analysis session. Nothing client-side
     // (a previous status fetch, a cached flag, etc.) is trusted here; this
@@ -1492,6 +1508,7 @@ export default function VisionPage() {
       const cmd = pool[Math.floor(Math.random() * pool.length)];
 
       setActiveCommand(cmd.text);
+      setTacticalCue(tacticalCueForCommand(cmd.text, cmd.kind));
       activeCommandTextRef.current = cmd.text;
       awaitingRef.current = true;
       awaitingKindRef.current = cmd.kind;
@@ -1528,6 +1545,7 @@ export default function VisionPage() {
     let remaining = freestyleDurationRef.current;
     elapsedSecondsRef.current = 0;
     setActiveCommand('FREESTYLE');
+    setTacticalCue('Keep your guard high — choose clean, committed punch shapes.');
     activeCommandTextRef.current = 'FREESTYLE';
     awaitingRef.current = true;
     awaitingKindRef.current = 'punch';
@@ -2498,7 +2516,7 @@ export default function VisionPage() {
                       <span className="text-[7px] text-white/30 font-mono">JUST NOW</span>
                     </div>
                     <p className="text-[9px] text-white/80 font-semibold leading-tight truncate">
-                      {activeCommand ? `Drive from hips on ${activeCommand} — keep guard up` : 'Keep lead guard high — rotation velocity +12%'}
+                      {tacticalCue}
                     </p>
                   </div>
                 </div>

@@ -60,6 +60,7 @@ const VOICE_EVENT_ALIASES: Record<string, VoiceEvent> = {
 };
 
 const audioCache = new Map<string, HTMLAudioElement>();
+const failedEvents = new Set<string>();
 
 export function voiceEventForText(text: string): VoiceEvent | null {
   const normalized = text.trim().toUpperCase().replace(/\s+/g, ' ');
@@ -86,7 +87,8 @@ export function preloadVoicePack(): void {
     const url = `/voice-packs/${ACTIVE_VOICE_PACK}/${encodeURIComponent(filename)}`;
     if (audioCache.has(event)) return;
     const audio = new Audio(url);
-    audio.preload = 'auto';
+      audio.preload = 'auto';
+      audio.addEventListener('error', () => failedEvents.add(event), { once: true });
     audioCache.set(event, audio);
     audio.load();
   });
@@ -109,18 +111,49 @@ export function playVoiceEvent(
   preloadVoicePack();
   const event = voiceEventForText(text);
   const audio = event ? audioCache.get(event) : undefined;
-  if (!audio) {
+  if (!audio || !event || failedEvents.has(event)) {
     fallback();
     return;
   }
   audio.pause();
   audio.currentTime = 0;
-  audio.onplaying = () => onStart?.();
-  audio.onended = () => onEnd?.();
+  let started = false;
+  let finished = false;
+  const start = () => {
+    if (!started) {
+      started = true;
+      onStart?.();
+    }
+  };
+  const end = () => {
+    if (!finished) {
+      finished = true;
+      onEnd?.();
+    }
+  };
+  audio.onplaying = start;
+  audio.onended = end;
   audio.onerror = () => {
+    failedEvents.add(event);
     fallback();
   };
-  audio.play().catch(() => {
+  audio.play().then(start).catch(() => {
+    failedEvents.add(event);
     fallback();
+  });
+}
+
+export function unlockVoicePack(): void {
+  if (typeof window === 'undefined') return;
+  preloadVoicePack();
+  audioCache.forEach((audio) => {
+    audio.muted = true;
+    audio.play().then(() => {
+      audio.pause();
+      audio.currentTime = 0;
+      audio.muted = false;
+    }).catch(() => {
+      audio.muted = false;
+    });
   });
 }
