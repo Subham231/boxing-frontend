@@ -246,31 +246,23 @@ export default function SparMatchClient() {
     let cancelled = false;
     let connected = false;
 
-    // Distinguishes "this machine genuinely has no camera/mic hardware"
-    // from "hardware exists but the browser/OS is blocking or hiding it" —
-    // enumerateDevices() lists devices even before permission is granted
-    // (labels are blank, but the device entries themselves still show up).
-    const hasAnyMediaHardware = async (): Promise<boolean> => {
-      try {
-        if (!navigator.mediaDevices?.enumerateDevices) return true; // can't check, assume yes
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        return devices.some((d) => d.kind === 'videoinput' || d.kind === 'audioinput');
-      } catch {
-        return true; // enumeration itself failing shouldn't change the error message
-      }
-    };
-
-    const friendlyMediaError = async (e: any): Promise<string> => {
+    // DO NOT TOUCH — see the matching notice in next.config.mjs. This screen
+    // requests camera + mic in ONE getUserMedia call, so it lives or dies by
+    // the site-wide Permissions-Policy header (camera + microphone must both
+    // be "(self)") and by running on a secure (HTTPS) origin. The two guard
+    // checks below exist specifically so that if either of those is ever
+    // broken again, the user sees an accurate reason instead of the
+    // misleading generic "access was denied" message.
+    const friendlyMediaError = (e: any): string => {
       const name = e?.name || '';
       if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
-        const hasHardware = await hasAnyMediaHardware();
-        if (!hasHardware) {
-          return 'No camera or microphone was found on this device. Connect one and try again.';
-        }
-        return 'A camera/microphone is present but not accessible — check your OS privacy settings (Camera & Microphone access for this browser) and that no security software is blocking it, then try again.';
+        return 'No camera or microphone was found on this device. Connect one and try again.';
       }
-      if (name === 'NotAllowedError' || name === 'PermissionDeniedError' || name === 'SecurityError') {
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
         return 'Camera and microphone access was denied. Allow permissions in your browser settings and try again.';
+      }
+      if (name === 'SecurityError') {
+        return 'Your browser blocked camera/microphone access on this page (Permissions-Policy or insecure connection). This is a site configuration issue, not something you can fix — please report it.';
       }
       if (name === 'NotReadableError' || name === 'TrackStartError') {
         return 'Your camera or microphone is already in use by another app. Close it and try again.';
@@ -311,6 +303,18 @@ export default function SparMatchClient() {
         });
         const readyData = await readyRes.json();
         const iceServers = readyData.iceServers || [{ urls: 'stun:stun.l.google.com:19302' }];
+
+        // Fail fast with an accurate message instead of letting the browser
+        // throw an opaque error deep inside getUserMedia. Both of these are
+        // environment/config problems (insecure origin, or the
+        // Permissions-Policy header — see notice above), never something the
+        // player can fix by re-clicking "allow".
+        if (typeof window !== 'undefined' && window.isSecureContext === false) {
+          throw Object.assign(new Error(), { name: 'SecurityError' });
+        }
+        if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+          throw Object.assign(new Error(), { name: 'SecurityError' });
+        }
 
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
@@ -440,8 +444,7 @@ export default function SparMatchClient() {
         speak('Fight');
       } catch (e: any) {
         window.clearTimeout(overallTimeout);
-        const message = await friendlyMediaError(e);
-        failAndExit(message, 'Connection failed');
+        failAndExit(friendlyMediaError(e), 'Connection failed');
       }
     };
 

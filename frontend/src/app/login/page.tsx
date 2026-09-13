@@ -111,9 +111,6 @@ export default function LoginPage() {
           <button onClick={() => router.push('/onboarding')} className="text-[10px] font-black uppercase tracking-widest text-primary hover:text-white">
             New fighter? Sign up
           </button>
-          <button onClick={() => router.push('/login/phone')} className="text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white">
-            Log in with phone instead
-          </button>
         </section>
       </div>
     </main>
