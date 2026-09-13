@@ -59,7 +59,7 @@ const EmailVerification: React.FC = () => {
       const code = e && typeof e === 'object' && 'code' in e ? String((e as { code?: string }).code) : '';
       if (code === 'auth/email-already-in-use') {
         setExistingAccount(true);
-        setError('This Gmail account already has a fighter profile. Log in to continue.');
+        setError('This email is already registered. Log in with the existing password, or reset it.');
         return;
       }
       setError(formatEmailAuthError(e));
@@ -181,7 +181,11 @@ const EmailVerification: React.FC = () => {
                 type="email"
                 autoComplete="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setExistingAccount(false);
+                  setError(null);
+                }}
                 placeholder="you@email.com"
                 className="w-full bg-transparent border-b border-white/20 py-2 text-2xl font-bold outline-none focus:border-primary transition-all pb-1 tracking-tight"
                 autoFocus
@@ -247,8 +251,8 @@ const EmailVerification: React.FC = () => {
 
       <footer className="mt-6 sm:mt-8 flex flex-col gap-3 sm:gap-4">
         {step === 'details' ? (
-          <button onClick={handleCreateAccount} disabled={loading} className="btn-primary w-full h-14 sm:h-16 flex items-center justify-center gap-2 disabled:opacity-50">
-            {loading ? 'CREATING...' : 'CREATE ACCOUNT'} <ChevronRight size={20} />
+          <button onClick={handleCreateAccount} disabled={loading || existingAccount} className="btn-primary w-full h-14 sm:h-16 flex items-center justify-center gap-2 disabled:opacity-50">
+            {loading ? 'CREATING...' : existingAccount ? 'ACCOUNT EXISTS — LOG IN' : 'CREATE ACCOUNT'} <ChevronRight size={20} />
           </button>
         ) : (
           <button onClick={handleCheckVerified} disabled={checking} className="btn-primary w-full h-14 sm:h-16 flex items-center justify-center gap-2 disabled:opacity-50">
