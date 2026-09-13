@@ -149,7 +149,13 @@ export default function SparMatchClient() {
     }
 
     cleanup();
-  }, [authHeaders, cleanup, match]);
+
+    // Give the fighter a moment to read why the match ended, then send them
+    // back to the sparring hub automatically instead of stranding them here.
+    window.setTimeout(() => {
+      router.replace('/spar');
+    }, 2500);
+  }, [authHeaders, cleanup, match, router]);
 
   useEffect(() => () => cleanup(), [cleanup]);
 
@@ -238,6 +244,45 @@ export default function SparMatchClient() {
     if (!match || !supabase) return;
     const client = supabase;
     let cancelled = false;
+    let connected = false;
+
+    const friendlyMediaError = (e: any): string => {
+      const name = e?.name || '';
+      if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+        return 'No camera or microphone was found on this device. Connect one and try again.';
+      }
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError' || name === 'SecurityError') {
+        return 'Camera and microphone access was denied. Allow permissions in your browser settings and try again.';
+      }
+      if (name === 'NotReadableError' || name === 'TrackStartError') {
+        return 'Your camera or microphone is already in use by another app. Close it and try again.';
+      }
+      if (name === 'OverconstrainedError') {
+        return "Your camera doesn't support the required video settings.";
+      }
+      return e?.message || 'Camera / connection failed.';
+    };
+
+    // If we can't get a live match going within a reasonable window (media
+    // permission stuck, opponent never connects, etc.), stop waiting forever
+    // — fail gracefully, let the opponent know, and send this fighter home.
+    const failAndExit = (message: string, status: string) => {
+      if (cancelled) return;
+      setError(message);
+      setStatusLine(status);
+      setPhase('done');
+      if (!exitHandledRef.current) {
+        // Broadcast while the ref is still false so cleanup() actually
+        // notifies the opponent, then mark it handled to stop duplicate exits.
+        cleanup();
+        exitHandledRef.current = true;
+      }
+      window.setTimeout(() => router.replace('/spar'), 3000);
+    };
+
+    const overallTimeout = window.setTimeout(() => {
+      if (!connected) failAndExit('Connection timed out. Your opponent may have lost signal.', 'Connection timed out');
+    }, 20000);
 
     const run = async () => {
       try {
@@ -371,18 +416,22 @@ export default function SparMatchClient() {
 
         setStatusLine('Match starting…');
         setPhase('live');
+        connected = true;
+        window.clearTimeout(overallTimeout);
         matchStartRef.current = Date.now();
         speak('Fight');
       } catch (e: any) {
-        setError(e.message || 'Camera / connection failed.');
+        window.clearTimeout(overallTimeout);
+        failAndExit(friendlyMediaError(e), 'Connection failed');
       }
     };
 
     run();
     return () => {
       cancelled = true;
+      window.clearTimeout(overallTimeout);
     };
-  }, [match, authHeaders, handleOpponentExit]);
+  }, [match, authHeaders, handleOpponentExit, cleanup, router]);
 
   useEffect(() => {
     if (phase !== 'live' || !match || typeof window === 'undefined') return;
@@ -669,8 +718,8 @@ export default function SparMatchClient() {
             </div>
           </div>
 
-          {error && <div className="absolute left-3 right-3 top-14 rounded-xl border border-red-500/40 bg-black/80 p-3 text-[10px] font-semibold text-red-300">{error}</div>}
-          {opponentLeft && <div className="absolute inset-x-3 top-1/2 -translate-y-1/2 rounded-2xl border border-orange-400/40 bg-black/90 p-4 text-center text-[11px] font-semibold text-orange-200">{opponentLeftReason}<button onClick={() => router.push('/spar')} className="mt-3 block w-full rounded-xl bg-primary px-3 py-2 text-[10px] font-black uppercase tracking-widest text-black">Exit to lobby</button></div>}
+          {error && !opponentLeft && <div className="absolute left-3 right-3 top-14 rounded-xl border border-red-500/40 bg-black/80 p-3 text-[10px] font-semibold text-red-300">{error}<span className="mt-1 block text-[9px] font-bold uppercase tracking-widest text-red-300/60">Returning to sparring…</span></div>}
+          {opponentLeft && <div className="absolute inset-x-3 top-1/2 -translate-y-1/2 rounded-2xl border border-orange-400/40 bg-black/90 p-4 text-center text-[11px] font-semibold text-orange-200">{opponentLeftReason}<span className="mt-1 block text-[9px] font-bold uppercase tracking-widest text-orange-200/60">Returning to sparring…</span><button onClick={() => router.push('/spar')} className="mt-3 block w-full rounded-xl bg-primary px-3 py-2 text-[10px] font-black uppercase tracking-widest text-black">Exit now</button></div>}
         </section>
 
         <section className="mt-2 shrink-0 rounded-2xl border border-amber-400/45 bg-black/85 p-3 shadow-[0_0_20px_rgba(245,158,11,0.08)]">

@@ -26,7 +26,10 @@ export async function POST(
     return NextResponse.json({ error: 'Not a participant.' }, { status: 403 });
   }
 
-  const winnerUid = match.player_a_uid === uid ? match.player_b_uid : match.player_a_uid;
+  // The caller is the participant whose client detected the opponent leaving
+  // or disconnecting (see handleOpponentExit in SparMatchClient) — they are
+  // the one who stayed, so they are awarded the win.
+  const winnerUid = uid;
   await supabaseAdmin
     .from('spar_matches')
     .update({
