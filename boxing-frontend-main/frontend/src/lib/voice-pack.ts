@@ -49,10 +49,19 @@ const PACKS: Record<string, Partial<Record<VoiceEvent, string>>> = {
   },
 };
 
+const VOICE_EVENT_ALIASES: Record<string, VoiceEvent> = {
+  'CALIBRATION COMPLETE. BEGINNING DRILL': 'GET READY',
+  'FREESTYLE ROUND. THROW WHEN READY': 'GET READY',
+  'SESSION COMPLETE. COMPILING YOUR PERFORMANCE REPORT': 'WORKOUT COMPLETE',
+  'PREPARE STANCE': 'GET READY',
+};
+
 const audioCache = new Map<string, HTMLAudioElement>();
 
 export function voiceEventForText(text: string): VoiceEvent | null {
   const normalized = text.trim().toUpperCase().replace(/\s+/g, ' ');
+  const directAlias = VOICE_EVENT_ALIASES[normalized.replace(/[.!]+$/, '')];
+  if (directAlias) return directAlias;
   if (normalized.startsWith('GET READY')) return 'GET READY';
   if (normalized.startsWith('SET COMPLETE')) return 'SET COMPLETE';
   if (normalized.startsWith('WORKOUT COMPLETE')) return 'WORKOUT COMPLETE';
