@@ -11,10 +11,10 @@ import {
   Brain, 
   Target, 
   Check, 
-  Activity,
   ChevronRight,
   Award,
-  Swords
+  Swords,
+  Bell
 } from 'lucide-react';
 import { getDailyWorkout } from '@/lib/workout-data';
 import { StreakManager } from '@/lib/streak-manager';
@@ -216,11 +216,13 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="relative w-full">
+    <div className="relative -mx-4 min-h-[calc(100dvh-1rem)] w-[calc(100%+2rem)] overflow-hidden bg-[#0A0A0A] px-4">
+      <div className="pointer-events-none absolute inset-0 opacity-40" style={{ backgroundImage: 'linear-gradient(rgba(226,255,59,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(226,255,59,0.08) 1px, transparent 1px)', backgroundSize: '26px 26px', maskImage: 'linear-gradient(to bottom, black, transparent 88%)', WebkitMaskImage: 'linear-gradient(to bottom, black, transparent 88%)' }} />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-primary/[0.06] to-transparent" />
       {/* Non-repeating One-Time Limited Free Sparring & Deals Launch Popup */}
       <SparFreePromoModal />
 
-      <div className="flex flex-col gap-5 anim-fade-in pb-10">
+      <div className="relative z-10 flex flex-col gap-5 anim-fade-in pb-10 pt-2">
         {/* Fighter identity and alert action */}
         <header className="flex justify-between items-center">
           <div className="flex items-center gap-3 ranks-ref">
@@ -243,8 +245,8 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
-          <Link href="/settings" aria-label="Open notifications and profile settings" className="relative w-10 h-10 rounded-xl border border-white/10 bg-white/[0.04] flex items-center justify-center text-white/70 hover:text-primary hover:border-primary/40 transition-colors">
-            <Activity className="w-4 h-4" />
+          <Link href="/settings" aria-label="Open notifications and profile settings" className="relative w-10 h-10 rounded-xl border border-white/10 bg-[#121212] flex items-center justify-center text-white/70 shadow-[0_0_16px_rgba(226,255,59,0.06)] hover:text-primary hover:border-primary/40 transition-colors">
+            <Bell className="w-4 h-4" />
             <span className="absolute right-2 top-2 w-1.5 h-1.5 rounded-full bg-primary" />
           </Link>
         </header>
