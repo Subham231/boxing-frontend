@@ -7,13 +7,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Flame, 
   Play, 
-  Zap, 
-  Brain, 
   Target, 
   Check, 
   ChevronRight,
   Award,
-  Swords,
   Bell
 } from 'lucide-react';
 import { getDailyWorkout } from '@/lib/workout-data';
@@ -27,6 +24,7 @@ import { NeonButton } from '@/components/ui/NeonButton';
 import WelcomeIntro, { WELCOME_INTRO_KEY } from '@/components/tutorial/WelcomeIntro';
 import SpotlightTour, { TourStep } from '@/components/tutorial/SpotlightTour';
 import { SparFreePromoModal } from '@/components/ui/SparFreePromoModal';
+import { AnalysisCamIcon, SwordsNeonIcon, ZapNeonIcon, BrainNeonIcon } from '@/components/ui/NeonIcons';
 
 const TUTORIAL_DONE_KEY = 'boxing_tutorial_done';
 
@@ -260,13 +258,13 @@ export default function DashboardPage() {
         </div>
 
         {/* Microcycle progress */}
-        <section className="rounded-2xl border border-white/10 bg-black/30 p-4">
-          <div className="flex justify-between items-center mb-3"><div><span className="text-[9px] font-black text-white/45 uppercase tracking-widest">Microcycle progress</span><h2 className="text-sm font-black uppercase text-white mt-1">Week 4 • {Math.min(6, completedIndices.length + (visionComplete ? 1 : 0))} of 6 sessions</h2></div><span className="text-[9px] font-black text-primary uppercase">{completionPercent}%</span></div>
-        <div className="grid grid-cols-7 gap-1.5 select-none">
+        <section className="rounded-[15px] border border-white/10 bg-[#101112] p-3 shadow-[0_0_18px_rgba(0,0,0,0.3)]">
+          <div className="flex justify-between items-center mb-2.5"><div><span className="text-[8px] font-black text-white/45 uppercase tracking-[1.5px]">Microcycle progress</span><h2 className="text-xs font-black uppercase text-white mt-1">Week 4 • {Math.min(6, completedIndices.length + (visionComplete ? 1 : 0))} of 6 sessions</h2></div><span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[7px] font-black text-primary uppercase">✹ 1 freeze active</span></div>
+        <div className="grid grid-cols-7 gap-1 select-none">
           {calendarDays.map((day, idx) => (
             <div 
               key={idx}
-              className={`relative flex flex-col items-center justify-center py-2.5 rounded-2xl border transition-all duration-300 ${
+              className={`relative flex flex-col items-center justify-center py-2 rounded-xl border transition-all duration-300 ${
                 day.isToday 
                   ? 'bg-primary/10 border-primary shadow-[0_0_15px_rgba(226,255,59,0.25)] scale-105' 
                   : 'bg-black/20 border-white/5 opacity-55'
@@ -289,7 +287,7 @@ export default function DashboardPage() {
 
         {/* Today Challenge / Progress Card */}
         <GlassCard 
-          className="challenge-card-ref bg-gradient-to-br from-primary/15 via-black/60 to-black/80 border-primary/30 relative overflow-hidden p-5"
+          className="challenge-card-ref bg-gradient-to-br from-[#273318] via-[#11150D] to-[#0B0D0B] border-primary/30 relative overflow-hidden p-3.5 rounded-[15px] shadow-[0_0_22px_rgba(226,255,59,0.07)]"
           hoverGlow
           onClick={() => router.push('/training')}
         >
@@ -300,24 +298,24 @@ export default function DashboardPage() {
 
           <div className="flex justify-between items-center relative z-10">
             <div className="flex-1 pr-4">
-              <span className="inline-flex text-[8px] font-black tracking-widest text-primary uppercase border border-primary/50 bg-primary/10 rounded px-2 py-1 mb-2">
+              <span className="inline-flex text-[7px] font-black tracking-widest text-primary uppercase border border-primary/50 bg-primary/10 rounded px-1.5 py-0.5 mb-1.5">
                 TARGET COMBAT MISSION
               </span>
-              <h3 className="text-2xl font-black uppercase tracking-tight italic leading-[0.95] text-white">
+              <h3 className="text-[19px] font-black uppercase tracking-tight italic leading-[0.95] text-white">
                 {todayWorkout.title}
               </h3>
-              <p className="text-xs text-white/60 font-semibold mt-2 max-w-[220px]">
+              <p className="text-[10px] text-white/60 font-semibold mt-1.5 max-w-[210px] leading-snug">
                 {todayWorkout.drills.length > 0 
                   ? `High-cadence combat drills with dynamic AI stance tracking.`
                   : 'Recovery Protocol Active'}
               </p>
             </div>
             
-            <ProgressRing progress={completionPercent} size={70} strokeWidth={6} />
+            <ProgressRing progress={completionPercent} size={58} strokeWidth={5} />
           </div>
-          <div className="grid grid-cols-2 gap-2 mt-5 relative z-10">
-            <div className="rounded-xl border border-white/10 bg-black/45 p-3"><span className="block text-[8px] font-black text-white/40 uppercase tracking-widest">Duration</span><strong className="text-sm text-white">{todayWorkout.drills.length * 15} MIN</strong></div>
-            <div className="rounded-xl border border-white/10 bg-black/45 p-3"><span className="block text-[8px] font-black text-white/40 uppercase tracking-widest">Rounds</span><strong className="text-sm text-white">{todayWorkout.drills.length} RDS</strong></div>
+          <div className="grid grid-cols-2 gap-2 mt-3 relative z-10">
+            <div className="rounded-lg border border-white/10 bg-black/50 p-2"><span className="block text-[7px] font-black text-white/40 uppercase tracking-widest">Duration</span><strong className="text-xs text-white">{todayWorkout.drills.length * 15} MIN</strong></div>
+            <div className="rounded-lg border border-white/10 bg-black/50 p-2"><span className="block text-[7px] font-black text-white/40 uppercase tracking-widest">Rounds</span><strong className="text-xs text-white">{todayWorkout.drills.length} RDS</strong></div>
           </div>
         </GlassCard>
 
@@ -344,7 +342,7 @@ export default function DashboardPage() {
 
         {/* Start Session Button */}
         <NeonButton 
-          className="start-btn-ref w-full h-[68px] text-base font-black italic tracking-widest text-black uppercase"
+          className="start-btn-ref w-full h-11 text-[11px] font-black tracking-widest text-black uppercase rounded-lg shadow-[0_0_18px_rgba(226,255,59,0.3)]"
           onClick={() => router.push('/training')}
         >
           START SESSION <Play className="w-4 h-4 fill-black text-black ml-1.5" />
@@ -359,10 +357,10 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between mb-3"><h2 className="text-sm font-black uppercase text-white">Core tactical modules</h2><span className="text-[8px] font-black uppercase tracking-widest text-white/35">Precision drills</span></div>
           <div className="grid grid-cols-2 gap-2.5">
             {[
-              { href: '/vision', label: 'AI Vision', detail: 'Kinematic strike analysis & guard check', icon: Target, color: 'text-primary', border: 'border-primary/25', badge: visionComplete ? 'DONE' : 'READY' },
-              { href: '/spar', label: 'Live Sparring', detail: 'Interactive virtual opponent round tempo', icon: Swords, color: 'text-orange-400', border: 'border-orange-400/25', badge: 'LIVE' },
-              { href: '/reflex', label: 'Reflex Engine', detail: 'Rapid audio stimulus slip & counter drills', icon: Zap, color: 'text-cyan-400', border: 'border-cyan-400/25', badge: 'AUDIO' },
-              { href: '/guru', label: 'Tactical Guru', detail: 'Heavyweight combination playbook library', icon: Brain, color: 'text-pink-400', border: 'border-pink-400/25', badge: 'VAULT' },
+              { href: '/vision', label: 'AI Vision', detail: 'Kinematic strike analysis & guard check', icon: AnalysisCamIcon, color: 'text-primary', border: 'border-primary/25', badge: visionComplete ? 'DONE' : 'READY' },
+              { href: '/spar', label: 'Live Sparring', detail: 'Interactive virtual opponent round tempo', icon: SwordsNeonIcon, color: 'text-orange-400', border: 'border-orange-400/25', badge: 'LIVE' },
+              { href: '/reflex', label: 'Reflex Engine', detail: 'Rapid audio stimulus slip & counter drills', icon: ZapNeonIcon, color: 'text-cyan-400', border: 'border-cyan-400/25', badge: 'AUDIO' },
+              { href: '/guru', label: 'Tactical Guru', detail: 'Heavyweight combination playbook library', icon: BrainNeonIcon, color: 'text-pink-400', border: 'border-pink-400/25', badge: 'VAULT' },
             ].map((module) => {
               const Icon = module.icon;
               return <Link key={module.href} href={module.href} className={`relative min-h-[132px] rounded-xl border ${module.border} bg-[#0D0D0E] p-3.5 flex flex-col justify-between no-underline shadow-[inset_0_0_18px_rgba(255,255,255,0.015)] hover:bg-white/[0.04] hover:shadow-[0_0_18px_rgba(226,255,59,0.08)] transition-all`}><span className={`absolute top-3 right-3 rounded bg-white/[0.08] px-1.5 py-1 text-[7px] font-black uppercase ${module.color}`}>{module.badge}</span><div className={`w-9 h-9 rounded-lg border border-white/10 bg-[#17191A] flex items-center justify-center ${module.color}`}><Icon className="w-4 h-4" /></div><div><strong className="block text-xs font-black uppercase text-white">{module.label} <ChevronRight className="inline w-3 h-3 text-white/35" /></strong><span className="block mt-1 text-[9px] leading-snug text-white/45">{module.detail}</span></div></Link>;
