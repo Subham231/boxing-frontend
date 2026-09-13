@@ -80,6 +80,7 @@ function serializeOnboarding(data: OnboardingData): Record<string, unknown> {
 
     return {
         ring_name: data.ringName.trim().toUpperCase(),
+        ...(data.email ? { email: data.email.trim().toLowerCase() } : {}),
         ...(avatar ? { avatar_url: avatar } : {}),
         user_metrics: {
             age: Number(data.age),

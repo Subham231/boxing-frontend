@@ -297,7 +297,7 @@ export function formatEmailAuthError(error: unknown): string {
     case 'auth/wrong-password':
     case 'auth/invalid-credential':
     case 'auth/invalid-login-credentials':
-      return 'Incorrect email or password.';
+      return 'Incorrect email or password. Use Forgot password if you need to reset it.';
     case 'auth/user-not-found':
       return 'No account was found for this email. Please sign up first.';
     case 'auth/too-many-requests':

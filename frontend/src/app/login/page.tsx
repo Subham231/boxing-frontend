@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, ShieldCheck, Eye, EyeOff } from 'lucide-react';
-import { loginWithEmail, formatEmailAuthError } from '@/lib/firebase-auth';
+import { ensureUserProfile, loginWithEmail, formatEmailAuthError } from '@/lib/firebase-auth';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -35,7 +35,9 @@ export default function LoginPage() {
         router.replace('/verify-email');
         return;
       }
-      router.replace('/dashboard');
+      const { profile } = await ensureUserProfile(user);
+      const onboardingData = (profile.onboarding_data ?? {}) as Record<string, unknown>;
+      router.replace(onboardingData.onboarding_completed ? '/dashboard' : '/onboarding');
     } catch (loginError) {
       setError(formatEmailAuthError(loginError));
     } finally {

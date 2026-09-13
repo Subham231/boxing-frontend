@@ -12,6 +12,10 @@ export async function POST(req: NextRequest) {
   const auth = await requireVerifiedFirebaseUid(req);
   if ('error' in auth) return auth.error;
 
+  // Derive identity fields from the verified Firebase token, never from the
+  // request body. This keeps the Supabase profile linked to the real account.
+  const email = typeof auth.token.email === 'string' ? auth.token.email.trim().toLowerCase() : '';
+
   const body = await req.json().catch(() => ({}));
   const onboardingData = body.onboardingData && typeof body.onboardingData === 'object' ? body.onboardingData : undefined;
   
@@ -30,6 +34,10 @@ export async function POST(req: NextRequest) {
   const avatarUrl = typeof rawAvatarUrl === 'string' ? rawAvatarUrl.trim().slice(0, 2000) : undefined;
 
   const update: Record<string, unknown> = {};
+  if (email) {
+    update.email = email;
+    update.email_verified = true;
+  }
   if (displayName) update.display_name = displayName;
   if (phone) update.phone = phone;
   if (age !== undefined) update.age = age;
