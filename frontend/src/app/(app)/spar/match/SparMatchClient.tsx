@@ -2,11 +2,10 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Loader2, Swords, Flag } from 'lucide-react';
+import { ArrowLeft, Loader2, Swords, Flag, Mic, MicOff, Settings, Volume2, VolumeX } from 'lucide-react';
 import { firebaseAuth } from '@/lib/firebase';
 import { supabase } from '@/lib/supabase';
-import { GlassCard } from '@/components/ui/GlassCard';
-import { NeonButton } from '@/components/ui/NeonButton';
+import { playVoiceEvent, preloadVoicePack, unlockVoicePack } from '@/lib/voice-pack';
 
 type SparCommand = { command: string; kind: 'punch' | 'defense'; callAtMs: number };
 const PUNCH_EXTEND_DEG = 155;
@@ -38,7 +37,6 @@ export default function SparMatchClient() {
   const matchId = searchParams.get('id') || '';
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -62,8 +60,7 @@ export default function SparMatchClient() {
   const lastPunchMotionAtRef = useRef(0);
 
   const [match, setMatch] = useState<MatchInfo | null>(null);
-  const [phase, setPhase] = useState<'setup' | 'countdown' | 'live' | 'submitting' | 'done'>('setup');
-  const [countdownNum, setCountdownNum] = useState<number | null>(null);
+  const [phase, setPhase] = useState<'setup' | 'live' | 'submitting' | 'done'>('setup');
   const [currentCommand, setCurrentCommand] = useState<string>('');
   const [hits, setHits] = useState(0);
   const [misses, setMisses] = useState(0);
@@ -71,8 +68,10 @@ export default function SparMatchClient() {
   const [statusLine, setStatusLine] = useState('Connecting…');
   const [opponentLeft, setOpponentLeft] = useState(false);
   const [opponentLeftReason, setOpponentLeftReason] = useState('Opponent left the match.');
-
-  const [permissionNeeded, setPermissionNeeded] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [micEnabled, setMicEnabled] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
+  const voiceEnabledRef = useRef(true);
 
   const authHeaders = useCallback(async () => {
     const user = firebaseAuth.currentUser;
@@ -81,30 +80,26 @@ export default function SparMatchClient() {
   }, []);
 
   const speak = (text: string) => {
-    try {
-      if (typeof window === 'undefined' || !window.speechSynthesis) return;
-      const synth = window.speechSynthesis;
-      synth.cancel();
-      setTimeout(() => {
-        try {
-          const u = new SpeechSynthesisUtterance(text);
-          u.volume = 1.0;
-          u.rate = 1.0;
-          u.pitch = 1.0;
-          const voices = synth.getVoices();
-          const preferredVoice = voices.find(
-            (v) => v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Natural') || v.default),
-          );
-          if (preferredVoice) u.voice = preferredVoice;
-          synth.speak(u);
-        } catch {
-          /* ignore */
-        }
-      }, 30);
-    } catch {
-      /* ignore */
-    }
+    if (!voiceEnabledRef.current) return;
+    playVoiceEvent(text, () => {
+      try {
+        if (typeof window === 'undefined' || !window.speechSynthesis) return;
+        const u = new SpeechSynthesisUtterance(text);
+        u.rate = 1.05;
+        u.volume = 1;
+        u.pitch = 1;
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(u);
+      } catch { /* ignore */ }
+    });
   };
+
+  useEffect(() => { preloadVoicePack(); }, []);
+  useEffect(() => {
+    const unlock = () => unlockVoicePack();
+    window.addEventListener('pointerdown', unlock, { once: true });
+    return () => window.removeEventListener('pointerdown', unlock);
+  }, []);
 
   const cleanup = useCallback(() => {
     try {
@@ -229,243 +224,155 @@ export default function SparMatchClient() {
     }
   }, [match, authHeaders, cleanup, router]);
 
-  const startCountdown = useCallback(() => {
-    setPhase('countdown');
-    setStatusLine('Get ready in stance…');
-    let count = 3;
-    setCountdownNum(count);
-    speak('3');
-
-    const timer = setInterval(() => {
-      count -= 1;
-      if (count > 0) {
-        setCountdownNum(count);
-        speak(String(count));
-      } else {
-        clearInterval(timer);
-        setCountdownNum(0);
-        speak('Fight!');
-        setTimeout(() => {
-          setPhase('live');
-          matchStartRef.current = Date.now();
-          setCountdownNum(null);
-          setStatusLine('Sparring active!');
-        }, 600);
-      }
-    }, 1000);
-  }, []);
-
-  const setupMediaAndConnect = useCallback(async () => {
+  useEffect(() => {
     if (!match || !supabase) return;
     const client = supabase;
-    setError(null);
-    setPermissionNeeded(false);
-    setStatusLine('Connecting to devices…');
+    let cancelled = false;
 
-    try {
-      const headers = await authHeaders();
-      const readyRes = await fetch(`/api/spar/match/${match.matchId}/ready`, {
-        method: 'POST',
-        headers,
-      });
-      const readyData = await readyRes.json().catch(() => ({}));
-
-      const defaultStunServers = [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' },
-      ];
-
-      const cleanIceServers = (readyData.iceServers && Array.isArray(readyData.iceServers))
-        ? readyData.iceServers
-            .map((server: any) => {
-              if (!server) return null;
-              const rawUrls = server.urls || server.url;
-              const urlsArr = Array.isArray(rawUrls) ? rawUrls : typeof rawUrls === 'string' ? [rawUrls] : [];
-              const validUrls = urlsArr.filter((u: any) => typeof u === 'string' && u.trim().length > 0);
-              if (validUrls.length === 0) return null;
-
-              const hasTurn = validUrls.some((u: string) => {
-                const lower = u.toLowerCase();
-                return lower.startsWith('turn:') || lower.startsWith('turns:');
-              });
-
-              if (hasTurn) {
-                const hasUser = typeof server.username === 'string' && server.username.trim().length > 0;
-                const hasCred = typeof server.credential === 'string' && server.credential.trim().length > 0;
-                if (!hasUser || !hasCred) {
-                  const stunOnly = validUrls.filter((u: string) => {
-                    const lower = u.toLowerCase();
-                    return !lower.startsWith('turn:') && !lower.startsWith('turns:');
-                  });
-                  if (stunOnly.length > 0) return { urls: stunOnly };
-                  return null;
-                }
-              }
-              return {
-                urls: validUrls,
-                ...(server.username ? { username: String(server.username).trim() } : {}),
-                ...(server.credential ? { credential: String(server.credential).trim() } : {}),
-              };
-            })
-            .filter(Boolean)
-        : defaultStunServers;
-
-      const finalIceServers = cleanIceServers.length > 0 ? cleanIceServers : defaultStunServers;
-
-      let stream: MediaStream | null = null;
+    const run = async () => {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
+        const headers = await authHeaders();
+        const readyRes = await fetch(`/api/spar/match/${match.matchId}/ready`, {
+          method: 'POST',
+          headers,
+        });
+        const readyData = await readyRes.json();
+        const iceServers = readyData.iceServers || [{ urls: 'stun:stun.l.google.com:19302' }];
+
+        const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
           audio: true,
         });
-      } catch (audioErr: any) {
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
-            audio: false,
-          });
-        } catch (videoErr: any) {
-          setPermissionNeeded(true);
-          throw new Error(
-            videoErr.name === 'NotAllowedError' || videoErr.name === 'PermissionDeniedError'
-              ? 'Camera permission denied. Please tap "GRANT CAMERA ACCESS" below to allow your camera.'
-              : 'Could not access device camera. Please check browser permissions.',
-          );
-        }
-      }
-
-      localStreamRef.current = stream;
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
-        localVideoRef.current.muted = true;
-        await localVideoRef.current.play().catch(() => {});
-      }
-
-      let pc: RTCPeerConnection;
-      try {
-        pc = new RTCPeerConnection({ iceServers: finalIceServers });
-      } catch (pcErr) {
-        console.warn('[WebRTC] Custom iceServers construction failed, using fallback STUN:', pcErr);
-        pc = new RTCPeerConnection({ iceServers: defaultStunServers });
-      }
-      pcRef.current = pc;
-      stream.getTracks().forEach((t) => pc.addTrack(t, stream!));
-
-      pc.onconnectionstatechange = () => {
-        if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
-          handleOpponentExit('Connection lost. Your opponent left the match.');
-        }
-        if (pc.connectionState === 'connected') {
-          setStatusLine('Opponent connected');
-          setOpponentLeft(false);
-        }
-      };
-
-      pc.ontrack = (ev) => {
-        const remoteStream = ev.streams?.[0] || new MediaStream([ev.track]);
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = remoteStream;
-          remoteVideoRef.current.play().catch(() => {});
-          setStatusLine('Opponent connected');
-          setOpponentLeft(false);
-        }
-      };
-
-      const channel = client.channel(match.signalingChannel, {
-        config: { broadcast: { self: false } },
-      });
-      channelRef.current = channel;
-      const pendingIceCandidates: RTCIceCandidateInit[] = [];
-
-      const addIceCandidate = async (candidate: RTCIceCandidateInit) => {
-        if (!pc.remoteDescription) {
-          pendingIceCandidates.push(candidate);
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
           return;
         }
-        try {
-          await pc.addIceCandidate(candidate);
-        } catch {
-          /* ignore stale candidates */
+        localStreamRef.current = stream;
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = stream;
+          localVideoRef.current.muted = true;
+          await localVideoRef.current.play().catch(() => {});
         }
-      };
 
-      pc.onicecandidate = (ev) => {
-        if (ev.candidate) {
-          channel.send({
-            type: 'broadcast',
-            event: 'ice',
-            payload: { candidate: ev.candidate.toJSON(), from: match.role },
-          });
-        }
-      };
+        const pc = new RTCPeerConnection({ iceServers });
+        pcRef.current = pc;
+        stream.getTracks().forEach((t) => pc.addTrack(t, stream));
 
-      channel.on('broadcast', { event: 'ice' }, async ({ payload }) => {
-        if (!payload?.candidate || payload.from === match.role) return;
-        await addIceCandidate(payload.candidate);
-      });
-
-      channel.on('broadcast', { event: 'sdp' }, async ({ payload }) => {
-        if (!payload?.sdp || payload.from === match.role) return;
-        try {
-          await pc.setRemoteDescription(payload.sdp);
-          while (pendingIceCandidates.length) {
-            const candidate = pendingIceCandidates.shift();
-            if (candidate) await addIceCandidate(candidate);
+        pc.onconnectionstatechange = () => {
+          if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
+            handleOpponentExit('Connection lost. Your opponent left the match.');
           }
-          if (payload.sdp.type === 'offer') {
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
+          if (pc.connectionState === 'connected') {
+            setStatusLine('Opponent connected');
+            setOpponentLeft(false);
+          }
+        };
+
+        pc.ontrack = (ev) => {
+          const remoteStream = ev.streams?.[0];
+          if (remoteStream && remoteVideoRef.current) {
+            remoteVideoRef.current.srcObject = remoteStream;
+            remoteVideoRef.current.play().catch(() => {});
+            setStatusLine('Opponent connected');
+            setOpponentLeft(false);
+          }
+        };
+
+        const channel = client.channel(match.signalingChannel, {
+          config: { broadcast: { self: false } },
+        });
+        channelRef.current = channel;
+        const pendingIceCandidates: RTCIceCandidateInit[] = [];
+
+        const addIceCandidate = async (candidate: RTCIceCandidateInit) => {
+          if (!pc.remoteDescription) {
+            pendingIceCandidates.push(candidate);
+            return;
+          }
+          try { await pc.addIceCandidate(candidate); } catch { /* ignore stale candidates */ }
+        };
+
+        pc.onicecandidate = (ev) => {
+          if (ev.candidate) {
             channel.send({
               type: 'broadcast',
-              event: 'sdp',
-              payload: { sdp: pc.localDescription, from: match.role },
+              event: 'ice',
+              payload: { candidate: ev.candidate.toJSON(), from: match.role },
             });
           }
-        } catch {
-          /* ignore */
-        }
-      });
+        };
 
-      channel.on('broadcast', { event: 'peer-left' }, ({ payload }) => {
-        if (!payload || payload.matchId !== match.matchId) return;
-        handleOpponentExit('Your opponent left the match.');
-      });
+        channel.on('broadcast', { event: 'ice' }, async ({ payload }) => {
+          if (!payload?.candidate || payload.from === match.role) return;
+          await addIceCandidate(payload.candidate);
+        });
 
-      await new Promise<void>((resolve, reject) => {
-        const timeout = window.setTimeout(() => reject(new Error('Spar connection timed out.')), 12000);
-        channel.subscribe((status) => {
-          if (status === 'SUBSCRIBED') {
-            window.clearTimeout(timeout);
-            resolve();
-          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            window.clearTimeout(timeout);
-            reject(new Error('Could not connect to the spar signaling service.'));
+        channel.on('broadcast', { event: 'sdp' }, async ({ payload }) => {
+          if (!payload?.sdp || payload.from === match.role) return;
+          try {
+            await pc.setRemoteDescription(payload.sdp);
+            while (pendingIceCandidates.length) {
+              const candidate = pendingIceCandidates.shift();
+              if (candidate) await addIceCandidate(candidate);
+            }
+            if (payload.sdp.type === 'offer') {
+              const answer = await pc.createAnswer();
+              await pc.setLocalDescription(answer);
+              channel.send({
+                type: 'broadcast',
+                event: 'sdp',
+                payload: { sdp: pc.localDescription, from: match.role },
+              });
+            }
+          } catch {
+            /* ignore */
           }
         });
-      });
 
-      await new Promise((r) => setTimeout(r, 600));
-
-      if (match.role === 'offer') {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        channel.send({
-          type: 'broadcast',
-          event: 'sdp',
-          payload: { sdp: pc.localDescription, from: match.role },
+        channel.on('broadcast', { event: 'peer-left' }, ({ payload }) => {
+          if (!payload || payload.matchId !== match.matchId) return;
+          handleOpponentExit('Your opponent left the match.');
         });
+
+        await new Promise<void>((resolve, reject) => {
+          const timeout = window.setTimeout(() => reject(new Error('Spar connection timed out.')), 10000);
+          channel.subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+              window.clearTimeout(timeout);
+              resolve();
+            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+              window.clearTimeout(timeout);
+              reject(new Error('Could not connect to the spar signaling service.'));
+            }
+          });
+        });
+
+        await new Promise((r) => setTimeout(r, 800));
+
+        if (match.role === 'offer') {
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          channel.send({
+            type: 'broadcast',
+            event: 'sdp',
+            payload: { sdp: pc.localDescription, from: match.role },
+          });
+        }
+
+        setStatusLine('Match starting…');
+        setPhase('live');
+        matchStartRef.current = Date.now();
+        speak('Fight');
+      } catch (e: any) {
+        setError(e.message || 'Camera / connection failed.');
       }
+    };
 
-      startCountdown();
-    } catch (e: any) {
-      setError(e.message || 'Camera / connection failed.');
-    }
-  }, [match, authHeaders, handleOpponentExit, startCountdown]);
-
-  useEffect(() => {
-    setupMediaAndConnect();
-  }, [setupMediaAndConnect]);
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [match, authHeaders, handleOpponentExit]);
 
   useEffect(() => {
     if (phase !== 'live' || !match || typeof window === 'undefined') return;
@@ -493,59 +400,6 @@ export default function SparMatchClient() {
         pose.onResults((results: any) => {
           const landmarks = results.poseLandmarks;
           if (!landmarks || landmarks.length < 17 || phase !== 'live') return;
-
-          // Draw real-time AI vision skeleton overlay
-          const canvas = canvasRef.current;
-          const video = localVideoRef.current;
-          if (canvas && video) {
-            const ctx = canvas.getContext('2d');
-            if (ctx) {
-              if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-                canvas.width = video.videoWidth || 640;
-                canvas.height = video.videoHeight || 480;
-              }
-              ctx.clearRect(0, 0, canvas.width, canvas.height);
-              const w = canvas.width;
-              const h = canvas.height;
-
-              // Draw skeleton connection lines
-              const connections = [
-                [11, 12], // shoulders
-                [11, 13], [13, 15], // left arm
-                [12, 14], [14, 16], // right arm
-                [11, 23], [12, 24], [23, 24], // torso
-              ];
-
-              ctx.strokeStyle = '#E2FF3B';
-              ctx.lineWidth = 3;
-              ctx.shadowColor = 'rgba(226,255,59,0.8)';
-              ctx.shadowBlur = 8;
-
-              for (const [i, j] of connections) {
-                const ptA = landmarks[i];
-                const ptB = landmarks[j];
-                if (ptA && ptB && (ptA.visibility ?? 1) > 0.3 && (ptB.visibility ?? 1) > 0.3) {
-                  ctx.beginPath();
-                  ctx.moveTo((1 - ptA.x) * w, ptA.y * h); // flipped x for mirrored video
-                  ctx.lineTo((1 - ptB.x) * w, ptB.y * h);
-                  ctx.stroke();
-                }
-              }
-
-              // Draw keypoint joint nodes
-              const keypoints = [11, 12, 13, 14, 15, 16, 0];
-              for (const idx of keypoints) {
-                const pt = landmarks[idx];
-                if (pt && (pt.visibility ?? 1) > 0.3) {
-                  ctx.fillStyle = idx === 15 || idx === 16 ? '#F97316' : '#E2FF3B';
-                  ctx.beginPath();
-                  ctx.arc((1 - pt.x) * w, pt.y * h, idx === 15 || idx === 16 ? 8 : 5, 0, 2 * Math.PI);
-                  ctx.fill();
-                }
-              }
-            }
-          }
-
           const leftShoulder = landmarks[11], rightShoulder = landmarks[12];
           const leftElbow = landmarks[13], rightElbow = landmarks[14];
           const leftWrist = landmarks[15], rightWrist = landmarks[16];
@@ -619,25 +473,7 @@ export default function SparMatchClient() {
 
   useEffect(() => {
     if (phase !== 'live' || !match) return;
-    const BASIC_PUNCHES: SparCommand[] = [
-      { command: 'JAB', kind: 'punch', callAtMs: 3500 },
-      { command: 'CROSS', kind: 'punch', callAtMs: 6500 },
-      { command: 'LEAD HOOK', kind: 'punch', callAtMs: 9500 },
-      { command: 'REAR HOOK', kind: 'punch', callAtMs: 12500 },
-      { command: 'LEAD UPPERCUT', kind: 'punch', callAtMs: 15500 },
-      { command: 'REAR UPPERCUT', kind: 'punch', callAtMs: 18500 },
-      { command: 'BODY HOOK', kind: 'punch', callAtMs: 21500 },
-      { command: 'JAB', kind: 'punch', callAtMs: 24500 },
-      { command: 'CROSS', kind: 'punch', callAtMs: 27500 },
-      { command: 'LEAD HOOK', kind: 'punch', callAtMs: 30500 },
-      { command: 'REAR UPPERCUT', kind: 'punch', callAtMs: 33500 },
-      { command: 'BODY HOOK', kind: 'punch', callAtMs: 36500 },
-    ];
-    const seq: SparCommand[] =
-      match.commandSequence && Array.isArray(match.commandSequence) && match.commandSequence.length > 0
-        ? (match.commandSequence as SparCommand[])
-        : BASIC_PUNCHES;
-
+    const seq = match.commandSequence || [];
     const interval = setInterval(() => {
       const elapsed = Date.now() - matchStartRef.current;
       for (let i = 0; i < seq.length; i++) {
@@ -720,121 +556,78 @@ export default function SparMatchClient() {
     }
   };
 
+  const toggleMicrophone = () => {
+    const next = !micEnabled;
+    localStreamRef.current?.getAudioTracks().forEach((track) => {
+      track.enabled = next;
+    });
+    setMicEnabled(next);
+  };
+
   return (
-    <div className="min-h-[100dvh] bg-[#0A0A0A] text-white p-4 pb-8 font-sans relative">
-      <header className="flex items-center justify-between mb-4">
-        <button
-          onClick={() => router.push('/spar')}
-          className="w-10 h-10 rounded-full border border-white/10 bg-white/5 flex items-center justify-center text-white/60"
-        >
-          <ArrowLeft className="w-4 h-4" />
-        </button>
-        <div className="text-center">
-          <div className="text-[9px] font-black text-primary uppercase tracking-widest flex items-center gap-1 justify-center">
-            <Swords className="w-3 h-3" /> LIVE SPARRING
+    <div className="fixed inset-0 z-50 overflow-hidden bg-[#050706] text-white font-sans">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,rgba(33,55,43,0.22),transparent_58%)]" />
+      <div className="absolute inset-0 z-10 pointer-events-none opacity-20 bg-[linear-gradient(rgba(255,255,255,0.025)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.025)_1px,transparent_1px)] bg-[size:44px_44px]" />
+
+      <main className="relative z-20 mx-auto h-full w-full max-w-[760px] flex flex-col px-3 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(0.8rem,env(safe-area-inset-bottom))]">
+        <header className="flex items-center justify-between shrink-0">
+          <button onClick={() => router.push('/spar')} aria-label="Back to spar lobby" className="w-10 h-10 rounded-full border border-white/15 bg-black/50 flex items-center justify-center text-white/70">
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+          <div className="flex items-center gap-2 rounded-full border border-primary/30 bg-black/65 px-3 py-1.5">
+            <span className="w-2 h-2 rounded-full bg-primary shadow-[0_0_8px_rgba(226,255,59,0.9)]" />
+            <span className="text-[10px] font-black tracking-widest text-primary uppercase">Live Spar</span>
+            <span className="text-[9px] font-mono text-white/70 uppercase">{phase === 'live' ? 'RD 2' : statusLine}</span>
           </div>
-          <div className="text-[10px] text-white/40 font-bold uppercase">{statusLine}</div>
-        </div>
-        <button
-          onClick={forfeit}
-          className="w-10 h-10 rounded-full border border-red-500/30 bg-red-500/10 flex items-center justify-center text-red-400"
-          title="Forfeit"
-        >
-          <Flag className="w-4 h-4" />
-        </button>
-      </header>
+          <button onClick={forfeit} aria-label="Surrender" className="w-10 h-10 rounded-full border border-red-500/50 bg-red-500/10 flex items-center justify-center text-red-400">
+            <Flag className="w-4 h-4" />
+          </button>
+        </header>
 
-      {error && (
-        <GlassCard className="p-4 mb-4 border-red-500/30 text-[11px] text-red-400 font-semibold">{error}</GlassCard>
-      )}
-
-      {opponentLeft && (
-        <GlassCard className="p-4 mb-4 border-orange-500/30 bg-orange-500/10 text-[11px] text-orange-200 font-semibold">
-          {opponentLeftReason}
-          <div className="mt-3 flex gap-2">
-            <button
-              onClick={() => router.push('/spar')}
-              className="flex-1 rounded-xl bg-primary text-black px-3 py-2 font-black uppercase tracking-widest text-[10px]"
-            >
-              Exit to lobby
-            </button>
+        <div className="mt-3 flex items-center justify-between shrink-0">
+          <div className="rounded-xl border border-white/10 bg-black/65 px-3 py-2 min-w-[76px]">
+            <span className="block text-[7px] font-black uppercase tracking-widest text-white/45">Landed</span>
+            <span className="text-xl font-black text-primary leading-none">{hits}<span className="text-[10px] text-white/35"> / {hits + misses}</span></span>
           </div>
-        </GlassCard>
-      )}
-
-      {phase === 'countdown' && (
-        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/85 backdrop-blur-md">
-          <div className="text-8xl font-black italic text-primary animate-pulse drop-shadow-[0_0_30px_rgba(226,255,59,0.9)]">
-            {countdownNum === 0 ? 'FIGHT!' : countdownNum}
-          </div>
-          <p className="text-xs font-black uppercase tracking-widest text-white/70 mt-4">
-            Get ready in stance · Hands up
-          </p>
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 gap-2 mb-3 relative">
-        <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-black border border-white/10">
-          <video ref={localVideoRef} playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
-          <canvas ref={canvasRef} className="absolute inset-0 w-full h-full object-cover pointer-events-none z-10" />
-          <span className="absolute bottom-2 left-2 text-[8px] font-black uppercase bg-black/60 px-2 py-0.5 rounded z-20">You</span>
-          <span className="absolute top-2 left-2 text-[7px] font-black uppercase bg-primary/20 text-primary px-1.5 py-0.5 rounded border border-primary/30 z-20">AI VISION ACTIVE</span>
-
-          {/* Boxing Target Stance Alignment Grid */}
-          <div className="pointer-events-none absolute inset-0 border border-primary/20 rounded-2xl flex flex-col items-center justify-between p-3 opacity-60">
-            <div className="w-16 h-16 rounded-full border border-dashed border-primary/40 mt-4 flex items-center justify-center">
-              <span className="text-[7px] font-black uppercase text-primary/60">HEAD</span>
-            </div>
-            <div className="w-28 h-20 border border-dashed border-primary/30 rounded-xl mb-4 flex items-center justify-center">
-              <span className="text-[7px] font-black uppercase text-primary/60">STANCE</span>
-            </div>
-            <div className="absolute top-2 left-2 w-3 h-3 border-t-2 border-l-2 border-primary" />
-            <div className="absolute top-2 right-2 w-3 h-3 border-t-2 border-r-2 border-primary" />
-            <div className="absolute bottom-2 left-2 w-3 h-3 border-b-2 border-l-2 border-primary" />
-            <div className="absolute bottom-2 right-2 w-3 h-3 border-b-2 border-r-2 border-primary" />
+          <div className="text-right rounded-xl border border-white/10 bg-black/65 px-3 py-2 min-w-[76px]">
+            <span className="block text-[7px] font-black uppercase tracking-widest text-white/45">Opp. Pace</span>
+            <span className="text-xl font-black text-amber-400 leading-none">{hits + misses ? Math.round((hits / (hits + misses)) * 100) : 0}<span className="text-[9px] text-amber-400/60">% par</span></span>
           </div>
         </div>
-        <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-black border border-primary/20">
-          <video ref={remoteVideoRef} playsInline className="w-full h-full object-cover" />
-          <span className="absolute bottom-2 left-2 text-[8px] font-black uppercase bg-black/60 px-2 py-0.5 rounded z-10">Opponent</span>
-          <div className="pointer-events-none absolute top-2 right-2 w-3 h-3 border-t-2 border-r-2 border-primary/40" />
-          <div className="pointer-events-none absolute bottom-2 left-2 w-3 h-3 border-b-2 border-l-2 border-primary/40" />
-        </div>
-      </div>
 
-      <div className="grid grid-cols-3 gap-2 mb-4">
-        <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-center">
-          <div className="text-[8px] font-black uppercase tracking-widest text-white/40">HITS</div>
-          <div className="mt-0.5 text-xl font-black text-primary">{hits}</div>
-        </div>
-        <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-center">
-          <div className="text-[8px] font-black uppercase tracking-widest text-white/40">MISSES</div>
-          <div className="mt-0.5 text-xl font-black text-red-300">{misses}</div>
-        </div>
-        <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-center">
-          <div className="text-[8px] font-black uppercase tracking-widest text-white/40">TOTAL</div>
-          <div className="mt-0.5 text-xl font-black text-white">{hits + misses}</div>
-        </div>
-      </div>
+        <section className="relative mt-2 flex-1 min-h-0 overflow-hidden rounded-[28px] border border-white/10 bg-black shadow-[0_0_45px_rgba(0,0,0,0.7)]">
+          <video ref={remoteVideoRef} playsInline className="absolute inset-0 h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/35 via-transparent to-black/65 pointer-events-none" />
+          <div className="absolute left-3 top-3 rounded-full border border-white/15 bg-black/60 px-2.5 py-1 text-[8px] font-black uppercase tracking-widest text-white/70">Opponent</div>
 
-      <GlassCard className="p-5 border-primary/30 bg-primary/[0.05] mb-4 text-center">
-        <div className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-2">Coach Call</div>
-        <div className="text-3xl font-black italic uppercase text-primary tracking-tight min-h-[2.5rem]">
-          {phase === 'setup' ? <Loader2 className="w-8 h-8 animate-spin mx-auto" /> : currentCommand || '…'}
-        </div>
-      </GlassCard>
+          <div className="absolute bottom-3 right-3 h-[31%] w-[31%] min-h-[120px] min-w-[96px] overflow-hidden rounded-2xl border-2 border-primary bg-black shadow-[0_0_22px_rgba(226,255,59,0.28)]">
+            <video ref={localVideoRef} playsInline muted className="h-full w-full object-cover scale-x-[-1]" />
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-2 pt-5 text-[8px] font-black uppercase tracking-widest text-primary">You</div>
+            <div className={`absolute right-2 top-2 rounded-full p-1 ${micEnabled ? 'bg-black/65 text-white/70' : 'bg-red-500/80 text-white'}`}><span className="sr-only">Microphone {micEnabled ? 'on' : 'off'}</span>{micEnabled ? <Mic className="h-3 w-3" /> : <MicOff className="h-3 w-3" />}</div>
+          </div>
 
-      {phase === 'live' && (
-        <NeonButton className="w-full h-16 text-base" onClick={registerHit}>
-          CAMERA AUTO-DETECT <span className="text-[9px] opacity-60">MANUAL FALLBACK</span>
-        </NeonButton>
-      )}
+          {error && <div className="absolute left-3 right-3 top-14 rounded-xl border border-red-500/40 bg-black/80 p-3 text-[10px] font-semibold text-red-300">{error}</div>}
+          {opponentLeft && <div className="absolute inset-x-3 top-1/2 -translate-y-1/2 rounded-2xl border border-orange-400/40 bg-black/90 p-4 text-center text-[11px] font-semibold text-orange-200">{opponentLeftReason}<button onClick={() => router.push('/spar')} className="mt-3 block w-full rounded-xl bg-primary px-3 py-2 text-[10px] font-black uppercase tracking-widest text-black">Exit to lobby</button></div>}
+        </section>
 
-      {phase === 'submitting' && (
-        <div className="flex items-center justify-center gap-2 text-primary font-black text-xs uppercase tracking-widest py-4">
-          <Loader2 className="w-4 h-4 animate-spin" /> Waiting for opponent…
-        </div>
-      )}
+        <section className="mt-2 shrink-0 rounded-2xl border border-amber-400/45 bg-black/85 p-3 shadow-[0_0_20px_rgba(245,158,11,0.08)]">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-amber-400"><Swords className="h-3 w-3" /> AI Coach Commands</span>
+            <span className="rounded border border-white/15 px-2 py-1 text-[7px] font-mono uppercase tracking-widest text-white/55">{phase === 'submitting' ? 'Uploading' : 'Live sequence'}</span>
+          </div>
+          <div className="grid grid-cols-4 gap-1.5">
+            {['JAB', 'CROSS', 'SLIP R', 'L-HOOK'].map((command, index) => <div key={command} className={`rounded-lg border px-1 py-2 text-center ${currentCommand.toUpperCase().includes(command.replace('SLIP R', 'SLIP RIGHT').replace('L-HOOK', 'HOOK')) ? 'border-primary bg-primary/15 text-primary' : 'border-white/10 bg-white/[0.03] text-white/45'}`}><span className="block text-[7px] font-mono">0{index + 1}</span><span className="text-[9px] font-black uppercase">{command}</span><span className="block text-[6px] uppercase">{index === 0 ? 'Hit' : index === 1 ? 'Right hand' : 'Defense'}</span></div>)}
+          </div>
+          <div className="mt-2 flex items-center gap-2 text-[8px] font-semibold text-white/60"><span className="text-primary">✦</span>{phase === 'setup' ? 'Connecting to your opponent…' : currentCommand ? `Execute ${currentCommand} now` : 'Stay light, keep your guard high.'}</div>
+        </section>
+
+        <footer className="mt-2 flex items-center gap-2 rounded-2xl border border-white/10 bg-[#171a19] p-2 shrink-0">
+          <button onClick={forfeit} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#ff3b3b] text-[11px] font-black uppercase tracking-widest text-white shadow-[0_4px_16px_rgba(255,59,59,0.25)]"><Flag className="h-4 w-4" /> Surrender</button>
+          <button onClick={toggleMicrophone} aria-label={micEnabled ? 'Mute microphone' : 'Unmute microphone'} className={`flex h-12 w-12 items-center justify-center rounded-xl border border-white/15 ${micEnabled ? 'bg-white/[0.06] text-white/75' : 'bg-red-500/20 text-red-300 border-red-500/40'}`}>{micEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}</button>
+          <button onClick={() => setShowSettings((open) => !open)} aria-label="Open spar settings" className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/15 bg-white/[0.06] text-white/75"><Settings className="h-4 w-4" /></button>
+        </footer>
+        {showSettings && <div className="absolute bottom-20 right-3 z-30 rounded-xl border border-white/15 bg-[#161a18] p-3 text-[9px] font-black uppercase tracking-widest text-white/70 shadow-2xl"><button onClick={() => { const next = !voiceEnabledRef.current; voiceEnabledRef.current = next; setVoiceEnabled(next); if (!next) window.speechSynthesis?.cancel(); }} className="flex items-center gap-2">{voiceEnabled ? <Volume2 className="h-3.5 w-3.5 text-primary" /> : <VolumeX className="h-3.5 w-3.5 text-red-400" />} Coach voice {voiceEnabled ? 'on' : 'off'}</button></div>}
+      </main>
     </div>
   );
 }

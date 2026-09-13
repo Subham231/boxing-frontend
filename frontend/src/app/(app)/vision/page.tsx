@@ -23,6 +23,8 @@ import { NeonButton } from '@/components/ui/NeonButton';
 import { completeSessionSecure } from '@/lib/rank-client';
 import { logVisionSession, getReflexTier } from '@/lib/session-log';
 import { firebaseAuth } from '@/lib/firebase';
+import { topSessionFlaws, summarizeTechniques, DetectedFlaw, FlawEngineRep } from '@/lib/coach/flawEngine';
+import { playVoiceEvent, preloadVoicePack, unlockVoicePack } from '@/lib/voice-pack';
 
 // ---------------------------------------------------------------------------
 // Landmark indices we care about (MediaPipe Pose / BlazePose 33-point model)
@@ -96,6 +98,12 @@ const GUARD_REARM_MS = 70;
 // below this displacement (relative to shoulder width) there isn't enough
 // signal to say what shape was thrown, so we don't penalize it.
 const MIN_TRAJECTORY_CONFIDENCE = 0.18;
+// Reference magnitudes (normalized by shoulder width, same units as
+// noseOffset/drop above) for a "fully committed" slip or roll, used to
+// convert raw peak displacement into a 0-100 score the same way peak
+// rotation/knee-drive/etc are converted above.
+const FULL_HEAD_LATERAL_FOR_FULL_SCORE = 0.55; // matches the existing defenseTriggered lateral threshold with headroom
+const FULL_HEAD_DROP_FOR_FULL_SCORE = 0.35;
 
 // Wrist displacement (normalized by shoulder width) shape used to classify
 // what kind of punch was actually thrown, independent of what was called —
@@ -114,6 +122,21 @@ function expectedTrajectoryFor(command: string): 'straight' | 'hook' | 'uppercut
   return 'straight'; // JAB, CROSS
 }
 
+function tacticalCueForCommand(command: string, kind: 'punch' | 'defense'): string {
+  if (kind === 'defense') {
+    if (command === 'ROLL UNDER') return 'Sink through your knees and roll under the shot.';
+    if (command === 'SLIP LEFT' || command === 'SLIP RIGHT') return `Move your head off line on ${command} — keep your eyes forward.`;
+    return 'Keep your guard high and move your head, not just your shoulders.';
+  }
+  switch (command) {
+    case 'JAB': return 'Snap the jab straight out and return to guard.';
+    case 'CROSS': return 'Drive from the rear hip and let the back foot pivot.';
+    case 'HOOK': return 'Turn your torso through the hook and keep the elbow bent.';
+    case 'UPPERCUT': return 'Bend your knees and drive upward through the fist.';
+    default: return 'Keep your guard high and drive from the hips.';
+  }
+}
+
 type PoseLandmark = { x: number; y: number; z?: number; visibility?: number };
 type Stage = 'welcome' | 'config' | 'camera' | 'analyzing' | 'results';
 
@@ -125,10 +148,14 @@ interface RepLogEntry {
   reactionMs: number | null;
   peakVelocity: number; // degrees/second of elbow extension — a real measured value
   estimatedPower: number; // 0-100, derived from peakVelocity — an estimate, not a force sensor reading
-  rotationScore: number; // 0-100, derived from measured shoulder-line rotation during the strike
+  rotationScore: number; // 0-100, combined hip+torso rotation — kept for backward compatibility with existing displays
+  torsoRotationScore: number; // 0-100, shoulder-line rotation specifically (a hook/cross twisting the shoulders)
+  hipRotationScore: number; // 0-100, hip-line rotation specifically, independent of shoulder rotation
   kneeDriveScore: number; // 0-100, derived from measured knee-angle change (leg drive/push-off)
   weightTransferScore: number; // 0-100, derived from measured hip horizontal shift during the strike
   footPivotScore: number; // 0-100, derived from measured rear-foot rotation during the strike
+  headLateralScore: number; // 0-100, lateral head displacement off centerline — slip quality
+  headDropScore: number; // 0-100, vertical head drop below baseline — roll/bob-and-weave quality
   trajectory: 'straight' | 'hook' | 'uppercut'; // what shape of punch was actually thrown, from real wrist-path data
   trajectoryMatch: boolean; // whether the thrown shape matched what was called
 }
@@ -278,6 +305,7 @@ export default function VisionPage() {
   const [missCount, setMissCount] = useState(0);
   const [attemptedCount, setAttemptedCount] = useState(0);
   const [activeCommand, setActiveCommand] = useState('');
+  const [tacticalCue, setTacticalCue] = useState('Keep your guard high and stay light on your feet.');
   const [isCommandSpeaking, setIsCommandSpeaking] = useState(false);
   const [subscriptionChecking, setSubscriptionChecking] = useState(false);
   const [subscriptionError, setSubscriptionError] = useState<string | null>(null);
@@ -375,6 +403,14 @@ export default function VisionPage() {
   const shoulderBaselineAngleRef = useRef(0);
   const peakRotationRef = useRef(0);
 
+  // Hip-line rotation, tracked independently of the shoulder-line rotation
+  // above. A cross/hook can show a fully rotated torso while the hips barely
+  // turn (arm-and-shoulder punch) — scoring them separately is what lets the
+  // flaw engine tell "no hip rotation" apart from "no torso rotation" as two
+  // distinct, separately-correctable flaws instead of one blended number.
+  const hipBaselineAngleRef = useRef(0);
+  const peakHipRotationRef = useRef(0);
+
   // --- Full-body kinetic-chain tracking (all measured, all baselined off
   // the guard position, all peak-tracked through the strike phase) --------
   const kneeBaselineRef = useRef({ L: 0, R: 0 });
@@ -386,6 +422,15 @@ export default function VisionPage() {
   const wristBaselineRef = useRef({ L: { x: 0, y: 0 }, R: { x: 0, y: 0 } });
   const peakWristDisplacementRef = useRef({ dx: 0, dy: 0, mag: 0 });
   const lastShoulderWidthRef = useRef(0.2);
+
+  // --- Defensive head-movement tracking (independent of the elbow state
+  // machine — a slip/roll never extends the elbow, so it needs its own peak
+  // tracker rather than piggybacking on the punch guard/strike cycle). Reset
+  // per-command in runCommands() so each defense rep is scored on its own
+  // window, not against drift from earlier in the round. -------------------
+  const noseYBaselineRef = useRef(0); // slow EMA of nose.y — the "at rest" head height
+  const peakHeadLateralRef = useRef(0); // peak |noseOffset| (normalized) this command window — slip quality
+  const peakHeadDropRef = useRef(0); // peak downward nose displacement (normalized) this command window — roll quality
 
   // -------------------------------------------------------------------------
   // Mount / MediaPipe script loading
@@ -517,6 +562,8 @@ export default function VisionPage() {
     window.speechSynthesis.onvoiceschanged = loadVoices;
   }, []);
 
+  useEffect(() => { preloadVoicePack(); }, []);
+
   const pickVoice = (profile: string): SpeechSynthesisVoice | undefined => {
     if (voiceForProfileRef.current[profile]) return voiceForProfileRef.current[profile];
     const voices = voicesCacheRef.current.length ? voicesCacheRef.current : (synthRef.current?.getVoices() ?? []);
@@ -544,47 +591,46 @@ export default function VisionPage() {
   // that are genuinely synced to what the fighter hears, not to network/
   // engine latency, which can be 100-500ms on remote "Online" voices.
   const speakCommand = (text: string, onStart?: () => void, onEnd?: () => void) => {
-    if (!synthRef.current || isMutedRef.current) {
+    if (isMutedRef.current) {
       onStart?.();
       onEnd?.();
       return;
     }
-    try {
-      synthRef.current.cancel();
-      const utterance = new SpeechSynthesisUtterance(normalizeForSpeech(text));
-      const profile = voiceProfileRef.current;
-      const voice = pickVoice(profile);
-      if (voice) {
-        utterance.voice = voice;
-        utterance.lang = voice.lang;
-      }
-      
-      // Maximum projection settings for long distance (10-15ft away)
-      utterance.volume = 1.0; // 100% max hardware volume output
-      const baseRate = difficultyRef.current === 'hard' ? 1.05 : difficultyRef.current === 'easy' ? 0.85 : 0.95;
-      utterance.rate = profile === 'steel' ? baseRate * 0.9 : profile === 'athena' ? baseRate * 1.08 : baseRate * 1.18;
-      utterance.pitch = profile === 'steel' ? 0.78 : profile === 'athena' ? 1.28 : 1.65;
-
-      let fired = false;
-      const fireStart = () => {
-        if (fired) return;
-        fired = true;
+    const fallback = () => {
+      if (!synthRef.current) {
         onStart?.();
-      };
-      utterance.onstart = fireStart;
-      utterance.onend = () => onEnd?.();
-      utterance.onerror = () => {
-        fireStart();
         onEnd?.();
-      };
-      synthRef.current.speak(utterance);
-      // Safety net: cap wait to prevent desync
-      setTimeout(fireStart, 150);
-    } catch (e) {
-      console.warn('Speech failed:', e);
-      onStart?.();
-      onEnd?.();
-    }
+        return;
+      }
+      try {
+        synthRef.current.cancel();
+        const utterance = new SpeechSynthesisUtterance(normalizeForSpeech(text));
+        const profile = voiceProfileRef.current;
+        const voice = pickVoice(profile);
+        if (voice) {
+          utterance.voice = voice;
+          utterance.lang = voice.lang;
+        }
+        utterance.volume = 1.0;
+        utterance.rate = 0.95;
+        utterance.pitch = 1.0;
+        let fired = false;
+        const fireStart = () => {
+          if (fired) return;
+          fired = true;
+          onStart?.();
+        };
+        utterance.onstart = fireStart;
+        utterance.onend = () => onEnd?.();
+        utterance.onerror = () => { fireStart(); onEnd?.(); };
+        synthRef.current.speak(utterance);
+        setTimeout(fireStart, 150);
+      } catch {
+        onStart?.();
+        onEnd?.();
+      }
+    };
+    playVoiceEvent(text, fallback, onStart, onEnd);
   };
 
   // -------------------------------------------------------------------------
@@ -658,6 +704,7 @@ export default function VisionPage() {
   };
 
   const startCalibration = async () => {
+    unlockVoicePack();
     // Server-side entitlement + usage-limit check — the ONLY thing that can
     // actually grant an AI Video Analysis session. Nothing client-side
     // (a previous status fetch, a cached flag, etc.) is trusted here; this
@@ -728,6 +775,8 @@ export default function VisionPage() {
     prevAngleTsRef.current = null;
     shoulderBaselineAngleRef.current = 0;
     peakRotationRef.current = 0;
+    hipBaselineAngleRef.current = 0;
+    peakHipRotationRef.current = 0;
     kneeBaselineRef.current = { L: 0, R: 0 };
     peakKneeDriveRef.current = 0;
     hipXBaselineRef.current = 0;
@@ -736,6 +785,9 @@ export default function VisionPage() {
     peakFootPivotRef.current = 0;
     wristBaselineRef.current = { L: { x: 0, y: 0 }, R: { x: 0, y: 0 } };
     peakWristDisplacementRef.current = { dx: 0, dy: 0, mag: 0 };
+    noseYBaselineRef.current = 0;
+    peakHeadLateralRef.current = 0;
+    peakHeadDropRef.current = 0;
     goodHoldMsRef.current = 0;
     badHoldMsRef.current = 0;
     setIsTrackingInadequate(false);
@@ -1133,6 +1185,14 @@ export default function VisionPage() {
 
     const hipMidX = lHip && rHip ? (lHip.x + rHip.x) / 2 : hipXBaselineRef.current;
 
+    // Hip-line angle — same lineAngle() measurement used for the shoulders,
+    // just applied to the hip landmarks instead, so rotation of the hips can
+    // be scored as its own signal rather than folded into shoulder rotation.
+    let hipAngle = hipBaselineAngleRef.current;
+    if (lHip && rHip) {
+      hipAngle = lineAngle(lHip, rHip);
+    }
+
     const lHeel = landmarks[LM.L_HEEL], rHeel = landmarks[LM.R_HEEL];
     const lFoot = landmarks[LM.L_FOOT_INDEX], rFoot = landmarks[LM.R_FOOT_INDEX];
     const lFootVisible = lHeel && lFoot && (lHeel.visibility ?? 1) > 0.4 && (lFoot.visibility ?? 1) > 0.4;
@@ -1145,6 +1205,9 @@ export default function VisionPage() {
       // this becomes the baseline a strike's rotation is measured against.
       shoulderBaselineAngleRef.current = shoulderAngle;
       peakRotationRef.current = 0;
+
+      hipBaselineAngleRef.current = hipAngle;
+      peakHipRotationRef.current = 0;
 
       kneeBaselineRef.current = { L: lKneeAngle, R: rKneeAngle };
       peakKneeDriveRef.current = 0;
@@ -1162,6 +1225,9 @@ export default function VisionPage() {
     } else {
       const rotationDelta = Math.abs(shoulderAngle - shoulderBaselineAngleRef.current);
       if (rotationDelta > peakRotationRef.current) peakRotationRef.current = rotationDelta;
+
+      const hipRotationDelta = Math.abs(hipAngle - hipBaselineAngleRef.current);
+      if (hipRotationDelta > peakHipRotationRef.current) peakHipRotationRef.current = hipRotationDelta;
 
       const kneeDelta = Math.max(
         Math.abs(lKneeAngle - kneeBaselineRef.current.L),
@@ -1227,6 +1293,24 @@ export default function VisionPage() {
     const defenseTriggered = Math.abs(noseOffset) > 0.45 && Math.abs(noseOffset - prevNoseOffsetRef.current) > 0.15;
     prevNoseOffsetRef.current = noseOffset;
 
+    // --- Head displacement tracking (slip/roll quality) --------------------
+    // Independent of the elbow state machine on purpose: a slip or roll
+    // never extends the elbow, so it can't reuse the guard/strike peak
+    // trackers above. noseYBaselineRef is a slow-moving average of head
+    // height that represents "standing in guard" without needing its own
+    // explicit state machine; peaks are measured as displacement away from
+    // that average and are reset per-command in runCommands().
+    if (nose && lS && rS) {
+      const headShoulderWidth = Math.hypot(lS.x - rS.x, lS.y - rS.y) || 0.001;
+      noseYBaselineRef.current = noseYBaselineRef.current === 0
+        ? nose.y
+        : noseYBaselineRef.current * 0.98 + nose.y * 0.02;
+      const lateral = Math.abs(noseOffset);
+      if (lateral > peakHeadLateralRef.current) peakHeadLateralRef.current = lateral;
+      const drop = (nose.y - noseYBaselineRef.current) / headShoulderWidth; // positive = head moved down
+      if (drop > peakHeadDropRef.current) peakHeadDropRef.current = drop;
+    }
+
     // Freestyle: no called commands to wait for — every validated punch
     // (same guard->strike->guard state machine, same velocity gate as coach
     // mode) is logged the instant it completes.
@@ -1260,9 +1344,13 @@ export default function VisionPage() {
     setIsVelocityFlashing(true);
     setTimeout(() => setIsVelocityFlashing(false), 300);
     setComboIndex((prev) => (prev + 1) % 5);
-    const rotationScore = Math.round(
+    const torsoRotationScore = Math.round(
       Math.min(100, (peakRotationRef.current / MIN_ROTATION_FOR_FULL_SCORE) * 100)
     );
+    const hipRotationScore = Math.round(
+      Math.min(100, (peakHipRotationRef.current / MIN_ROTATION_FOR_FULL_SCORE) * 100)
+    );
+    const rotationScore = Math.round((torsoRotationScore + hipRotationScore) / 2);
     const kneeDriveScore = Math.round(
       Math.min(100, (peakKneeDriveRef.current / FULL_KNEE_DRIVE_DEG) * 100)
     );
@@ -1271,6 +1359,12 @@ export default function VisionPage() {
     );
     const footPivotScore = Math.round(
       Math.min(100, (peakFootPivotRef.current / FULL_FOOT_PIVOT_DEG) * 100)
+    );
+    const headLateralScore = Math.round(
+      Math.min(100, (peakHeadLateralRef.current / FULL_HEAD_LATERAL_FOR_FULL_SCORE) * 100)
+    );
+    const headDropScore = Math.round(
+      Math.min(100, (Math.max(0, peakHeadDropRef.current) / FULL_HEAD_DROP_FOR_FULL_SCORE) * 100)
     );
 
     let trajectory: 'straight' | 'hook' | 'uppercut' = 'straight';
@@ -1293,9 +1387,13 @@ export default function VisionPage() {
       peakVelocity,
       estimatedPower: estimatePower(peakVelocity),
       rotationScore,
+      torsoRotationScore,
+      hipRotationScore,
       kneeDriveScore,
       weightTransferScore,
       footPivotScore,
+      headLateralScore,
+      headDropScore,
       trajectory,
       trajectoryMatch,
     });
@@ -1311,7 +1409,9 @@ export default function VisionPage() {
     setIsVelocityFlashing(true);
     setTimeout(() => setIsVelocityFlashing(false), 300);
     setComboIndex((prev) => (prev + 1) % 5);
-    const rotationScore = Math.round(Math.min(100, (peakRotationRef.current / MIN_ROTATION_FOR_FULL_SCORE) * 100));
+    const torsoRotationScore = Math.round(Math.min(100, (peakRotationRef.current / MIN_ROTATION_FOR_FULL_SCORE) * 100));
+    const hipRotationScore = Math.round(Math.min(100, (peakHipRotationRef.current / MIN_ROTATION_FOR_FULL_SCORE) * 100));
+    const rotationScore = Math.round((torsoRotationScore + hipRotationScore) / 2);
     const kneeDriveScore = Math.round(Math.min(100, (peakKneeDriveRef.current / FULL_KNEE_DRIVE_DEG) * 100));
     const weightTransferScore = Math.round(Math.min(100, (peakWeightTransferRef.current / FULL_WEIGHT_TRANSFER_RATIO) * 100));
     const footPivotScore = Math.round(Math.min(100, (peakFootPivotRef.current / FULL_FOOT_PIVOT_DEG) * 100));
@@ -1327,9 +1427,13 @@ export default function VisionPage() {
       peakVelocity,
       estimatedPower: estimatePower(peakVelocity),
       rotationScore,
+      torsoRotationScore,
+      hipRotationScore,
       kneeDriveScore,
       weightTransferScore,
       footPivotScore,
+      headLateralScore: 0,
+      headDropScore: 0,
       trajectory,
       trajectoryMatch: true, // no called shape to compare against in freestyle
     });
@@ -1381,9 +1485,13 @@ export default function VisionPage() {
           peakVelocity,
           estimatedPower: estimatePower(peakVelocity),
           rotationScore: 0,
+          torsoRotationScore: 0,
+          hipRotationScore: 0,
           kneeDriveScore: 0,
           weightTransferScore: 0,
           footPivotScore: 0,
+          headLateralScore: 0,
+          headDropScore: 0,
           trajectory: 'straight',
           trajectoryMatch: false,
         });
@@ -1394,16 +1502,19 @@ export default function VisionPage() {
         return;
       }
 
-      const pool = modeRef.current === 'punches'
-        ? PUNCH_COMMANDS
-        : [...PUNCH_COMMANDS, ...DEFENSE_COMMANDS];
+      const pool = modeRef.current === 'defense'
+        ? DEFENSE_COMMANDS
+        : PUNCH_COMMANDS;
       const cmd = pool[Math.floor(Math.random() * pool.length)];
 
       setActiveCommand(cmd.text);
+      setTacticalCue(tacticalCueForCommand(cmd.text, cmd.kind));
       activeCommandTextRef.current = cmd.text;
       awaitingRef.current = true;
       awaitingKindRef.current = cmd.kind;
       currentRepPeakVelocityRef.current = 0;
+      peakHeadLateralRef.current = 0;
+      peakHeadDropRef.current = 0;
       attemptedRef.current += 1;
       setAttemptedCount(attemptedRef.current);
 
@@ -1434,6 +1545,7 @@ export default function VisionPage() {
     let remaining = freestyleDurationRef.current;
     elapsedSecondsRef.current = 0;
     setActiveCommand('FREESTYLE');
+    setTacticalCue('Keep your guard high — choose clean, committed punch shapes.');
     activeCommandTextRef.current = 'FREESTYLE';
     awaitingRef.current = true;
     awaitingKindRef.current = 'punch';
@@ -1485,9 +1597,13 @@ export default function VisionPage() {
         peakVelocity,
         estimatedPower: estimatePower(peakVelocity),
         rotationScore: 0,
+        torsoRotationScore: 0,
+        hipRotationScore: 0,
         kneeDriveScore: 0,
         weightTransferScore: 0,
         footPivotScore: 0,
+        headLateralScore: 0,
+        headDropScore: 0,
         trajectory: 'straight',
         trajectoryMatch: false,
       });
@@ -1579,6 +1695,7 @@ export default function VisionPage() {
     // (defense reps don't drive the arm state machine these are measured
     // through), so they're computed over punchHits, not all hits.
     let avgKneeDrive = 0, avgWeightTransfer = 0, avgFootPivot = 0, avgRotation = 0, trajectoryAccuracy = 0;
+    let avgHipRotation = 0, avgTorsoRotation = 0;
     if (punchHits.length > 0) {
       const weakestStrike = punchHits.reduce((a, b) => (a.peakVelocity < b.peakVelocity ? a : b));
       if (weakestStrike.peakVelocity < POWER_REFERENCE_VELOCITY * 0.35) {
@@ -1586,6 +1703,8 @@ export default function VisionPage() {
       }
 
       avgRotation = punchHits.reduce((sum, r) => sum + r.rotationScore, 0) / punchHits.length;
+      avgHipRotation = punchHits.reduce((sum, r) => sum + (r.hipRotationScore ?? 0), 0) / punchHits.length;
+      avgTorsoRotation = punchHits.reduce((sum, r) => sum + (r.torsoRotationScore ?? 0), 0) / punchHits.length;
       avgKneeDrive = punchHits.reduce((sum, r) => sum + r.kneeDriveScore, 0) / punchHits.length;
       avgWeightTransfer = punchHits.reduce((sum, r) => sum + r.weightTransferScore, 0) / punchHits.length;
       avgFootPivot = punchHits.reduce((sum, r) => sum + r.footPivotScore, 0) / punchHits.length;
@@ -1640,6 +1759,52 @@ export default function VisionPage() {
         advice = weakestTech.advice;
       }
     }
+    // Defensive head-movement aggregates — measured on defense hits only,
+    // mirroring how punch kinetic-chain aggregates are scoped to punchHits
+    // above.
+    const defenseHits = allHits.filter((r) => r.kind === 'defense');
+    const avgHeadLateral = defenseHits.length
+      ? defenseHits.reduce((sum, r) => sum + (r.headLateralScore ?? 0), 0) / defenseHits.length
+      : 0;
+    const avgHeadDrop = defenseHits.length
+      ? defenseHits.reduce((sum, r) => sum + (r.headDropScore ?? 0), 0) / defenseHits.length
+      : 0;
+
+    // --- Data-driven flaw detection ----------------------------------------
+    // Replaces the fixed "lowest of ~9 canned strings" logic above with a
+    // real evaluation against the mechanics database: every flaw returned
+    // here carries the measured session-average value that triggered it,
+    // and a matched cause / coaching tip / corrective exercise / progression
+    // target instead of a generic sentence. The canned `flaw`/`advice`
+    // strings computed above are kept as a fallback (used only when the
+    // engine has too little data — e.g. under MIN_SAMPLE_SIZE reps per
+    // technique — to make a confident call).
+    const engineReps: FlawEngineRep[] = log.map((r) => ({
+      command: r.command,
+      kind: r.kind,
+      hit: r.hit,
+      estimatedPower: r.estimatedPower,
+      hipRotationScore: r.hipRotationScore ?? 0,
+      torsoRotationScore: r.torsoRotationScore ?? 0,
+      kneeDriveScore: r.kneeDriveScore,
+      weightTransferScore: r.weightTransferScore,
+      footPivotScore: r.footPivotScore,
+      headLateralScore: r.headLateralScore ?? 0,
+      headDropScore: r.headDropScore ?? 0,
+      trajectory: r.trajectory,
+      trajectoryMatch: r.trajectoryMatch,
+    }));
+    const detailedFlaws: DetectedFlaw[] = topSessionFlaws(engineReps, 5);
+    const techniqueSummaries = summarizeTechniques(engineReps);
+
+    if (detailedFlaws.length > 0) {
+      // Top-ranked (most severe) flaw drives the headline "biggest
+      // opportunity" + coach line, same slots the UI already reads.
+      const top = detailedFlaws[0];
+      flaw = `${top.techniqueLabel}: ${top.cause}`;
+      advice = top.coachingTip;
+    }
+
     if (mistakes.length === 0) {
       mistakes.push('No specific recurring mistake detected — commands were answered cleanly and on time.');
     }
@@ -1659,11 +1824,17 @@ export default function VisionPage() {
       mistakes,
       log,
       rotationScore: Math.round(avgRotation),
+      hipRotationScore: Math.round(avgHipRotation),
+      torsoRotationScore: Math.round(avgTorsoRotation),
       kneeDriveScore: Math.round(avgKneeDrive),
       weightTransferScore: Math.round(avgWeightTransfer),
       footPivotScore: Math.round(avgFootPivot),
+      headLateralScore: Math.round(avgHeadLateral),
+      headDropScore: Math.round(avgHeadDrop),
       trajectoryAccuracy,
       isFreestyle,
+      detailedFlaws,
+      techniqueSummaries,
     });
     setInsufficientData(false);
     setStage('results');
@@ -1679,13 +1850,31 @@ export default function VisionPage() {
       // pulled straight from the actual computed results, nothing invented.
       logVisionSession({
         date: new Date().toISOString(),
+        mode: resultsData.isFreestyle ? 'freestyle' : modeRef.current,
         punches: resultsData.log.filter((r: RepLogEntry) => r.kind === 'punch').length,
+        hits: resultsData.hits,
+        misses: resultsData.misses,
+        attempted: resultsData.hits + resultsData.misses,
         score: resultsData.overallScore,
         reflex_tier: resultsData.avgReflex ? getReflexTier(resultsData.avgReflex / 1000) : '--',
         avg_reflex_ms: resultsData.avgReflex ?? 0,
         accuracy: resultsData.accuracy,
+        power_score: resultsData.powerScore,
+        tracking_score: resultsData.stanceScore,
+        reflex_score: resultsData.reflexScore,
+        rotation_score: resultsData.rotationScore,
+        hip_rotation_score: resultsData.hipRotationScore,
+        torso_rotation_score: resultsData.torsoRotationScore,
+        knee_drive_score: resultsData.kneeDriveScore,
+        weight_transfer_score: resultsData.weightTransferScore,
+        foot_pivot_score: resultsData.footPivotScore,
+        head_lateral_score: resultsData.headLateralScore,
+        head_drop_score: resultsData.headDropScore,
+        trajectory_accuracy: resultsData.trajectoryAccuracy,
         flaw: resultsData.flaw,
         advice: resultsData.advice,
+        detailed_flaws: resultsData.detailedFlaws,
+        technique_summaries: resultsData.techniqueSummaries,
         raw_data: {
           drill_data: resultsData.log.map((r: RepLogEntry) => ({
             command: r.command,
@@ -1694,6 +1883,7 @@ export default function VisionPage() {
             extension_speed_ms: r.reactionMs ?? 0,
             form_notes: r.hit ? 'Clean strike, on time.' : 'Missed — no clean strike detected within the window.',
           })),
+          reps: resultsData.log,
         },
       });
 
@@ -2326,7 +2516,7 @@ export default function VisionPage() {
                       <span className="text-[7px] text-white/30 font-mono">JUST NOW</span>
                     </div>
                     <p className="text-[9px] text-white/80 font-semibold leading-tight truncate">
-                      {activeCommand ? `Drive from hips on ${activeCommand} — keep guard up` : 'Keep lead guard high — rotation velocity +12%'}
+                      {tacticalCue}
                     </p>
                   </div>
                 </div>
@@ -2567,6 +2757,76 @@ export default function VisionPage() {
               </GlassCard>
             )}
 
+            {resultsData.detailedFlaws && resultsData.detailedFlaws.length > 0 && (
+              <GlassCard className="p-5 border-white/5 bg-black/40">
+                <span className="text-[9px] font-black text-primary tracking-widest uppercase block mb-1">
+                  Detailed Flaw Breakdown
+                </span>
+                <p className="text-[8px] text-white/30 uppercase tracking-wider mb-3">
+                  Ranked by severity — each one matched against measured technique, not guessed
+                </p>
+                <div className="flex flex-col gap-3">
+                  {resultsData.detailedFlaws.map((f: DetectedFlaw, idx: number) => (
+                    <div key={idx} className="bg-white/[0.02] border border-white/5 rounded-2xl p-3.5">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[10px] font-black text-white uppercase tracking-wide">
+                          {f.techniqueLabel}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest ${
+                            f.severity === 'major'
+                              ? 'bg-red-500/15 text-red-400'
+                              : f.severity === 'moderate'
+                              ? 'bg-orange-500/15 text-orange-400'
+                              : 'bg-yellow-500/15 text-yellow-400'
+                          }`}
+                        >
+                          {f.severity}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-white/60 leading-snug mb-2">
+                        {f.cause}{' '}
+                        <span className="text-white/30">
+                          (measured {f.measuredValue}% vs target {f.targetValue}%, over {f.sampleSize} reps)
+                        </span>
+                      </p>
+                      <p className="text-[10px] font-bold text-primary leading-snug mb-1">
+                        Fix: {f.coachingTip}
+                      </p>
+                      <p className="text-[9px] text-white/40 leading-snug">
+                        Drill: {f.correctiveExercise} — {f.recommendedFrequency}
+                      </p>
+                      <p className="text-[9px] text-white/30 leading-snug mt-0.5">
+                        Target: {f.progressionTarget}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </GlassCard>
+            )}
+
+            {resultsData.techniqueSummaries && resultsData.techniqueSummaries.length > 1 && (
+              <GlassCard className="p-5 border-white/5 bg-black/40">
+                <span className="text-[9px] font-black text-primary tracking-widest uppercase block mb-3">
+                  Strongest / Weakest Techniques
+                </span>
+                <div className="flex flex-col gap-1.5">
+                  {resultsData.techniqueSummaries.map((t: any, idx: number) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between px-3 py-2 rounded-xl bg-white/[0.02] border border-white/5"
+                    >
+                      <span className="text-[10px] font-bold text-white/80 uppercase tracking-wide">
+                        {idx === 0 ? '💪 ' : idx === resultsData.techniqueSummaries.length - 1 ? '⚠️ ' : ''}
+                        {t.label}
+                      </span>
+                      <span className="text-[10px] font-black text-primary">{t.avgScore}%</span>
+                    </div>
+                  ))}
+                </div>
+              </GlassCard>
+            )}
+
             {resultsData.log && resultsData.log.length > 0 && (
               <GlassCard className="p-5 border-white/5 bg-black/40">
                 <span className="text-[9px] font-black text-primary tracking-widest uppercase block mb-1">
@@ -2577,10 +2837,17 @@ export default function VisionPage() {
                 </p>
                 <div className="grid grid-cols-2 gap-2.5">
                   {[
-                    { label: 'Hip / Torso Rotation', val: resultsData.rotationScore },
+                    { label: 'Hip Rotation', val: resultsData.hipRotationScore ?? resultsData.rotationScore },
+                    { label: 'Torso Rotation', val: resultsData.torsoRotationScore ?? resultsData.rotationScore },
                     { label: 'Knee Drive', val: resultsData.kneeDriveScore },
                     { label: 'Weight Transfer', val: resultsData.weightTransferScore },
                     { label: 'Rear Foot Pivot', val: resultsData.footPivotScore },
+                    ...(resultsData.headLateralScore || resultsData.headDropScore
+                      ? [
+                          { label: 'Head Lateral (Slip)', val: resultsData.headLateralScore ?? 0 },
+                          { label: 'Head Drop (Roll)', val: resultsData.headDropScore ?? 0 },
+                        ]
+                      : []),
                   ].map((m, idx) => (
                     <div key={idx} className="bg-white/[0.02] border border-white/5 rounded-2xl p-3">
                       <div className="flex justify-between items-center mb-1.5">

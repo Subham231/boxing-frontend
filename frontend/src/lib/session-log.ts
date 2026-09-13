@@ -11,17 +11,78 @@ export interface DrillLogEntry {
   form_notes: string;
 }
 
+export interface VisionRepRecord {
+  index: number;
+  command: string;
+  kind: 'punch' | 'defense';
+  hit: boolean;
+  reactionMs: number | null;
+  peakVelocity: number;
+  estimatedPower: number;
+  rotationScore: number;
+  torsoRotationScore: number;
+  hipRotationScore: number;
+  kneeDriveScore: number;
+  weightTransferScore: number;
+  footPivotScore: number;
+  headLateralScore: number;
+  headDropScore: number;
+  trajectory: 'straight' | 'hook' | 'uppercut';
+  trajectoryMatch: boolean;
+}
+
+export interface VisionFlawRecord {
+  techniqueLabel: string;
+  metric: string;
+  measuredValue: number;
+  targetValue: number;
+  severity: string;
+  cause: string;
+  coachingTip: string;
+  correctiveExercise: string;
+  recommendedFrequency: string;
+  progressionTarget: string;
+  sampleSize: number;
+}
+
+export interface VisionTechniqueSummary {
+  technique: string;
+  label: string;
+  primaryMetric: string;
+  avgScore: number;
+  sampleSize: number;
+}
+
 export interface VisionSessionRecord {
   date: string; // ISO timestamp
+  mode?: 'punches' | 'defense' | 'freestyle';
   punches: number;
+  hits?: number;
+  misses?: number;
+  attempted?: number;
   score: number;
   reflex_tier: string;
   avg_reflex_ms: number;
   accuracy: number;
+  power_score?: number;
+  tracking_score?: number;
+  reflex_score?: number;
+  rotation_score?: number;
+  hip_rotation_score?: number;
+  torso_rotation_score?: number;
+  knee_drive_score?: number;
+  weight_transfer_score?: number;
+  foot_pivot_score?: number;
+  head_lateral_score?: number;
+  head_drop_score?: number;
+  trajectory_accuracy?: number;
   flaw: string;
   advice: string;
+  detailed_flaws?: VisionFlawRecord[];
+  technique_summaries?: VisionTechniqueSummary[];
   raw_data?: {
     drill_data: DrillLogEntry[];
+    reps?: VisionRepRecord[];
   };
 }
 
