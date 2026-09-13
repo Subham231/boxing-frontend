@@ -11,8 +11,7 @@ const Welcome: React.FC = () => {
     const router = useRouter();
 
     // Screen order (see onboarding/page.tsx): ... PromiseStep,
-    // OtpVerification, SubscriptionOffer, FinalPromise — OTP is three steps
-    // from the end.
+    // EmailVerification, SubscriptionOffer, FinalPromise.
     return (
         <div className="relative flex flex-col min-h-full justify-between py-4 pb-20 sm:pb-24">
             {/* Ambient particles */}

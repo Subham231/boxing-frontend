@@ -3,7 +3,6 @@
 import React, { useState, useRef } from 'react';
 import { useOnboarding } from '@/context/OnboardingContext';
 import { Camera, Upload, ChevronRight, UserCircle2, Sparkles, Flame, Check } from 'lucide-react';
-import { checkEmailExists } from '@/lib/firebase-auth';
 
 const RING_NAME_SUGGESTIONS = ['TITAN', 'SHADOW', 'VIPER', 'THUNDER', 'IRONCLAD', 'STRIKER'];
 const PROFESSION_SUGGESTIONS = ['Student', 'Engineer', 'Athlete', 'Entrepreneur', 'Doctor', 'Coach', 'Artist', 'Other'];
@@ -19,8 +18,6 @@ const Identity: React.FC = () => {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [signupError, setSignupError] = useState<string | null>(null);
-    const [existingAccount, setExistingAccount] = useState(false);
-    const [checkingEmail, setCheckingEmail] = useState(false);
 
     const startCamera = async () => {
         try {
@@ -131,28 +128,14 @@ const Identity: React.FC = () => {
             return;
         }
 
-        setExistingAccount(false);
-        setCheckingEmail(true);
-        try {
-            if (await checkEmailExists(email)) {
-                setExistingAccount(true);
-                setSignupError('You already have an account. Try logging in.');
-                return;
-            }
-
-            updateData({ 
-                ringName: name, 
-                age: age,
-                profession: profession || 'Fighter',
-                promiseWord: promiseWord.toUpperCase(),
-                email
-            });
-            nextStep();
-        } catch (e: any) {
-            setSignupError(e?.message || 'Could not check email address. Please try again.');
-        } finally {
-            setCheckingEmail(false);
-        }
+        updateData({
+            ringName: name,
+            age: age,
+            profession: profession || 'Fighter',
+            promiseWord: promiseWord.toUpperCase(),
+            email,
+        });
+        nextStep();
     };
 
     return (
@@ -252,7 +235,6 @@ const Identity: React.FC = () => {
                             value={data.ringName || ''}
                             onChange={(e) => {
                                 setSignupError(null);
-                                setExistingAccount(false);
                                 updateData({ ringName: e.target.value });
                             }}
                             className="w-full bg-black/50 border border-white/15 rounded-xl px-3 py-2.5 text-sm font-black text-white outline-none focus:border-primary transition-all tracking-wider uppercase placeholder:text-white/20"
@@ -358,43 +340,21 @@ const Identity: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* 4. Phone Number (MANDATORY) */}
-                    <div className="flex flex-col gap-1">
-                        <label className="text-[9px] font-black tracking-widest text-primary uppercase">
-                            Phone Number <span className="text-[#E2FF3B]">*</span>
-                        </label>
-                        <input
-                            type="tel"
-                            placeholder="+91..."
-                            value={data.phone ?? '+91'}
-                            onChange={(e) => {
-                                setSignupError(null);
-                                updateData({ phone: e.target.value });
-                            }}
-                            className="w-full bg-black/50 border border-white/15 rounded-xl px-3 py-2 text-sm font-bold text-white outline-none focus:border-primary transition-all tracking-tight"
-                        />
-                    </div>
                 </div>
 
                 {signupError && (
-                    <div className={`p-2.5 rounded-xl border text-xs font-bold text-center leading-relaxed ${existingAccount ? 'bg-primary/10 border-primary text-primary' : 'bg-red-500/10 border-red-500/40 text-red-400'}`}>
+                    <div className="p-2.5 rounded-xl border border-red-500/40 bg-red-500/10 text-xs font-bold text-center leading-relaxed text-red-400">
                         {signupError}
                     </div>
-                )}
-                {existingAccount && (
-                    <button type="button" onClick={() => window.location.assign('/login')} className="btn-primary w-full h-11 flex items-center justify-center gap-2 text-xs">
-                        LOG IN TO EXISTING ACCOUNT <ChevronRight size={16} />
-                    </button>
                 )}
             </main>
 
             <footer className="mt-3 flex flex-col gap-2">
                 <button
                     onClick={handleSignUp}
-                    disabled={checkingEmail}
                     className="btn-primary w-full h-12 flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider disabled:opacity-50 shadow-[0_0_20px_rgba(226,255,59,0.3)]"
                 >
-                    {checkingEmail ? 'CHECKING EMAIL...' : 'CONFIRM & CONTINUE'} <ChevronRight size={16} />
+                    CONFIRM & CONTINUE <ChevronRight size={16} />
                 </button>
                 <button onClick={prevStep} className="text-[10px] font-black text-white/40 hover:text-white uppercase tracking-widest py-0.5 mx-auto">
                     Back

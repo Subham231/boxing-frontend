@@ -315,20 +315,6 @@ export function formatEmailAuthError(error: unknown): string {
   }
 }
 
-export async function checkEmailExists(email: string): Promise<boolean> {
-  try {
-    const res = await fetch('/api/reflex/check-email', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
-    });
-    const data = await res.json();
-    return !!data.exists;
-  } catch {
-    return false;
-  }
-}
-
 /**
  * New-user signup with email + password. Creates the Firebase account,
  * fires off the verification email, and returns the (unverified) user.

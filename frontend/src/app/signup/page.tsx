@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, ShieldCheck, Eye, EyeOff } from 'lucide-react';
-import { signUpWithEmail, checkEmailExists, formatEmailAuthError } from '@/lib/firebase-auth';
+import { signUpWithEmail, formatEmailAuthError } from '@/lib/firebase-auth';
 
 export default function SignupPage() {
   const router = useRouter();
@@ -27,10 +27,6 @@ export default function SignupPage() {
 
     setLoading(true);
     try {
-      if (await checkEmailExists(trimmedEmail)) {
-        setError('An account already exists for this email. Try logging in instead.');
-        return;
-      }
       await signUpWithEmail(trimmedEmail, password);
       if (typeof window !== 'undefined') {
         sessionStorage.setItem('sparai_pending_email', trimmedEmail);

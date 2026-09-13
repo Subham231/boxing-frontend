@@ -7,7 +7,6 @@ import { useOnboarding } from '@/context/OnboardingContext';
 import StepBadge from './StepBadge';
 import {
   signUpWithEmail,
-  checkEmailExists,
   resendVerificationEmail,
   refreshEmailVerified,
   saveProfileDetails,
@@ -27,6 +26,7 @@ const EmailVerification: React.FC = () => {
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [existingAccount, setExistingAccount] = useState(false);
   const [cooldown, setCooldown] = useState(0);
 
   useEffect(() => {
@@ -37,6 +37,7 @@ const EmailVerification: React.FC = () => {
 
   const handleCreateAccount = async () => {
     setError(null);
+    setExistingAccount(false);
     const trimmedEmail = email.trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
       setError('Enter a valid email address.');
@@ -49,15 +50,17 @@ const EmailVerification: React.FC = () => {
 
     setLoading(true);
     try {
-      if (await checkEmailExists(trimmedEmail)) {
-        setError('You already have an account. Please use the separate login page.');
-        return;
-      }
       await signUpWithEmail(trimmedEmail, password);
       updateData({ email: trimmedEmail });
       setStep('pending');
       setCooldown(RESEND_COOLDOWN_SECONDS);
     } catch (e) {
+      const code = e && typeof e === 'object' && 'code' in e ? String((e as { code?: string }).code) : '';
+      if (code === 'auth/email-already-in-use') {
+        setExistingAccount(true);
+        setError('This Gmail account already has a fighter profile. Log in to continue.');
+        return;
+      }
       setError(formatEmailAuthError(e));
     } finally {
       setLoading(false);
@@ -226,6 +229,15 @@ const EmailVerification: React.FC = () => {
         )}
 
         {error && <p className="text-[10px] font-bold text-red-400">{error}</p>}
+        {existingAccount && (
+          <button
+            type="button"
+            onClick={() => window.location.assign('/login')}
+            className="btn-primary flex h-11 w-full items-center justify-center gap-2 text-xs"
+          >
+            LOG IN WITH EMAIL <ChevronRight size={16} />
+          </button>
+        )}
       </main>
 
       <footer className="mt-6 sm:mt-8 flex flex-col gap-3 sm:gap-4">

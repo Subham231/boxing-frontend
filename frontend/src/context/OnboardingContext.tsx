@@ -10,7 +10,6 @@ export interface OnboardingConstraints {
 
 export interface OnboardingData {
     ringName: string;
-    phone: string;
     email?: string;
     age: number;
     profession: string;
@@ -54,7 +53,6 @@ interface OnboardingContextType {
 
 const defaultData: OnboardingData = {
     ringName: '',
-    phone: '+91',
     age: 25,
     profession: '',
     height: 175,
@@ -82,7 +80,6 @@ function serializeOnboarding(data: OnboardingData): Record<string, unknown> {
 
     return {
         ring_name: data.ringName.trim().toUpperCase(),
-        phone_number: data.phone.trim(),
         ...(avatar ? { avatar_url: avatar } : {}),
         user_metrics: {
             age: Number(data.age),
@@ -136,7 +133,6 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 setData({
                     ...defaultData,
                     ringName: stored.ring_name || '',
-                    phone: stored.phone_number || '',
                     age: stored.user_metrics?.age ?? defaultData.age,
                     height: stored.user_metrics?.height ?? defaultData.height,
                     weight: stored.user_metrics?.weight ?? defaultData.weight,
@@ -211,9 +207,7 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     });
 
     // Used by the "Already have an account? Login" shortcut on the Welcome
-    // screen — jumps straight to the OTP verification step (which already
-    // correctly detects and restores an existing account) instead of
-    // running a second, separate auth implementation.
+    // screen.
     const goToStep = (step: number) => {
         persistProgress();
         setCurrentStep(() => {
@@ -248,7 +242,6 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
             body: JSON.stringify({
                 displayName: data.ringName,
-                phone: data.phone,
                 age: Number(data.age),
                 profession: data.profession,
                 promiseWord: data.promiseWord,

@@ -191,8 +191,7 @@ export default function OnboardingPage() {
                 const onboardingData = (profile.onboarding_data ?? {}) as Record<string, unknown>;
                 const complete =
                     !!onboardingData.onboarding_completed ||
-                    !!profile.uid ||
-                    !!profile.phone ||
+                    !!onboardingData.ring_name ||
                     localStorage.getItem('boxing_onboarding_done') === 'true';
                 cacheProfileLocally(profile);
                 if (complete) localStorage.setItem('boxing_onboarding_done', 'true');
