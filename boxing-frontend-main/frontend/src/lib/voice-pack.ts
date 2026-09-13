@@ -8,6 +8,7 @@ export type VoiceEvent =
   | 'ROLL UNDER'
   | 'FIGHT'
   | 'GET READY'
+  | 'PREPARE STANCE'
   | 'SET COMPLETE'
   | 'WORKOUT COMPLETE'
   | 'REVIEW YOUR NEXT EXERCISE WHEN READY'
@@ -34,6 +35,7 @@ const PACKS: Record<string, Partial<Record<VoiceEvent, string>>> = {
     'ROLL UNDER': 'rollunder.mp3',
     FIGHT: 'fight.mp3',
     'GET READY': 'getready.mp3',
+    'PREPARE STANCE': 'prepare stance.mp3',
     'SET COMPLETE': 'setcomplete.mp3',
     'WORKOUT COMPLETE': 'workoutcompletewelldone.mp3',
     'REVIEW YOUR NEXT EXERCISE WHEN READY': 'reviewyournextexersisewhenready.mp3',
@@ -50,10 +52,11 @@ const PACKS: Record<string, Partial<Record<VoiceEvent, string>>> = {
 };
 
 const VOICE_EVENT_ALIASES: Record<string, VoiceEvent> = {
-  'CALIBRATION COMPLETE. BEGINNING DRILL': 'GET READY',
+  'CALIBRATION COMPLETE. BEGINNING DRILL': 'PREPARE STANCE',
+  'CALIBRATION COMPLETE BEGINNING DRILL': 'PREPARE STANCE',
   'FREESTYLE ROUND. THROW WHEN READY': 'GET READY',
   'SESSION COMPLETE. COMPILING YOUR PERFORMANCE REPORT': 'WORKOUT COMPLETE',
-  'PREPARE STANCE': 'GET READY',
+  'PREPARE STANCE': 'PREPARE STANCE',
 };
 
 const audioCache = new Map<string, HTMLAudioElement>();
@@ -63,6 +66,7 @@ export function voiceEventForText(text: string): VoiceEvent | null {
   const directAlias = VOICE_EVENT_ALIASES[normalized.replace(/[.!]+$/, '')];
   if (directAlias) return directAlias;
   if (normalized.startsWith('GET READY')) return 'GET READY';
+  if (normalized.startsWith('PREPARE STANCE')) return 'PREPARE STANCE';
   if (normalized.startsWith('SET COMPLETE')) return 'SET COMPLETE';
   if (normalized.startsWith('WORKOUT COMPLETE')) return 'WORKOUT COMPLETE';
   if (normalized.startsWith('REVIEW YOUR NEXT EXERCISE')) return 'REVIEW YOUR NEXT EXERCISE WHEN READY';
