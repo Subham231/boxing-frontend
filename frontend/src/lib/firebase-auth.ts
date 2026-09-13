@@ -3,6 +3,13 @@ import {
   signInWithPhoneNumber,
   onAuthStateChanged,
   signOut as firebaseSignOut,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  sendEmailVerification,
+  sendPasswordResetEmail,
+  linkWithCredential,
+  EmailAuthProvider,
+  reload,
   type ConfirmationResult,
   type User,
 } from 'firebase/auth';
@@ -11,6 +18,11 @@ import { firebaseAuth } from './firebase';
 export interface UserProfile {
   uid: string;
   phone: string;
+  // Added by reflex-schema-v21.sql (email/password auth). Optional because
+  // rows created before the migration ran may not have them yet.
+  email?: string | null;
+  email_verified?: boolean;
+  auth_method?: 'phone' | 'email' | 'both';
   referral_code: string;
   referred_by: string | null;
   referral_count: number;
@@ -176,6 +188,18 @@ export async function confirmOtp(
   return { user, isNew, profile };
 }
 
+/** Thrown by ensureUserProfile when the server rejects the request with a
+ * machine-readable `code` (e.g. an unverified email account). Callers can
+ * check `error.code` instead of parsing the message string. */
+export class ProfileRequestError extends Error {
+  code?: string;
+  constructor(message: string, code?: string) {
+    super(message);
+    this.name = 'ProfileRequestError';
+    this.code = code;
+  }
+}
+
 export async function ensureUserProfile(
   user: User,
   referralCodeEntered?: string,
@@ -186,7 +210,10 @@ export async function ensureUserProfile(
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
     body: JSON.stringify({ referredBy: referralCodeEntered || null }),
   });
-  if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || 'Could not create profile.');
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new ProfileRequestError(err?.error || 'Could not create profile.', err?.code);
+  }
   const { profile, isNew, sessionToken } = await res.json();
   return { profile: profile as UserProfile, isNew: !!isNew, sessionToken };
 }
@@ -241,4 +268,123 @@ export async function applyReferralCode(user: User, code: string): Promise<void>
     const err = await res.json().catch(() => ({ error: 'Request failed' }));
     throw new Error(err.error || 'Could not apply referral code');
   }
+}
+
+// ---------------------------------------------------------------------------
+// Email / Password authentication
+//
+// Architecture mirrors phone auth above: Firebase Auth owns the credential
+// and the verification email; Supabase (via /api/reflex/*) only stores the
+// profile row keyed by the same Firebase uid. A phone-auth user who later
+// adds an email keeps their existing uid — see linkEmailPasswordToUser.
+// ---------------------------------------------------------------------------
+
+/** Map Firebase email/password auth errors to something a fighter can act on. */
+export function formatEmailAuthError(error: unknown): string {
+  const code =
+    error && typeof error === 'object' && 'code' in error
+      ? String((error as { code?: string }).code)
+      : '';
+  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+
+  switch (code) {
+    case 'auth/email-already-in-use':
+      return 'An account already exists for this email. Try logging in instead.';
+    case 'auth/invalid-email':
+      return 'That email address looks invalid.';
+    case 'auth/weak-password':
+      return 'Choose a stronger password (at least 6 characters).';
+    case 'auth/wrong-password':
+    case 'auth/invalid-credential':
+    case 'auth/invalid-login-credentials':
+      return 'Incorrect email or password.';
+    case 'auth/user-not-found':
+      return 'No account was found for this email. Please sign up first.';
+    case 'auth/too-many-requests':
+      return 'Too many attempts. Wait a bit, then try again.';
+    case 'auth/requires-recent-login':
+      return 'For security, please log in again before doing this.';
+    case 'auth/credential-already-in-use':
+      return 'This email is already linked to a different account.';
+    case 'auth/user-disabled':
+      return 'This account has been disabled. Contact support.';
+    default: {
+      const cleaned = message.replace(/^Firebase:\s*/i, '').replace(/\s*\(auth\/[^)]+\)\s*$/i, '');
+      return cleaned || 'Something went wrong. Please try again.';
+    }
+  }
+}
+
+export async function checkEmailExists(email: string): Promise<boolean> {
+  try {
+    const res = await fetch('/api/reflex/check-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    const data = await res.json();
+    return !!data.exists;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * New-user signup with email + password. Creates the Firebase account,
+ * fires off the verification email, and returns the (unverified) user.
+ * Does NOT create the Supabase profile row yet — that only happens once
+ * the email is verified (see ensureUserProfile / the /verify-email page),
+ * so an unverified signup can never occupy a phone-style profile slot.
+ */
+export async function signUpWithEmail(email: string, password: string): Promise<User> {
+  const cred = await createUserWithEmailAndPassword(firebaseAuth, email.trim(), password);
+  await sendEmailVerification(cred.user);
+  return cred.user;
+}
+
+/**
+ * Login with email + password. Throws the raw Firebase error on bad
+ * credentials — callers should run it through formatEmailAuthError. Does
+ * NOT check emailVerified itself; callers decide what to do with an
+ * unverified user (normally: send them to /verify-email). The backend
+ * enforces verification independently on any protected route.
+ */
+export async function loginWithEmail(email: string, password: string): Promise<User> {
+  const cred = await signInWithEmailAndPassword(firebaseAuth, email.trim(), password);
+  return cred.user;
+}
+
+/** Re-sends the verification email to the currently signed-in user. */
+export async function resendVerificationEmail(user: User): Promise<void> {
+  await sendEmailVerification(user);
+}
+
+/**
+ * Forces a fresh token fetch from Firebase and returns whether the email
+ * is verified now. Firebase's local `user.emailVerified` is a snapshot from
+ * sign-in time — it does NOT update on its own after the user clicks the
+ * link in their inbox, so this reload is required before checking.
+ */
+export async function refreshEmailVerified(user: User): Promise<boolean> {
+  await reload(user);
+  return user.emailVerified;
+}
+
+export async function sendResetPasswordEmail(email: string): Promise<void> {
+  await sendPasswordResetEmail(firebaseAuth, email.trim());
+}
+
+/**
+ * Migration path for existing phone-auth users: links an email/password
+ * credential onto the CURRENT Firebase user without creating a new account
+ * or a new uid. All existing Supabase data (keyed by uid) is untouched —
+ * ensureUserProfile just adds the email onto the same profile row after
+ * this succeeds. Firebase itself rejects the link if the email is already
+ * used by a different account (auth/credential-already-in-use — see
+ * formatEmailAuthError above).
+ */
+export async function linkEmailPasswordToUser(user: User, email: string, password: string): Promise<void> {
+  const credential = EmailAuthProvider.credential(email.trim(), password);
+  await linkWithCredential(user, credential);
+  await sendEmailVerification(user);
 }

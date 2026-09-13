@@ -1,43 +1,51 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, ShieldCheck, Eye, EyeOff } from 'lucide-react';
-import { loginWithEmail, formatEmailAuthError } from '@/lib/firebase-auth';
+import { useFirebaseUser } from '@/lib/useFirebaseUser';
+import { linkEmailPasswordToUser, formatEmailAuthError } from '@/lib/firebase-auth';
 
-export default function LoginPage() {
+/**
+ * Lets an existing phone-auth fighter add an email/password credential
+ * onto their CURRENT account — same Firebase uid, same Supabase profile
+ * row, same subscription/streaks/analytics. Nothing about their existing
+ * account is replaced; this only adds a second way to log in and a
+ * verified email on file. See linkEmailPasswordToUser in firebase-auth.ts.
+ */
+export default function LinkEmailPage() {
   const router = useRouter();
+  const { user, loading: authLoading } = useFirebaseUser();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleLogin = async () => {
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) router.replace('/login');
+  }, [user, authLoading, router]);
+
+  const handleLink = async () => {
+    if (!user) return;
     setError(null);
     const trimmedEmail = email.trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
       setError('Enter a valid email address.');
       return;
     }
-    if (!password) {
-      setError('Enter your password.');
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters.');
       return;
     }
 
     setLoading(true);
     try {
-      const user = await loginWithEmail(trimmedEmail, password);
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem('sparai_pending_email', user.email || trimmedEmail);
-      }
-      if (!user.emailVerified) {
-        router.replace('/verify-email');
-        return;
-      }
-      router.replace('/dashboard');
-    } catch (loginError) {
-      setError(formatEmailAuthError(loginError));
+      await linkEmailPasswordToUser(user, trimmedEmail, password);
+      router.replace('/verify-email');
+    } catch (linkError) {
+      setError(formatEmailAuthError(linkError));
     } finally {
       setLoading(false);
     }
@@ -50,13 +58,14 @@ export default function LoginPage() {
           <span className="text-sm font-black italic uppercase tracking-tight">Spar<span className="text-primary">ai</span></span>
           <div className="mt-10 flex items-center gap-2 text-primary">
             <ShieldCheck className="h-5 w-5" />
-            <span className="text-[10px] font-black uppercase tracking-[0.2em]">Secure login</span>
+            <span className="text-[10px] font-black uppercase tracking-[0.2em]">Secure your account</span>
           </div>
           <h1 className="mt-4 text-4xl font-black italic uppercase leading-[0.95] tracking-tighter">
-            Welcome <span className="text-primary">back.</span>
+            Add an <span className="text-primary">email.</span>
           </h1>
           <p className="mt-4 text-sm font-semibold leading-relaxed text-white/55">
-            Sign in with the email linked to your fighter account.
+            Your phone number, streaks, subscription and history all stay exactly as they are — this just adds an
+            email + password login on top of your existing account.
           </p>
         </div>
 
@@ -68,7 +77,7 @@ export default function LoginPage() {
               autoComplete="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              onKeyDown={(event) => event.key === 'Enter' && handleLogin()}
+              onKeyDown={(event) => event.key === 'Enter' && handleLink()}
               placeholder="you@email.com"
               className="w-full border-b border-white/20 bg-transparent px-1 py-3 text-2xl font-bold tracking-tight outline-none focus:border-primary"
               autoFocus
@@ -80,11 +89,11 @@ export default function LoginPage() {
             <div className="flex items-center border-b border-white/20 focus-within:border-primary">
               <input
                 type={showPassword ? 'text' : 'password'}
-                autoComplete="current-password"
+                autoComplete="new-password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                onKeyDown={(event) => event.key === 'Enter' && handleLogin()}
-                placeholder="••••••••"
+                onKeyDown={(event) => event.key === 'Enter' && handleLink()}
+                placeholder="At least 6 characters"
                 className="w-full bg-transparent px-1 py-3 text-2xl font-bold tracking-tight outline-none"
               />
               <button type="button" onClick={() => setShowPassword((v) => !v)} className="px-1 text-white/40 hover:text-white">
@@ -93,26 +102,19 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <button onClick={() => router.push('/forgot-password')} className="self-end text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white">
-            Forgot password?
-          </button>
-
           {error && <p className="text-center text-[11px] font-bold leading-relaxed text-red-400">{error}</p>}
 
           <button
-            onClick={handleLogin}
+            onClick={handleLink}
             disabled={loading}
             className="btn-primary flex h-14 w-full items-center justify-center gap-2 disabled:opacity-50"
           >
-            {loading ? 'PLEASE WAIT...' : 'LOG IN'}
+            {loading ? 'LINKING...' : 'ADD EMAIL & SEND VERIFICATION'}
             <ArrowRight className="h-4 w-4" />
           </button>
 
-          <button onClick={() => router.push('/onboarding')} className="text-[10px] font-black uppercase tracking-widest text-primary hover:text-white">
-            New fighter? Sign up
-          </button>
-          <button onClick={() => router.push('/login/phone')} className="text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white">
-            Log in with phone instead
+          <button onClick={() => router.back()} className="text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white">
+            Not now
           </button>
         </section>
       </div>

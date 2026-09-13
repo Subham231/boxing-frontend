@@ -11,6 +11,7 @@ export interface OnboardingConstraints {
 export interface OnboardingData {
     ringName: string;
     phone: string;
+    email?: string;
     age: number;
     profession: string;
     height: number;

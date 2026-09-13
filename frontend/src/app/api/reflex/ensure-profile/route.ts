@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyFirebaseIdToken } from '@/lib/server/firebase-admin';
 import { supabaseAdmin } from '@/lib/server/supabase-admin';
 import { generateReferralCode } from '@/lib/server/referral-code';
+import { requireVerifiedFirebaseUid } from '@/lib/server/require-firebase';
 
 export const runtime = 'nodejs';
 
@@ -10,21 +10,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Server not configured.' }, { status: 500 });
   }
 
-  const authHeader = req.headers.get('authorization') || '';
-  const idToken = authHeader.replace('Bearer ', '');
-  if (!idToken) {
-    return NextResponse.json({ error: 'Missing auth token.' }, { status: 401 });
-  }
+  // requireVerifiedFirebaseUid, not the plain uid check — this is the one
+  // enforcement point that matters: an email/password account whose email
+  // isn't verified yet gets a 403 EMAIL_NOT_VERIFIED here and never gets a
+  // profile row (and therefore never passes the app's onboarding/dashboard
+  // gate in (app)/layout.tsx). Phone accounts are unaffected — see the
+  // helper's doc comment.
+  const authResult = await requireVerifiedFirebaseUid(req);
+  if ('error' in authResult) return authResult.error;
+  const { uid, token: decoded } = authResult;
 
-  let decoded;
-  try {
-    decoded = await verifyFirebaseIdToken(idToken);
-  } catch {
-    return NextResponse.json({ error: 'Invalid or expired token.' }, { status: 401 });
-  }
-
-  const uid = decoded.uid;
   const phone = decoded.phone_number || '';
+  // Only trust the email/verified flag straight off the decoded ID token —
+  // never anything the client body could claim.
+  const email = typeof decoded.email === 'string' ? decoded.email.toLowerCase() : '';
+  const emailVerified = decoded.email_verified === true;
+  const authMethod: 'phone' | 'email' = decoded.firebase?.sign_in_provider === 'password' ? 'email' : 'phone';
+
   const body = await req.json().catch(() => ({}));
   const referredBy = typeof body.referredBy === 'string' ? body.referredBy.trim().toUpperCase() : null;
 
@@ -32,9 +34,24 @@ export async function POST(req: NextRequest) {
 
   const { data: existing } = await supabaseAdmin.from('reflex_profiles').select('*').eq('uid', uid).maybeSingle();
   if (existing) {
-    // Invalidate any old device session by setting the new session_token
-    await supabaseAdmin.from('reflex_profiles').update({ current_session_token: sessionToken }).eq('uid', uid);
-    return NextResponse.json({ profile: { ...existing, current_session_token: sessionToken }, sessionToken, isNew: false });
+    // Keep the profile's email/verified state in sync (covers: a phone
+    // user linking an email later, or a re-login after finally verifying).
+    // auth_method flips to 'both' rather than overwriting 'phone' once an
+    // email has been linked, so we never lose the fact this uid can also
+    // log in by phone.
+    const updates: Record<string, unknown> = { current_session_token: sessionToken };
+    if (email && email !== existing.email) updates.email = email;
+    if (email && emailVerified !== existing.email_verified) updates.email_verified = emailVerified;
+    if (email && existing.auth_method === 'phone') updates.auth_method = 'both';
+    else if (!existing.auth_method) updates.auth_method = authMethod;
+
+    const { data: updated } = await supabaseAdmin
+      .from('reflex_profiles')
+      .update(updates)
+      .eq('uid', uid)
+      .select('*')
+      .single();
+    return NextResponse.json({ profile: updated || { ...existing, ...updates }, sessionToken, isNew: false });
   }
 
   // Guard against creating a second row for a phone number that's already
@@ -59,6 +76,23 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Same guard for email — belt-and-suspenders alongside Firebase's own
+  // "email already in use" check, in case a Supabase row ever exists
+  // without a matching Firebase account (e.g. partial past migration).
+  if (email) {
+    const { data: byEmail } = await supabaseAdmin
+      .from('reflex_profiles')
+      .select('*')
+      .ilike('email', email)
+      .maybeSingle();
+    if (byEmail && byEmail.uid !== uid) {
+      return NextResponse.json(
+        { error: 'This email is already linked to another account.', code: 'ACCOUNT_EMAIL_CONFLICT' },
+        { status: 409 },
+      );
+    }
+  }
+
   // Try a few times in case of a (rare) referral_code collision.
   for (let attempt = 0; attempt < 5; attempt++) {
     const code = generateReferralCode();
@@ -67,6 +101,9 @@ export async function POST(req: NextRequest) {
       .insert({
         uid,
         phone,
+        email: email || null,
+        email_verified: emailVerified,
+        auth_method: authMethod,
         referral_code: code,
         referred_by: referredBy,
         current_session_token: sessionToken,

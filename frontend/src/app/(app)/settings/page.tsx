@@ -22,7 +22,8 @@ import {
   ChevronRight,
   LogOut,
   FileText,
-  LockKeyhole
+  LockKeyhole,
+  Mail
 } from 'lucide-react';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
@@ -563,6 +564,18 @@ export default function SettingsPage() {
         </div>
 
         <div className="flex flex-col gap-2">
+          {!liveProfile?.email && (
+            <a href="/account/link-email" className="glass-card p-4 rounded-3xl border border-primary/20 bg-black/40 flex justify-between items-center hover:border-primary/40">
+              <div className="flex items-center gap-4">
+                <Mail className="w-4 h-4 text-primary" />
+                <div className="flex flex-col">
+                  <span className="text-xs font-black uppercase text-white">ADD & VERIFY EMAIL</span>
+                  <span className="text-[10px] font-semibold text-white/40">Recommended — secures your account with a password too</span>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-white/20" />
+            </a>
+          )}
           <a href="/legal/terms" className="glass-card p-4 rounded-3xl border border-white/5 bg-black/40 flex justify-between items-center hover:border-white/10">
             <div className="flex items-center gap-4">
               <FileText className="w-4 h-4 text-white/40" />

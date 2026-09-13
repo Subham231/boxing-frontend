@@ -24,7 +24,7 @@ import CommitmentLevel from './components/CommitmentLevel';
 import Commitment from './components/Commitment';
 import Identity from './components/Problem';
 import PromiseStep from './components/Promise';
-import OtpVerification from './components/OtpVerification';
+import EmailVerification from './components/EmailVerification';
 import AnalysisMeritsReveal from './components/AnalysisMeritsReveal';
 import SubscriptionOffer from './components/SubscriptionOffer';
 import FinalPromise from './components/FinalPromise';
@@ -79,7 +79,7 @@ const OnboardingFlow: React.FC = () => {
         <Commitment key="commitment" />,
         <Identity key="identity" />,
         <PromiseStep key="promise" />,
-        <OtpVerification key="otp" />,
+        <EmailVerification key="email-verify" />,
         <AnalysisMeritsReveal key="merits-reveal" />,
         <SubscriptionOffer key="subscription" />,
         <FinalPromise key="finalpromise" />,

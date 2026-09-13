@@ -6,7 +6,7 @@ import { AppShell } from '@/components/layout/AppShell';
 import { Loader2 } from 'lucide-react';
 import { useFirebaseUser } from '@/lib/useFirebaseUser';
 import { isExemptFromSubscriptionGate } from '@/lib/subscription';
-import { ensureUserProfile, saveProfileDetails } from '@/lib/firebase-auth';
+import { ensureUserProfile, saveProfileDetails, ProfileRequestError } from '@/lib/firebase-auth';
 import { cacheProfileLocally } from '@/lib/profile-client';
 
 export default function ProtectedLayout({
@@ -60,7 +60,17 @@ export default function ProtectedLayout({
             }).catch(() => {});
           }
         }
-      } catch {
+      } catch (err) {
+        // An email/password account that hasn't clicked the verification
+        // link yet gets 403 EMAIL_NOT_VERIFIED from ensure-profile (see
+        // requireVerifiedFirebaseUid) — send them to finish that step
+        // instead of falling through to the generic "any uid = onboarded"
+        // fallback below, which would otherwise let them straight into the
+        // app with no Supabase profile at all.
+        if (err instanceof ProfileRequestError && err.code === 'EMAIL_NOT_VERIFIED') {
+          if (!cancelled) window.location.replace('/verify-email');
+          return;
+        }
         // Any existing user with phone/uid is considered onboarded if network fails
         if (user.uid || user.phoneNumber || localStorage.getItem('boxing_onboarding_done') === 'true') {
           isOnboardingComplete = true;
