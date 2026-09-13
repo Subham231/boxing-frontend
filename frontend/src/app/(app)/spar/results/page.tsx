@@ -114,19 +114,19 @@ function SparResultsInner() {
                   'STRIKE ACCURACY',
                   result.yourResult?.hits != null && result.yourResult?.commandsResponded
                     ? `${Math.round((result.yourResult.hits / Math.max(1, result.yourResult.commandsResponded)) * 100)}%`
-                    : '85%',
+                    : '—',
                 ],
                 [
                   'AVG REACTION',
-                  result.yourResult?.avgReactionMs != null ? `${result.yourResult.avgReactionMs} ms` : '340 ms',
+                  result.yourResult?.avgReactionMs != null ? `${Math.round(result.yourResult.avgReactionMs)} ms` : '—',
                 ],
                 [
                   'PUNCHES LANDED',
-                  result.yourResult?.hits != null ? `${result.yourResult.hits} hits` : '12 hits',
+                  result.yourResult?.hits != null ? `${result.yourResult.hits} hits` : '—',
                 ],
                 [
                   'MISSES / EVASIONS',
-                  result.yourResult?.misses != null ? `${result.yourResult.misses}` : '2',
+                  result.yourResult?.misses != null ? `${result.yourResult.misses}` : '—',
                 ],
               ].map(([label, val]) => (
                 <div key={label} className="p-3 rounded-xl bg-white/5 border border-white/5">

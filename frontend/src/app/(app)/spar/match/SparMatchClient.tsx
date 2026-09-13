@@ -71,7 +71,17 @@ export default function SparMatchClient() {
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [micEnabled, setMicEnabled] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
+  const [elapsedMs, setElapsedMs] = useState(0);
   const voiceEnabledRef = useRef(true);
+
+  const totalCalls = hits + misses;
+  const accuracyPct = totalCalls ? Math.round((hits / totalCalls) * 100) : 0;
+  const formatClock = (ms: number) => {
+    const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
 
   const authHeaders = useCallback(async () => {
     const user = firebaseAuth.currentUser;
@@ -476,6 +486,7 @@ export default function SparMatchClient() {
     const seq = match.commandSequence || [];
     const interval = setInterval(() => {
       const elapsed = Date.now() - matchStartRef.current;
+      setElapsedMs(elapsed);
       for (let i = 0; i < seq.length; i++) {
         const cmd = seq[i];
         if (elapsed >= cmd.callAtMs && !spokenRef.current.has(i)) {
@@ -564,46 +575,98 @@ export default function SparMatchClient() {
     setMicEnabled(next);
   };
 
+  const commandMeta = [
+    { label: 'JAB', match: 'JAB', tag: 'Speed' },
+    { label: 'CROSS', match: 'CROSS', tag: 'Right hand' },
+    { label: 'SLIP R', match: 'SLIP RIGHT', tag: 'Defense' },
+    { label: 'L-HOOK', match: 'HOOK', tag: 'Power' },
+  ];
+  const activeIndex = commandMeta.findIndex((c) => currentCommand.toUpperCase().includes(c.match));
+  const commandWasHit = currentCommand.includes('✓');
+
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-[#050706] text-white font-sans">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,rgba(33,55,43,0.22),transparent_58%)]" />
       <div className="absolute inset-0 z-10 pointer-events-none opacity-20 bg-[linear-gradient(rgba(255,255,255,0.025)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.025)_1px,transparent_1px)] bg-[size:44px_44px]" />
 
       <main className="relative z-20 mx-auto h-full w-full max-w-[760px] flex flex-col px-3 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(0.8rem,env(safe-area-inset-bottom))]">
-        <header className="flex items-center justify-between shrink-0">
-          <button onClick={() => router.push('/spar')} aria-label="Back to spar lobby" className="w-10 h-10 rounded-full border border-white/15 bg-black/50 flex items-center justify-center text-white/70">
+        <header className="flex items-center justify-between shrink-0 gap-2">
+          <button onClick={() => router.push('/spar')} aria-label="Back to spar lobby" className="w-10 h-10 shrink-0 rounded-full border border-white/15 bg-black/50 flex items-center justify-center text-white/70 transition hover:bg-black/70">
             <ArrowLeft className="w-4 h-4" />
           </button>
-          <div className="flex items-center gap-2 rounded-full border border-primary/30 bg-black/65 px-3 py-1.5">
-            <span className="w-2 h-2 rounded-full bg-primary shadow-[0_0_8px_rgba(226,255,59,0.9)]" />
-            <span className="text-[10px] font-black tracking-widest text-primary uppercase">Live Spar</span>
-            <span className="text-[9px] font-mono text-white/70 uppercase">{phase === 'live' ? 'RD 2' : statusLine}</span>
+
+          <div className="flex flex-1 flex-col items-center gap-1 min-w-0">
+            <div className="flex items-center gap-2 rounded-full border border-primary/30 bg-black/65 px-3 py-1.5">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-primary shadow-[0_0_8px_rgba(226,255,59,0.9)]" />
+              </span>
+              <span className="text-[10px] font-black tracking-widest text-primary uppercase">Live Spar</span>
+              <span className="text-white/25">|</span>
+              <span className="text-[10px] font-mono font-bold text-white/85">
+                {phase === 'live' ? 'RD 1' : phase === 'submitting' ? 'Ending' : 'RD 1'} &bull; {formatClock(elapsedMs)}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 text-[8px] font-semibold uppercase tracking-widest text-white/45 truncate">
+              <span className={`h-1.5 w-1.5 rounded-full ${phase === 'live' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+              <span className="truncate">{phase === 'live' ? 'HD Live' : statusLine}</span>
+            </div>
           </div>
-          <button onClick={forfeit} aria-label="Surrender" className="w-10 h-10 rounded-full border border-red-500/50 bg-red-500/10 flex items-center justify-center text-red-400">
+
+          <button onClick={forfeit} aria-label="Surrender" className="w-10 h-10 shrink-0 rounded-full border border-red-500/50 bg-red-500/10 flex items-center justify-center text-red-400 transition hover:bg-red-500/20">
             <Flag className="w-4 h-4" />
           </button>
         </header>
 
-        <div className="mt-3 flex items-center justify-between shrink-0">
-          <div className="rounded-xl border border-white/10 bg-black/65 px-3 py-2 min-w-[76px]">
+        <div className="mt-3 grid grid-cols-2 gap-2 shrink-0">
+          <div className="rounded-xl border border-white/10 bg-black/65 px-3 py-2">
             <span className="block text-[7px] font-black uppercase tracking-widest text-white/45">Landed</span>
-            <span className="text-xl font-black text-primary leading-none">{hits}<span className="text-[10px] text-white/35"> / {hits + misses}</span></span>
+            <span className="text-xl font-black text-primary leading-none">
+              {hits}<span className="text-[10px] text-white/35"> / {totalCalls}</span>
+            </span>
+            <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-white/10">
+              <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${totalCalls ? Math.min(100, (hits / totalCalls) * 100) : 0}%` }} />
+            </div>
           </div>
-          <div className="text-right rounded-xl border border-white/10 bg-black/65 px-3 py-2 min-w-[76px]">
-            <span className="block text-[7px] font-black uppercase tracking-widest text-white/45">Opp. Pace</span>
-            <span className="text-xl font-black text-amber-400 leading-none">{hits + misses ? Math.round((hits / (hits + misses)) * 100) : 0}<span className="text-[9px] text-amber-400/60">% par</span></span>
+          <div className="rounded-xl border border-white/10 bg-black/65 px-3 py-2">
+            <span className="block text-[7px] font-black uppercase tracking-widest text-white/45">Accuracy</span>
+            <span className="text-xl font-black text-amber-400 leading-none">
+              {accuracyPct}<span className="text-[10px] text-amber-400/60">%</span>
+            </span>
+            <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-white/10">
+              <div className="h-full rounded-full bg-amber-400 transition-all duration-300" style={{ width: `${accuracyPct}%` }} />
+            </div>
           </div>
         </div>
 
         <section className="relative mt-2 flex-1 min-h-0 overflow-hidden rounded-[28px] border border-white/10 bg-black shadow-[0_0_45px_rgba(0,0,0,0.7)]">
           <video ref={remoteVideoRef} playsInline className="absolute inset-0 h-full w-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-b from-black/35 via-transparent to-black/65 pointer-events-none" />
-          <div className="absolute left-3 top-3 rounded-full border border-white/15 bg-black/60 px-2.5 py-1 text-[8px] font-black uppercase tracking-widest text-white/70">Opponent</div>
+
+          {phase === 'live' && !opponentLeft && (
+            <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+              <div className="h-24 w-24 rounded-full border border-primary/25" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="h-2 w-2 rounded-full bg-primary/80 shadow-[0_0_10px_rgba(226,255,59,0.7)]" />
+              </div>
+            </div>
+          )}
+
+          <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full border border-white/15 bg-black/60 px-2.5 py-1 text-[8px] font-black uppercase tracking-widest text-white/70">
+            <Swords className="h-2.5 w-2.5" /> Opponent
+          </div>
 
           <div className="absolute bottom-3 right-3 h-[31%] w-[31%] min-h-[120px] min-w-[96px] overflow-hidden rounded-2xl border-2 border-primary bg-black shadow-[0_0_22px_rgba(226,255,59,0.28)]">
             <video ref={localVideoRef} playsInline muted className="h-full w-full object-cover scale-x-[-1]" />
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-2 pt-5 text-[8px] font-black uppercase tracking-widest text-primary">You</div>
-            <div className={`absolute right-2 top-2 rounded-full p-1 ${micEnabled ? 'bg-black/65 text-white/70' : 'bg-red-500/80 text-white'}`}><span className="sr-only">Microphone {micEnabled ? 'on' : 'off'}</span>{micEnabled ? <Mic className="h-3 w-3" /> : <MicOff className="h-3 w-3" />}</div>
+            <div className="absolute inset-x-0 top-0 flex items-center gap-1 bg-gradient-to-b from-black/75 to-transparent px-2 pb-3 pt-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+              <span className="text-[7px] font-black uppercase tracking-widest text-primary">You</span>
+            </div>
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-1.5 pt-5 text-[7px] font-black uppercase tracking-widest text-white/60">HD Live</div>
+            <div className={`absolute right-1.5 top-1.5 rounded-full p-1 ${micEnabled ? 'bg-black/65 text-white/70' : 'bg-red-500/80 text-white'}`}>
+              <span className="sr-only">Microphone {micEnabled ? 'on' : 'off'}</span>
+              {micEnabled ? <Mic className="h-3 w-3" /> : <MicOff className="h-3 w-3" />}
+            </div>
           </div>
 
           {error && <div className="absolute left-3 right-3 top-14 rounded-xl border border-red-500/40 bg-black/80 p-3 text-[10px] font-semibold text-red-300">{error}</div>}
@@ -616,15 +679,37 @@ export default function SparMatchClient() {
             <span className="rounded border border-white/15 px-2 py-1 text-[7px] font-mono uppercase tracking-widest text-white/55">{phase === 'submitting' ? 'Uploading' : 'Live sequence'}</span>
           </div>
           <div className="grid grid-cols-4 gap-1.5">
-            {['JAB', 'CROSS', 'SLIP R', 'L-HOOK'].map((command, index) => <div key={command} className={`rounded-lg border px-1 py-2 text-center ${currentCommand.toUpperCase().includes(command.replace('SLIP R', 'SLIP RIGHT').replace('L-HOOK', 'HOOK')) ? 'border-primary bg-primary/15 text-primary' : 'border-white/10 bg-white/[0.03] text-white/45'}`}><span className="block text-[7px] font-mono">0{index + 1}</span><span className="text-[9px] font-black uppercase">{command}</span><span className="block text-[6px] uppercase">{index === 0 ? 'Hit' : index === 1 ? 'Right hand' : 'Defense'}</span></div>)}
+            {commandMeta.map((command, index) => {
+              const isActive = index === activeIndex;
+              const isHit = isActive && commandWasHit;
+              return (
+                <div
+                  key={command.label}
+                  className={`rounded-lg border px-1 py-2 text-center transition-colors ${
+                    isHit
+                      ? 'border-emerald-400/70 bg-emerald-400/10 text-emerald-300'
+                      : isActive
+                      ? 'border-amber-400 bg-amber-400/15 text-amber-300 shadow-[0_0_14px_rgba(245,158,11,0.25)]'
+                      : 'border-white/10 bg-white/[0.03] text-white/45'
+                  }`}
+                >
+                  <span className="block text-[7px] font-mono">0{index + 1}{isActive && !isHit ? ' · NOW' : ''}</span>
+                  <span className="text-[9px] font-black uppercase">{command.label}</span>
+                  <span className="block text-[6px] uppercase">{isHit ? '✓ Hit' : command.tag}</span>
+                </div>
+              );
+            })}
           </div>
-          <div className="mt-2 flex items-center gap-2 text-[8px] font-semibold text-white/60"><span className="text-primary">✦</span>{phase === 'setup' ? 'Connecting to your opponent…' : currentCommand ? `Execute ${currentCommand} now` : 'Stay light, keep your guard high.'}</div>
+          <div className="mt-2 flex items-center gap-2 text-[8px] font-semibold text-white/60">
+            <span className="text-primary">✦</span>
+            {phase === 'setup' ? 'Connecting to your opponent…' : currentCommand ? `Execute ${currentCommand.replace('✓', '').trim()} now` : 'Stay light, keep your guard high.'}
+          </div>
         </section>
 
         <footer className="mt-2 flex items-center gap-2 rounded-2xl border border-white/10 bg-[#171a19] p-2 shrink-0">
-          <button onClick={forfeit} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#ff3b3b] text-[11px] font-black uppercase tracking-widest text-white shadow-[0_4px_16px_rgba(255,59,59,0.25)]"><Flag className="h-4 w-4" /> Surrender</button>
-          <button onClick={toggleMicrophone} aria-label={micEnabled ? 'Mute microphone' : 'Unmute microphone'} className={`flex h-12 w-12 items-center justify-center rounded-xl border border-white/15 ${micEnabled ? 'bg-white/[0.06] text-white/75' : 'bg-red-500/20 text-red-300 border-red-500/40'}`}>{micEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}</button>
-          <button onClick={() => setShowSettings((open) => !open)} aria-label="Open spar settings" className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/15 bg-white/[0.06] text-white/75"><Settings className="h-4 w-4" /></button>
+          <button onClick={forfeit} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#ff3b3b] text-[11px] font-black uppercase tracking-widest text-white shadow-[0_4px_16px_rgba(255,59,59,0.25)] transition hover:brightness-110"><Flag className="h-4 w-4" /> Surrender</button>
+          <button onClick={toggleMicrophone} aria-label={micEnabled ? 'Mute microphone' : 'Unmute microphone'} className={`flex h-12 w-12 items-center justify-center rounded-xl border border-white/15 transition ${micEnabled ? 'bg-white/[0.06] text-white/75 hover:bg-white/[0.1]' : 'bg-red-500/20 text-red-300 border-red-500/40'}`}>{micEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}</button>
+          <button onClick={() => setShowSettings((open) => !open)} aria-label="Open spar settings" className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/15 bg-white/[0.06] text-white/75 transition hover:bg-white/[0.1]"><Settings className="h-4 w-4" /></button>
         </footer>
         {showSettings && <div className="absolute bottom-20 right-3 z-30 rounded-xl border border-white/15 bg-[#161a18] p-3 text-[9px] font-black uppercase tracking-widest text-white/70 shadow-2xl"><button onClick={() => { const next = !voiceEnabledRef.current; voiceEnabledRef.current = next; setVoiceEnabled(next); if (!next) window.speechSynthesis?.cancel(); }} className="flex items-center gap-2">{voiceEnabled ? <Volume2 className="h-3.5 w-3.5 text-primary" /> : <VolumeX className="h-3.5 w-3.5 text-red-400" />} Coach voice {voiceEnabled ? 'on' : 'off'}</button></div>}
       </main>

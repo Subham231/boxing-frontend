@@ -2,7 +2,12 @@ export type VoiceEvent =
   | 'JAB'
   | 'CROSS'
   | 'HOOK'
+  | 'LEAD HOOK'
+  | 'REAR HOOK'
+  | 'BODY HOOK'
   | 'UPPERCUT'
+  | 'LEAD UPPERCUT'
+  | 'REAR UPPERCUT'
   | 'SLIP LEFT'
   | 'SLIP RIGHT'
   | 'ROLL UNDER'
@@ -29,7 +34,12 @@ const PACKS: Record<string, Partial<Record<VoiceEvent, string>>> = {
     JAB: 'jab.mp3',
     CROSS: 'cross.mp3',
     HOOK: 'hook.mp3',
+    'LEAD HOOK': 'leadhook.mp3',
+    'REAR HOOK': 'rearhook.mp3',
+    'BODY HOOK': 'bodyhook.mp3',
     UPPERCUT: 'Uppercut.mp3',
+    'LEAD UPPERCUT': 'leaduppercut.mp3',
+    'REAR UPPERCUT': 'rearuppercut.mp3',
     'SLIP LEFT': 'slipleft.mp3',
     'SLIP RIGHT': 'slipright.mp3',
     'ROLL UNDER': 'rollunder.mp3',
