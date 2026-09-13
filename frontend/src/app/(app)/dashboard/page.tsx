@@ -6,20 +6,24 @@ import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Flame, 
-  Play, 
   Target, 
   Check, 
   ChevronRight,
   Award,
-  Bell
+  Bell,
+  Moon,
+  Dumbbell,
+  ArrowRight,
+  BadgeCheck,
 } from 'lucide-react';
 import { getDailyWorkout } from '@/lib/workout-data';
 import { StreakManager } from '@/lib/streak-manager';
 import { useRankState } from '@/lib/rank-client';
 import { useMyProfile } from '@/lib/profile-client';
+import { requiredStreakForNextRank } from '@/lib/rank-system';
 import { ProgressRing } from '@/components/ui/ProgressRing';
-import { RankBadge } from '@/components/ui/RankBadge';
 import { GlassCard } from '@/components/ui/GlassCard';
+import { RankBadge } from '@/components/ui/RankBadge';
 import { NeonButton } from '@/components/ui/NeonButton';
 import WelcomeIntro, { WELCOME_INTRO_KEY } from '@/components/tutorial/WelcomeIntro';
 import SpotlightTour, { TourStep } from '@/components/tutorial/SpotlightTour';
@@ -118,6 +122,8 @@ export default function DashboardPage() {
         dateNum,
         isToday,
         isFullyCompleted,
+        dayOffset: i,
+        dayOfWeek: date.getDay(),
       });
     }
     setCalendarDays(tempDays);
@@ -154,38 +160,42 @@ export default function DashboardPage() {
     return Math.round((completed / todayWorkout.drills.length) * 100);
   }, [todayWorkout.drills, completedIndices, visionComplete]);
 
-  // Find next uncompleted drill
-  const nextDrill = useMemo(() => {
-    return todayWorkout.drills.find((drill, idx) => drill.isVision ? !visionComplete : !completedIndices.includes(idx)) || null;
-  }, [todayWorkout.drills, completedIndices, visionComplete]);
-
-  // Next drill value display helper
-  const nextDrillValue = useMemo(() => {
-    if (!nextDrill) return null;
-    if (nextDrill.duration) {
-      const minutes = Math.round(nextDrill.duration / 60);
-      return minutes > 0 ? `${minutes}m` : `${nextDrill.duration}s`;
-    }
-    if (nextDrill.reps) {
-      const match = nextDrill.reps.match(/\d+/);
-      return match ? match[0] : 'GO';
-    }
-    return 'GO';
-  }, [nextDrill]);
-
   const telemetry = useMemo(() => {
-    if (typeof window === 'undefined') return { punches: 0, reaction: 0 };
+    if (typeof window === 'undefined') return { punches: 0, reaction: 0, punchesDeltaPct: null as number | null, reactionDeltaMs: null as number | null };
     try {
       const sessions = JSON.parse(localStorage.getItem('boxing_session_history') || '[]');
       const latest = Array.isArray(sessions) ? sessions[0] : null;
+      const recent = Array.isArray(sessions) ? sessions.slice(1, 8) : [];
+      const avgPunches = recent.length ? recent.reduce((sum: number, r: any) => sum + (r.punches || 0), 0) / recent.length : null;
+      const avgReflex = recent.length ? recent.reduce((sum: number, r: any) => sum + (r.avg_reflex_ms || 0), 0) / recent.length : null;
+      const punchesDeltaPct = latest && avgPunches ? Math.round(((latest.punches - avgPunches) / avgPunches) * 100) : null;
+      const reactionDeltaMs = latest && avgReflex ? Math.round(latest.avg_reflex_ms - avgReflex) : null;
       return {
         punches: latest?.punches ?? 0,
         reaction: latest?.avg_reflex_ms ?? 0,
+        punchesDeltaPct,
+        reactionDeltaMs,
       };
     } catch {
-      return { punches: 0, reaction: 0 };
+      return { punches: 0, reaction: 0, punchesDeltaPct: null as number | null, reactionDeltaMs: null as number | null };
     }
   }, [visionComplete]);
+
+  // Progress toward the next rank tier, shown as a bar under the streak badge.
+  const nextRankThreshold = requiredStreakForNextRank(rankLevel);
+  const rankProgressPct = Math.max(0, Math.min(100, (streak / nextRankThreshold) * 100));
+
+  // Mission stat block: duration/rounds already come from today's workout;
+  // intensity + estimated burn are derived from the trainee's experience level.
+  const rounds = todayWorkout.drills.length;
+  const durationMin = rounds * 15;
+  const RPE_BY_LEVEL: Record<string, number> = { Novice: 6.5, Amateur: 7.5, Pro: 8.5 };
+  const CAL_RATE_BY_LEVEL: Record<string, number> = { Novice: 10, Amateur: 12, Pro: 13.8 };
+  const rpe = RPE_BY_LEVEL[level] ?? 7.0;
+  const estBurn = Math.round(durationMin * (CAL_RATE_BY_LEVEL[level] ?? 11));
+
+  // Mission readiness ramps with rank tier and today's completion progress.
+  const readiness = Math.max(0, Math.min(99, Math.round(40 + rankLevel * 8 + completionPercent * 0.2)));
 
   // Dashboard Spotlight Tour Steps Configuration
   const tourSteps: TourStep[] = [
@@ -237,7 +247,10 @@ export default function DashboardPage() {
               <span className="absolute right-0 bottom-0 w-3 h-3 rounded-full bg-primary border-2 border-bg-dark" />
             </div>
             <div>
-              <h1 className="text-base font-black uppercase leading-none text-white tracking-wide">{ringName}</h1>
+              <h1 className="flex items-center gap-1 text-base font-black uppercase leading-none text-white tracking-wide">
+                {ringName}
+                <BadgeCheck className="w-3.5 h-3.5 text-primary shrink-0" />
+              </h1>
               <div className="flex items-center gap-1.5 mt-1 text-[9px] font-black uppercase tracking-widest text-primary">
                 <span>{level}</span><span className="text-white/25">•</span><span className="text-white/45">LVL {rankLevel}</span>
               </div>
@@ -249,12 +262,39 @@ export default function DashboardPage() {
           </Link>
         </header>
 
-        <div className="flex items-center justify-between rounded-2xl border border-primary/25 bg-primary/[0.04] px-4 py-3">
-          <div className="flex items-center gap-3">
-            <Flame className="w-6 h-6 text-primary fill-primary" />
-            <div><div className="text-sm font-black uppercase text-white">{streak}-day streak <span className="text-[8px] text-primary border border-primary/40 rounded px-1.5 py-0.5 ml-1">ACTIVE</span></div><div className="text-[9px] text-white/45 font-bold uppercase tracking-wider mt-1">Keep the chain alive</div></div>
+        <div className="rounded-2xl border border-primary/25 bg-primary/[0.04] px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="relative w-11 h-11 rounded-2xl border border-white/10 bg-black/40 flex items-center justify-center shrink-0">
+                <Flame className="w-5 h-5 text-primary" />
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-primary border-2 border-[#0A0A0A]" />
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5 text-sm font-black uppercase text-white">
+                  {streak}-Day Streak
+                  <span className="text-[7px] font-black text-primary border border-primary/40 rounded px-1.5 py-0.5">ACTIVE</span>
+                </div>
+                <div className="text-[9px] text-white/45 font-bold uppercase tracking-wider mt-1">Keep the chain alive</div>
+              </div>
+            </div>
+            <button onClick={() => router.push('/ranks')} className="shrink-0 pl-2">
+              <RankBadge score={streak} level={rankLevel} className="shadow-[0_0_20px_rgba(226,255,59,0.4)]" />
+            </button>
           </div>
-          <button onClick={() => router.push('/ranks')} className="text-right"><RankBadge score={streak} level={rankLevel} /></button>
+
+          {/* Progress toward next rank */}
+          <div className="mt-3">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[7px] font-black uppercase tracking-widest text-white/40">Next rank progress</span>
+              <span className="text-[7px] font-black uppercase text-primary">{streak}/{nextRankThreshold} days</span>
+            </div>
+            <div className="h-1.5 rounded-full bg-black border border-white/10 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-primary shadow-[0_0_10px_rgba(226,255,59,0.8)] transition-all duration-500"
+                style={{ width: `${rankProgressPct}%` }}
+              />
+            </div>
+          </div>
         </div>
 
         {/* Microcycle progress */}
@@ -264,93 +304,87 @@ export default function DashboardPage() {
           {calendarDays.map((day, idx) => (
             <div 
               key={idx}
-              className={`relative flex flex-col items-center justify-center py-2 rounded-xl border transition-all duration-300 ${
+              className={`relative flex flex-col items-center justify-center py-2.5 rounded-xl border transition-all duration-300 ${
                 day.isToday 
-                  ? 'bg-primary/10 border-primary shadow-[0_0_15px_rgba(226,255,59,0.25)] scale-105' 
-                  : 'bg-black/20 border-white/5 opacity-55'
+                  ? 'bg-primary/10 border-2 border-primary shadow-[0_0_18px_rgba(226,255,59,0.3)] scale-105' 
+                  : 'bg-black/20 border-white/5 opacity-60'
               }`}
             >
-              {day.isFullyCompleted && (
-                <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-green-500 text-black flex items-center justify-center text-[8px] font-black shadow-[0_0_5px_rgba(34,197,94,0.6)]">
-                  <Check className="w-2.5 h-2.5 stroke-[4]" />
-                </div>
-              )}
               <span className={`text-[9px] font-black uppercase mb-1 ${day.isToday ? 'text-white' : 'text-white/40'}`}>
                 {day.dayName}
               </span>
-              <span className={`text-sm font-black leading-none ${day.isToday ? 'text-primary' : 'text-white'}`}>
+              <span className={`text-sm font-black leading-none mb-1.5 ${day.isToday ? 'text-primary' : 'text-white'}`}>
                 {day.dateNum}
               </span>
+              {day.isFullyCompleted ? (
+                <div className="w-3.5 h-3.5 rounded-full bg-green-500 text-black flex items-center justify-center shadow-[0_0_5px_rgba(34,197,94,0.6)]">
+                  <Check className="w-2 h-2 stroke-[4]" />
+                </div>
+              ) : day.isToday ? (
+                <div className="w-2 h-2 rounded-full bg-primary shadow-[0_0_8px_rgba(226,255,59,0.9)] animate-pulse" />
+              ) : day.dayOffset > 0 && day.dayOfWeek === 0 ? (
+                <Moon className="w-3 h-3 text-white/25" />
+              ) : (
+                <div className="w-1.5 h-1.5 rounded-full bg-white/15" />
+              )}
             </div>
           ))}
         </div></section>
 
         {/* Today Challenge / Progress Card */}
-        <GlassCard 
-          className="challenge-card-ref bg-gradient-to-br from-[#273318] via-[#11150D] to-[#0B0D0B] border-primary/30 relative overflow-hidden p-3.5 rounded-[15px] shadow-[0_0_22px_rgba(226,255,59,0.07)]"
-          hoverGlow
-          onClick={() => router.push('/training')}
-        >
-          {/* Glove watermark background */}
-          <div className="absolute right-0 bottom-0 top-0 opacity-[0.03] text-primary pointer-events-none flex items-center overflow-hidden">
-            <Target className="w-56 h-56 transform translate-x-12 translate-y-6" />
-          </div>
+        <div className="relative">
+          <span className="pointer-events-none absolute -top-1 -left-1 w-3 h-3 border-t-2 border-l-2 border-white/25 z-20" />
+          <span className="pointer-events-none absolute -bottom-1 -right-1 w-3 h-3 border-b-2 border-r-2 border-white/25 z-20" />
+          <GlassCard 
+            className="challenge-card-ref bg-gradient-to-br from-[#273318] via-[#11150D] to-[#0B0D0B] border-primary/30 relative overflow-hidden p-3.5 rounded-[15px] shadow-[0_0_22px_rgba(226,255,59,0.07)]"
+            hoverGlow
+          >
+            {/* Glove watermark background */}
+            <div className="absolute right-0 bottom-0 top-0 opacity-[0.03] text-primary pointer-events-none flex items-center overflow-hidden">
+              <Target className="w-56 h-56 transform translate-x-12 translate-y-6" />
+            </div>
 
-          <div className="flex justify-between items-center relative z-10">
-            <div className="flex-1 pr-4">
-              <span className="inline-flex text-[7px] font-black tracking-widest text-primary uppercase border border-primary/50 bg-primary/10 rounded px-1.5 py-0.5 mb-1.5">
-                TARGET COMBAT MISSION
-              </span>
-              <h3 className="text-[19px] font-black uppercase tracking-tight italic leading-[0.95] text-white">
-                {todayWorkout.title}
-              </h3>
-              <p className="text-[10px] text-white/60 font-semibold mt-1.5 max-w-[210px] leading-snug">
-                {todayWorkout.drills.length > 0 
-                  ? `High-cadence combat drills with dynamic AI stance tracking.`
-                  : 'Recovery Protocol Active'}
-              </p>
+            <div className="flex justify-between items-center relative z-10">
+              <div className="flex-1 pr-4">
+                <span className="inline-flex items-center gap-1 text-[7px] font-black tracking-widest text-primary uppercase border border-primary/50 bg-primary/10 rounded px-1.5 py-0.5 mb-1.5">
+                  <span className="w-1 h-1 rounded-full bg-primary" />
+                  TARGET COMBAT MISSION
+                </span>
+                <h3 className="text-[19px] font-black uppercase tracking-tight italic leading-[0.95] text-white">
+                  {todayWorkout.title}
+                </h3>
+                <p className="text-[10px] text-white/60 font-semibold mt-1.5 max-w-[210px] leading-snug">
+                  {todayWorkout.drills.length > 0 
+                    ? `High-cadence combination drills with dynamic AI stance tracking.`
+                    : 'Recovery Protocol Active'}
+                </p>
+              </div>
+              
+              <ProgressRing progress={readiness} size={58} strokeWidth={5} label="Readiness" />
             </div>
-            
-            <ProgressRing progress={completionPercent} size={58} strokeWidth={5} />
-          </div>
-          <div className="grid grid-cols-2 gap-2 mt-3 relative z-10">
-            <div className="rounded-lg border border-white/10 bg-black/50 p-2"><span className="block text-[7px] font-black text-white/40 uppercase tracking-widest">Duration</span><strong className="text-xs text-white">{todayWorkout.drills.length * 15} MIN</strong></div>
-            <div className="rounded-lg border border-white/10 bg-black/50 p-2"><span className="block text-[7px] font-black text-white/40 uppercase tracking-widest">Rounds</span><strong className="text-xs text-white">{todayWorkout.drills.length} RDS</strong></div>
-          </div>
-        </GlassCard>
+            <div className="grid grid-cols-2 gap-2 mt-3 relative z-10">
+              <div className="rounded-lg border border-white/10 bg-black/50 p-2"><span className="block text-[7px] font-black text-white/40 uppercase tracking-widest">Duration</span><strong className="text-xs text-white">{durationMin} MIN</strong></div>
+              <div className="rounded-lg border border-white/10 bg-black/50 p-2"><span className="block text-[7px] font-black text-white/40 uppercase tracking-widest">Rounds</span><strong className="text-xs text-white">{rounds} RDS</strong></div>
+              <div className="rounded-lg border border-white/10 bg-black/50 p-2"><span className="block text-[7px] font-black text-white/40 uppercase tracking-widest">Intensity</span><strong className="text-xs text-white">RPE {rpe.toFixed(1)}</strong></div>
+              <div className="rounded-lg border border-white/10 bg-black/50 p-2"><span className="block text-[7px] font-black text-white/40 uppercase tracking-widest">Est. Burn</span><strong className="text-xs text-primary">{estBurn} KCAL</strong></div>
+            </div>
 
-        {/* HUD Goal item */}
-        <div className="glass-card flex items-center justify-between p-4 border border-white/5 bg-black/40 rounded-3xl">
-          <div className="flex items-center gap-3.5">
-            <div className="w-10 h-10 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/60">
-              <Target className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <div className="text-[10px] font-black text-white/40 tracking-wider uppercase mb-0.5">
-                NEXT OBJECTIVE
-              </div>
-              <div className="text-xs font-black uppercase text-white truncate max-w-[200px]">
-                {nextDrill ? nextDrill.name : 'ALL OBJECTIVES COMPLETE'}
-              </div>
-            </div>
-          </div>
-          
-          <div className="w-9 h-9 rounded-full border border-primary/40 text-[10px] font-black text-primary flex items-center justify-center shadow-[0_0_8px_rgba(226,255,59,0.15)] bg-primary/5">
-            {nextDrill ? nextDrillValue : <Check className="w-4 h-4 text-primary stroke-[3]" />}
-          </div>
+            {/* Start Session Button */}
+            <NeonButton 
+              className="start-btn-ref relative z-10 w-full h-11 mt-3 text-[11px] font-black tracking-widest text-black uppercase rounded-lg shadow-[0_0_18px_rgba(226,255,59,0.3)]"
+              onClick={() => router.push('/training')}
+            >
+              <Dumbbell className="w-4 h-4 text-black mr-1" /> START COMBAT WORKOUT <ArrowRight className="w-4 h-4 text-black ml-1.5" />
+            </NeonButton>
+          </GlassCard>
         </div>
-
-        {/* Start Session Button */}
-        <NeonButton 
-          className="start-btn-ref w-full h-11 text-[11px] font-black tracking-widest text-black uppercase rounded-lg shadow-[0_0_18px_rgba(226,255,59,0.3)]"
-          onClick={() => router.push('/training')}
-        >
-          START SESSION <Play className="w-4 h-4 fill-black text-black ml-1.5" />
-        </NeonButton>
 
         <section className="rounded-2xl border border-white/10 bg-black/35 p-4">
           <div className="flex items-center justify-between mb-3"><span className="text-[10px] font-black uppercase tracking-widest text-white">Streak milestone target</span><span className="text-[8px] font-black uppercase text-white/40">{Math.max(0, 7 - streak)} days remaining</span></div>
-          <button onClick={() => router.push('/ranks')} className="w-full flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] p-3 text-left hover:border-primary/40 transition-colors"><div className="flex items-center gap-3"><div className="w-9 h-9 rounded-lg bg-primary/10 border border-primary/30 flex items-center justify-center"><Award className="w-4 h-4 text-primary" /></div><div><strong className="block text-[10px] font-black text-white uppercase">7-Day Iron Fist Milestone</strong><span className="text-[8px] text-white/45">Unlocks advanced combat analytics</span></div></div><span className="text-sm font-black text-primary">{Math.min(7, streak)}/7</span></button>
+          <button onClick={() => router.push('/ranks')} className="w-full flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] p-3 text-left hover:border-primary/40 transition-colors"><div className="flex items-center gap-3"><div className="w-9 h-9 rounded-lg bg-primary/10 border border-primary/30 flex items-center justify-center"><Award className="w-4 h-4 text-primary" /></div><div><strong className="block text-[10px] font-black text-white uppercase">7-Day Iron Fist Milestone</strong><span className="text-[8px] text-white/45">Unlocks Heavy Bag Kinematic Analytics</span></div></div><span className="text-sm font-black text-primary">{Math.min(7, streak)}/7</span></button>
+          <div className="mt-3 h-1.5 rounded-full bg-black border border-white/10 overflow-hidden">
+            <div className="h-full rounded-full bg-primary shadow-[0_0_8px_rgba(226,255,59,0.8)] transition-all duration-500" style={{ width: `${Math.min(100, (streak / 7) * 100)}%` }} />
+          </div>
         </section>
 
         <section>
@@ -358,7 +392,7 @@ export default function DashboardPage() {
           <div className="grid grid-cols-2 gap-2.5">
             {[
               { href: '/vision', label: 'AI Vision', detail: 'Kinematic strike analysis & guard check', icon: AnalysisCamIcon, color: 'text-primary', border: 'border-primary/25', badge: visionComplete ? 'DONE' : 'READY' },
-              { href: '/spar', label: 'Live Sparring', detail: 'Interactive virtual opponent round tempo', icon: SwordsNeonIcon, color: 'text-orange-400', border: 'border-orange-400/25', badge: 'LIVE' },
+              { href: '/spar', label: 'Live Sparring', detail: 'Interactive virtual opponent round tempo', icon: SwordsNeonIcon, color: 'text-orange-400', border: 'border-orange-400/25', badge: 'SIM' },
               { href: '/reflex', label: 'Reflex Engine', detail: 'Rapid audio stimulus slip & counter drills', icon: ZapNeonIcon, color: 'text-cyan-400', border: 'border-cyan-400/25', badge: 'AUDIO' },
               { href: '/guru', label: 'Tactical Guru', detail: 'Heavyweight combination playbook library', icon: BrainNeonIcon, color: 'text-pink-400', border: 'border-pink-400/25', badge: 'VAULT' },
             ].map((module) => {
@@ -371,20 +405,31 @@ export default function DashboardPage() {
         <section>
           <div className="flex items-center justify-between mb-3"><h2 className="text-sm font-black uppercase text-white">Kinematic telemetry</h2><span className="text-[8px] font-black uppercase tracking-widest text-white/35">Live sensors</span></div>
           <div className="grid grid-cols-2 gap-2.5">
-            <div className="rounded-xl border border-white/10 bg-[#0D0D0E] p-4 shadow-[inset_0_0_18px_rgba(255,255,255,0.015)]"><span className="block text-[8px] font-black uppercase tracking-widest text-white/45">Punches logged</span><strong className="block mt-2 text-2xl font-black text-white">{telemetry.punches.toLocaleString()}</strong><span className="text-[8px] text-primary">From latest AI session</span></div>
-            <div className="rounded-xl border border-white/10 bg-[#0D0D0E] p-4 shadow-[inset_0_0_18px_rgba(255,255,255,0.015)]"><span className="block text-[8px] font-black uppercase tracking-widest text-white/45">Reaction latency</span><strong className="block mt-2 text-2xl font-black text-primary">{telemetry.reaction || '--'}<span className="text-xs text-white/40 ml-1">ms</span></strong><span className="text-[8px] text-white/40">Latest measured response</span></div>
+            <div className="rounded-xl border border-white/10 bg-[#0D0D0E] p-4 shadow-[inset_0_0_18px_rgba(255,255,255,0.015)]">
+              <span className="block text-[8px] font-black uppercase tracking-widest text-white/45">Punches logged</span>
+              <strong className="block mt-2 text-2xl font-black text-white">{telemetry.punches.toLocaleString()}</strong>
+              {telemetry.punchesDeltaPct !== null ? (
+                <div className="flex items-center gap-1.5 mt-1">
+                  <span className="text-[8px] font-black text-black bg-primary rounded px-1 py-0.5">{telemetry.punchesDeltaPct >= 0 ? '+' : ''}{telemetry.punchesDeltaPct}%</span>
+                  <span className="text-[8px] text-white/40">vs 7-day avg</span>
+                </div>
+              ) : (
+                <span className="text-[8px] text-primary">From latest AI session</span>
+              )}
+            </div>
+            <div className="rounded-xl border border-white/10 bg-[#0D0D0E] p-4 shadow-[inset_0_0_18px_rgba(255,255,255,0.015)]">
+              <span className="block text-[8px] font-black uppercase tracking-widest text-white/45">Reaction latency</span>
+              <strong className="block mt-2 text-2xl font-black text-primary">{telemetry.reaction || '--'}<span className="text-xs text-white/40 ml-1">ms</span></strong>
+              {telemetry.reactionDeltaMs !== null ? (
+                <div className="flex items-center gap-1.5 mt-1">
+                  <span className="text-[8px] font-black text-black bg-primary rounded px-1 py-0.5">{telemetry.reactionDeltaMs > 0 ? '+' : ''}{telemetry.reactionDeltaMs}ms</span>
+                  <span className="text-[8px] text-white/40">{telemetry.reactionDeltaMs <= 0 ? 'quicker response' : 'slower response'}</span>
+                </div>
+              ) : (
+                <span className="text-[8px] text-white/40">Latest measured response</span>
+              )}
+            </div>
           </div>
-        </section>
-
-        <section className="rounded-xl border border-white/10 bg-[#0D0D0E] p-4 shadow-[0_0_18px_rgba(226,255,59,0.04)]">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[9px] font-black uppercase tracking-widest text-white">Streak progression</span>
-            <span className="text-[9px] font-black text-primary">{Math.min(7, streak)} / 7 DAYS</span>
-          </div>
-          <div className="h-2 rounded-full bg-black border border-white/10 p-[2px] overflow-hidden">
-            <div className="h-full rounded-full bg-primary shadow-[0_0_10px_rgba(226,255,59,0.8)] transition-all duration-500" style={{ width: `${Math.min(100, (streak / 7) * 100)}%` }} />
-          </div>
-          <div className="flex justify-between mt-2 text-[7px] font-black uppercase tracking-wider text-white/35"><span>Current streak</span><span>{streak >= 7 ? 'Milestone unlocked' : `${Math.max(0, 7 - streak)} days remaining`}</span></div>
         </section>
 
       </div>

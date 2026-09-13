@@ -7,6 +7,7 @@ interface ProgressRingProps {
   strokeWidth?: number;
   className?: string;
   glow?: boolean;
+  label?: string; // optional small caption shown under the percentage
 }
 
 export function ProgressRing({
@@ -15,6 +16,7 @@ export function ProgressRing({
   strokeWidth = 8,
   className,
   glow = true,
+  label,
 }: ProgressRingProps) {
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
@@ -52,7 +54,8 @@ export function ProgressRing({
       </svg>
       {/* Center content slot */}
       <div className="absolute flex flex-col items-center justify-center text-center">
-        <span className="text-2xl font-black tracking-tight text-white">{Math.round(progress)}%</span>
+        <span className={twMerge("font-black tracking-tight text-white", label ? "text-sm leading-none" : "text-2xl")}>{Math.round(progress)}%</span>
+        {label && <span className="mt-0.5 text-[6px] font-black uppercase tracking-widest text-white/50">{label}</span>}
       </div>
     </div>
   );
