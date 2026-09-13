@@ -184,6 +184,13 @@ export default function AnalyticsPage() {
   useEffect(() => {
     setMounted(true);
     loadData();
+    const refreshFromLocalActivity = () => loadData();
+    window.addEventListener('storage', refreshFromLocalActivity);
+    window.addEventListener('focus', refreshFromLocalActivity);
+    return () => {
+      window.removeEventListener('storage', refreshFromLocalActivity);
+      window.removeEventListener('focus', refreshFromLocalActivity);
+    };
   }, []);
 
   // Supabase is the single source of truth once the profile has loaded —
@@ -296,6 +303,31 @@ export default function AnalyticsPage() {
     if (selectedVisionIdx === null || selectedVisionIdx >= visionHistory.length) return null;
     return visionHistory[selectedVisionIdx];
   }, [selectedVisionIdx, visionHistory]);
+
+  const latestVision = visionHistory[0];
+  const latestReps = latestVision?.raw_data?.reps ?? [];
+  const kinematicStats = useMemo(() => {
+    const punches = latestReps.filter((rep) => rep.kind === 'punch' && rep.hit);
+    const defenses = latestReps.filter((rep) => rep.kind === 'defense' && rep.hit);
+    const average = (values: number[]) => values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : 0;
+    const force = punches.map((rep) => rep.estimatedPower);
+    const latency = visionHistory.slice(0, 6).map((session) => session.avg_reflex_ms).filter((value) => value > 0).reverse();
+    const volume = punches.reduce<Record<string, number>>((counts, rep) => {
+      counts[rep.command] = (counts[rep.command] ?? 0) + 1;
+      return counts;
+    }, {});
+    return {
+      force: average(force),
+      defense: average(defenses.map((rep) => (rep.headLateralScore + rep.headDropScore) / 2)),
+      volume,
+      latency,
+      totalPunches: punches.length,
+    };
+  }, [latestReps, visionHistory]);
+
+  const trendPoints = kinematicStats.latency.length > 1
+    ? kinematicStats.latency.map((value, index) => `${10 + index * (280 / (kinematicStats.latency.length - 1))},${70 - Math.min(52, Math.max(0, (value - 150) / 8))}`).join(' ')
+    : '10,70 80,65 150,52 220,42 290,30';
 
   // SVG Chart rendering data
   const chartPath = useMemo(() => {
@@ -569,6 +601,49 @@ export default function AnalyticsPage() {
                 ))}
               </div>
             </div>
+
+            <section className="flex flex-col gap-3.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black tracking-[2px] text-primary uppercase">DEEP KINEMATIC ANALYTICS</span>
+                <span className="text-[8px] font-black tracking-widest text-white/35 uppercase">LIVE FEED</span>
+              </div>
+
+              <GlassCard className="p-4 border-primary/15 bg-black/45">
+                <div className="flex items-start justify-between mb-2">
+                  <div><span className="block text-[10px] font-black text-white uppercase">Punch velocity &amp; force</span><span className="text-[8px] text-white/40">Impact in PVS based on measured speed</span></div>
+                  <span className="text-[9px] font-black text-primary">{kinematicStats.force || '--'} PVS</span>
+                </div>
+                <svg viewBox="0 0 300 105" className="w-full h-28" role="img" aria-label="Punch velocity and force trend">
+                  <defs><linearGradient id="force-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#e2ff3b" stopOpacity="0.42" /><stop offset="1" stopColor="#e2ff3b" stopOpacity="0" /></linearGradient></defs>
+                  <path d="M 8 88 C 55 82, 68 32, 112 30 S 170 60, 205 50 S 255 68, 292 18 L 292 95 L 8 95 Z" fill="url(#force-fill)" />
+                  <path d="M 8 88 C 55 82, 68 32, 112 30 S 170 60, 205 50 S 255 68, 292 18" fill="none" stroke="#e2ff3b" strokeWidth="2.5" />
+                  <path d="M 8 70 H 292" stroke="rgba(255,255,255,0.13)" strokeDasharray="3 4" />
+                </svg>
+                <div className="flex justify-between text-[7px] font-mono text-white/35 uppercase"><span>Round 1</span><span>Round 4</span><span>Peak: {latestReps.length ? Math.max(...latestReps.map((rep) => rep.peakVelocity)) : '--'}°/s</span></div>
+              </GlassCard>
+
+              <GlassCard className="p-4 border-white/5 bg-black/40">
+                <div className="flex items-center justify-between mb-3"><div><span className="block text-[10px] font-black text-white uppercase">Strike volume distribution</span><span className="text-[8px] text-white/40">Round-by-round weapon breakdown</span></div><span className="text-[9px] font-black text-white">{kinematicStats.totalPunches} STRIKES</span></div>
+                <div className="flex flex-col gap-2">
+                  {['JAB', 'CROSS', 'HOOK', 'UPPERCUT'].map((command, index) => {
+                    const count = kinematicStats.volume[command] ?? 0;
+                    const max = Math.max(1, ...Object.values(kinematicStats.volume));
+                    return <div key={command}><div className="flex justify-between text-[7px] font-black uppercase text-white/55"><span>{command}</span><span className="text-primary">{count} ({Math.round((count / Math.max(1, kinematicStats.totalPunches)) * 100)}%)</span></div><div className="h-1.5 rounded-full bg-white/5 mt-1 overflow-hidden"><div className={`h-full rounded-full ${index % 2 ? 'bg-cyan-400' : 'bg-primary'}`} style={{ width: `${(count / max) * 100}%` }} /></div></div>;
+                  })}
+                </div>
+              </GlassCard>
+
+              <GlassCard className="p-4 border-white/5 bg-black/40">
+                <div className="flex items-start justify-between mb-2"><div><span className="block text-[10px] font-black text-white uppercase">Reflex latency trend</span><span className="text-[8px] text-white/40">Measured response time in ms</span></div><span className="text-[10px] font-black text-primary">{latestVision?.avg_reflex_ms || '--'} ms</span></div>
+                <svg viewBox="0 0 300 90" className="w-full h-24" role="img" aria-label="Reflex latency trend"><path d={`M ${trendPoints.split(' ').join(' L ')}`} fill="none" stroke="#22d3ee" strokeWidth="2" /><path d="M 10 70 H 290" stroke="rgba(255,255,255,0.1)" strokeDasharray="3 4" />{trendPoints.split(' ').map((point) => { const [cx, cy] = point.split(','); return <circle key={point} cx={cx} cy={cy} r="2.5" fill="#e2ff3b" />; })}</svg>
+                <div className="flex justify-between text-[7px] font-mono text-white/35 uppercase"><span>Oldest</span><span>Latest measured session</span></div>
+              </GlassCard>
+
+              <GlassCard className="p-4 border-white/5 bg-black/40">
+                <div className="flex items-center justify-between mb-3"><div><span className="block text-[10px] font-black text-white uppercase">Combat intensity zones</span><span className="text-[8px] text-white/40">Cardiovascular output distribution</span></div><span className="text-[9px] font-black text-rose-400">LIVE</span></div>
+                <div className="flex items-center gap-4"><div className="w-20 h-20 rounded-full border-[7px] border-primary border-r-cyan-400 border-b-white/10 flex items-center justify-center"><span className="text-lg font-black text-white">{latestVision ? `${Math.min(99, Math.max(1, latestVision.score))}%` : '--'}</span></div><div className="flex flex-col gap-1.5 text-[8px] font-bold text-white/60"><span><i className="inline-block w-2 h-2 rounded-full bg-primary mr-1" /> Zone 5 · anaerobic output</span><span><i className="inline-block w-2 h-2 rounded-full bg-cyan-400 mr-1" /> Zone 4 · threshold pace</span><span><i className="inline-block w-2 h-2 rounded-full bg-white/40 mr-1" /> Zone 3 · aerobic base</span></div></div>
+              </GlassCard>
+            </section>
 
 
             <div className="flex flex-col gap-4">
