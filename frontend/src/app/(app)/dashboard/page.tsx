@@ -365,7 +365,7 @@ export default function DashboardPage() {
               { href: '/guru', label: 'Tactical Guru', detail: 'Heavyweight combination playbook library', icon: Brain, color: 'text-pink-400', border: 'border-pink-400/25', badge: 'VAULT' },
             ].map((module) => {
               const Icon = module.icon;
-              return <Link key={module.href} href={module.href} className={`relative min-h-[132px] rounded-2xl border ${module.border} bg-black/40 p-3.5 flex flex-col justify-between no-underline hover:bg-white/[0.04] transition-colors`}><span className={`absolute top-3 right-3 rounded bg-white/10 px-1.5 py-1 text-[7px] font-black uppercase ${module.color}`}>{module.badge}</span><div className={`w-9 h-9 rounded-xl border border-white/10 bg-white/[0.04] flex items-center justify-center ${module.color}`}><Icon className="w-4 h-4" /></div><div><strong className="block text-xs font-black uppercase text-white">{module.label} <ChevronRight className="inline w-3 h-3 text-white/35" /></strong><span className="block mt-1 text-[9px] leading-snug text-white/45">{module.detail}</span></div></Link>;
+              return <Link key={module.href} href={module.href} className={`relative min-h-[132px] rounded-xl border ${module.border} bg-[#0D0D0E] p-3.5 flex flex-col justify-between no-underline shadow-[inset_0_0_18px_rgba(255,255,255,0.015)] hover:bg-white/[0.04] hover:shadow-[0_0_18px_rgba(226,255,59,0.08)] transition-all`}><span className={`absolute top-3 right-3 rounded bg-white/[0.08] px-1.5 py-1 text-[7px] font-black uppercase ${module.color}`}>{module.badge}</span><div className={`w-9 h-9 rounded-lg border border-white/10 bg-[#17191A] flex items-center justify-center ${module.color}`}><Icon className="w-4 h-4" /></div><div><strong className="block text-xs font-black uppercase text-white">{module.label} <ChevronRight className="inline w-3 h-3 text-white/35" /></strong><span className="block mt-1 text-[9px] leading-snug text-white/45">{module.detail}</span></div></Link>;
             })}
           </div>
         </section>
@@ -373,9 +373,20 @@ export default function DashboardPage() {
         <section>
           <div className="flex items-center justify-between mb-3"><h2 className="text-sm font-black uppercase text-white">Kinematic telemetry</h2><span className="text-[8px] font-black uppercase tracking-widest text-white/35">Live sensors</span></div>
           <div className="grid grid-cols-2 gap-2.5">
-            <div className="rounded-2xl border border-white/10 bg-black/40 p-4"><span className="block text-[8px] font-black uppercase tracking-widest text-white/45">Punches logged</span><strong className="block mt-2 text-2xl font-black text-white">{telemetry.punches.toLocaleString()}</strong><span className="text-[8px] text-primary">From latest AI session</span></div>
-            <div className="rounded-2xl border border-white/10 bg-black/40 p-4"><span className="block text-[8px] font-black uppercase tracking-widest text-white/45">Reaction latency</span><strong className="block mt-2 text-2xl font-black text-primary">{telemetry.reaction || '--'}<span className="text-xs text-white/40 ml-1">ms</span></strong><span className="text-[8px] text-white/40">Latest measured response</span></div>
+            <div className="rounded-xl border border-white/10 bg-[#0D0D0E] p-4 shadow-[inset_0_0_18px_rgba(255,255,255,0.015)]"><span className="block text-[8px] font-black uppercase tracking-widest text-white/45">Punches logged</span><strong className="block mt-2 text-2xl font-black text-white">{telemetry.punches.toLocaleString()}</strong><span className="text-[8px] text-primary">From latest AI session</span></div>
+            <div className="rounded-xl border border-white/10 bg-[#0D0D0E] p-4 shadow-[inset_0_0_18px_rgba(255,255,255,0.015)]"><span className="block text-[8px] font-black uppercase tracking-widest text-white/45">Reaction latency</span><strong className="block mt-2 text-2xl font-black text-primary">{telemetry.reaction || '--'}<span className="text-xs text-white/40 ml-1">ms</span></strong><span className="text-[8px] text-white/40">Latest measured response</span></div>
           </div>
+        </section>
+
+        <section className="rounded-xl border border-white/10 bg-[#0D0D0E] p-4 shadow-[0_0_18px_rgba(226,255,59,0.04)]">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[9px] font-black uppercase tracking-widest text-white">Streak progression</span>
+            <span className="text-[9px] font-black text-primary">{Math.min(7, streak)} / 7 DAYS</span>
+          </div>
+          <div className="h-2 rounded-full bg-black border border-white/10 p-[2px] overflow-hidden">
+            <div className="h-full rounded-full bg-primary shadow-[0_0_10px_rgba(226,255,59,0.8)] transition-all duration-500" style={{ width: `${Math.min(100, (streak / 7) * 100)}%` }} />
+          </div>
+          <div className="flex justify-between mt-2 text-[7px] font-black uppercase tracking-wider text-white/35"><span>Current streak</span><span>{streak >= 7 ? 'Milestone unlocked' : `${Math.max(0, 7 - streak)} days remaining`}</span></div>
         </section>
 
       </div>
