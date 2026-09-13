@@ -246,10 +246,28 @@ export default function SparMatchClient() {
     let cancelled = false;
     let connected = false;
 
-    const friendlyMediaError = (e: any): string => {
+    // Distinguishes "this machine genuinely has no camera/mic hardware"
+    // from "hardware exists but the browser/OS is blocking or hiding it" —
+    // enumerateDevices() lists devices even before permission is granted
+    // (labels are blank, but the device entries themselves still show up).
+    const hasAnyMediaHardware = async (): Promise<boolean> => {
+      try {
+        if (!navigator.mediaDevices?.enumerateDevices) return true; // can't check, assume yes
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        return devices.some((d) => d.kind === 'videoinput' || d.kind === 'audioinput');
+      } catch {
+        return true; // enumeration itself failing shouldn't change the error message
+      }
+    };
+
+    const friendlyMediaError = async (e: any): Promise<string> => {
       const name = e?.name || '';
       if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
-        return 'No camera or microphone was found on this device. Connect one and try again.';
+        const hasHardware = await hasAnyMediaHardware();
+        if (!hasHardware) {
+          return 'No camera or microphone was found on this device. Connect one and try again.';
+        }
+        return 'A camera/microphone is present but not accessible — check your OS privacy settings (Camera & Microphone access for this browser) and that no security software is blocking it, then try again.';
       }
       if (name === 'NotAllowedError' || name === 'PermissionDeniedError' || name === 'SecurityError') {
         return 'Camera and microphone access was denied. Allow permissions in your browser settings and try again.';
@@ -422,7 +440,8 @@ export default function SparMatchClient() {
         speak('Fight');
       } catch (e: any) {
         window.clearTimeout(overallTimeout);
-        failAndExit(friendlyMediaError(e), 'Connection failed');
+        const message = await friendlyMediaError(e);
+        failAndExit(message, 'Connection failed');
       }
     };
 
