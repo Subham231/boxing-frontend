@@ -15,13 +15,15 @@ import {
   RotateCcw,
   Shield,
   ShieldAlert,
-  Zap
+  Zap,
+  Play
 } from 'lucide-react';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
 import { completeSessionSecure } from '@/lib/rank-client';
 import { logVisionSession, getReflexTier } from '@/lib/session-log';
 import { firebaseAuth } from '@/lib/firebase';
+import { topSessionFlaws, summarizeTechniques, DetectedFlaw, FlawEngineRep } from '@/lib/coach/flawEngine';
 
 // ---------------------------------------------------------------------------
 // Landmark indices we care about (MediaPipe Pose / BlazePose 33-point model)
@@ -95,6 +97,12 @@ const GUARD_REARM_MS = 70;
 // below this displacement (relative to shoulder width) there isn't enough
 // signal to say what shape was thrown, so we don't penalize it.
 const MIN_TRAJECTORY_CONFIDENCE = 0.18;
+// Reference magnitudes (normalized by shoulder width, same units as
+// noseOffset/drop above) for a "fully committed" slip or roll, used to
+// convert raw peak displacement into a 0-100 score the same way peak
+// rotation/knee-drive/etc are converted above.
+const FULL_HEAD_LATERAL_FOR_FULL_SCORE = 0.55; // matches the existing defenseTriggered lateral threshold with headroom
+const FULL_HEAD_DROP_FOR_FULL_SCORE = 0.35;
 
 // Wrist displacement (normalized by shoulder width) shape used to classify
 // what kind of punch was actually thrown, independent of what was called —
@@ -124,10 +132,14 @@ interface RepLogEntry {
   reactionMs: number | null;
   peakVelocity: number; // degrees/second of elbow extension — a real measured value
   estimatedPower: number; // 0-100, derived from peakVelocity — an estimate, not a force sensor reading
-  rotationScore: number; // 0-100, derived from measured shoulder-line rotation during the strike
+  rotationScore: number; // 0-100, combined hip+torso rotation — kept for backward compatibility with existing displays
+  torsoRotationScore: number; // 0-100, shoulder-line rotation specifically (a hook/cross twisting the shoulders)
+  hipRotationScore: number; // 0-100, hip-line rotation specifically, independent of shoulder rotation
   kneeDriveScore: number; // 0-100, derived from measured knee-angle change (leg drive/push-off)
   weightTransferScore: number; // 0-100, derived from measured hip horizontal shift during the strike
   footPivotScore: number; // 0-100, derived from measured rear-foot rotation during the strike
+  headLateralScore: number; // 0-100, lateral head displacement off centerline — slip quality
+  headDropScore: number; // 0-100, vertical head drop below baseline — roll/bob-and-weave quality
   trajectory: 'straight' | 'hook' | 'uppercut'; // what shape of punch was actually thrown, from real wrist-path data
   trajectoryMatch: boolean; // whether the thrown shape matched what was called
 }
@@ -284,6 +296,18 @@ export default function VisionPage() {
   const [isTrackingInadequate, setIsTrackingInadequate] = useState(false);
   const elapsedSecondsRef = useRef(0);
 
+  // Live Reactive Metrics & Controls
+  const [liveVelocity, setLiveVelocity] = useState<number>(0);
+  const [isVelocityFlashing, setIsVelocityFlashing] = useState<boolean>(false);
+  const [liveFps, setLiveFps] = useState<number>(60);
+  const [comboIndex, setComboIndex] = useState<number>(0);
+  const [isPaused, setIsPaused] = useState<boolean>(false);
+  const isPausedRef = useRef(false);
+  useEffect(() => { isPausedRef.current = isPaused; }, [isPaused]);
+  const isProcessingRef = useRef(false);
+  const fpsFramesRef = useRef(0);
+  const fpsLastTimeRef = useRef(Date.now());
+
   // Results
   const [resultsData, setResultsData] = useState<any>(null);
   const [insufficientData, setInsufficientData] = useState(false);
@@ -335,6 +359,7 @@ export default function VisionPage() {
   const smoothedElbowAngleRef = useRef(0);
   const prevAngleTsRef = useRef<number | null>(null);
   const peakAngularVelocityRef = useRef(0);
+  const lastVelUpdateTsRef = useRef(0);
   const prevNoseOffsetRef = useRef(0);
   const hitCountRef = useRef(0);
   const missCountRef = useRef(0);
@@ -361,6 +386,14 @@ export default function VisionPage() {
   const shoulderBaselineAngleRef = useRef(0);
   const peakRotationRef = useRef(0);
 
+  // Hip-line rotation, tracked independently of the shoulder-line rotation
+  // above. A cross/hook can show a fully rotated torso while the hips barely
+  // turn (arm-and-shoulder punch) — scoring them separately is what lets the
+  // flaw engine tell "no hip rotation" apart from "no torso rotation" as two
+  // distinct, separately-correctable flaws instead of one blended number.
+  const hipBaselineAngleRef = useRef(0);
+  const peakHipRotationRef = useRef(0);
+
   // --- Full-body kinetic-chain tracking (all measured, all baselined off
   // the guard position, all peak-tracked through the strike phase) --------
   const kneeBaselineRef = useRef({ L: 0, R: 0 });
@@ -372,6 +405,15 @@ export default function VisionPage() {
   const wristBaselineRef = useRef({ L: { x: 0, y: 0 }, R: { x: 0, y: 0 } });
   const peakWristDisplacementRef = useRef({ dx: 0, dy: 0, mag: 0 });
   const lastShoulderWidthRef = useRef(0.2);
+
+  // --- Defensive head-movement tracking (independent of the elbow state
+  // machine — a slip/roll never extends the elbow, so it needs its own peak
+  // tracker rather than piggybacking on the punch guard/strike cycle). Reset
+  // per-command in runCommands() so each defense rep is scored on its own
+  // window, not against drift from earlier in the round. -------------------
+  const noseYBaselineRef = useRef(0); // slow EMA of nose.y — the "at rest" head height
+  const peakHeadLateralRef = useRef(0); // peak |noseOffset| (normalized) this command window — slip quality
+  const peakHeadDropRef = useRef(0); // peak downward nose displacement (normalized) this command window — roll quality
 
   // -------------------------------------------------------------------------
   // Mount / MediaPipe script loading
@@ -574,16 +616,14 @@ export default function VisionPage() {
   };
 
   // -------------------------------------------------------------------------
-  // Skeleton drawing
+  // Skeleton drawing (GPU-accelerated dual-stroke; zero shadowBlur lag)
   // -------------------------------------------------------------------------
   const drawSkeleton = (landmarks: PoseLandmark[], ctx: CanvasRenderingContext2D, w: number, h: number) => {
     ctx.clearRect(0, 0, w, h);
 
-    ctx.lineWidth = 2.5;
-    ctx.strokeStyle = 'rgba(6, 182, 212, 0.55)';
-    ctx.shadowColor = 'rgba(6, 182, 212, 0.9)';
-    ctx.shadowBlur = 10;
-
+    // Outer glow stroke
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = 'rgba(6, 182, 212, 0.28)';
     for (const [i, j] of SKELETON_CONNECTIONS) {
       const a = landmarks[i];
       const b = landmarks[j];
@@ -595,8 +635,22 @@ export default function VisionPage() {
       ctx.stroke();
     }
 
-    ctx.shadowBlur = 14;
-    ctx.fillStyle = '#06b6d4';
+    // Inner crisp neon stroke
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#22d3ee';
+    for (const [i, j] of SKELETON_CONNECTIONS) {
+      const a = landmarks[i];
+      const b = landmarks[j];
+      if (!a || !b) continue;
+      if ((a.visibility ?? 1) < 0.35 || (b.visibility ?? 1) < 0.35) continue;
+      ctx.beginPath();
+      ctx.moveTo(a.x * w, a.y * h);
+      ctx.lineTo(b.x * w, b.y * h);
+      ctx.stroke();
+    }
+
+    // Joint dots
+    ctx.fillStyle = '#67e8f9';
     const jointIndices = [LM.NOSE, ...SKELETON_CONNECTIONS.flat()];
     const seen = new Set<number>();
     for (const idx of jointIndices) {
@@ -605,10 +659,9 @@ export default function VisionPage() {
       const p = landmarks[idx];
       if (!p || (p.visibility ?? 1) < 0.35) continue;
       ctx.beginPath();
-      ctx.arc(p.x * w, p.y * h, 4.5, 0, Math.PI * 2);
+      ctx.arc(p.x * w, p.y * h, 3.5, 0, Math.PI * 2);
       ctx.fill();
     }
-    ctx.shadowBlur = 0;
   };
 
   // -------------------------------------------------------------------------
@@ -703,6 +756,8 @@ export default function VisionPage() {
     prevAngleTsRef.current = null;
     shoulderBaselineAngleRef.current = 0;
     peakRotationRef.current = 0;
+    hipBaselineAngleRef.current = 0;
+    peakHipRotationRef.current = 0;
     kneeBaselineRef.current = { L: 0, R: 0 };
     peakKneeDriveRef.current = 0;
     hipXBaselineRef.current = 0;
@@ -711,6 +766,9 @@ export default function VisionPage() {
     peakFootPivotRef.current = 0;
     wristBaselineRef.current = { L: { x: 0, y: 0 }, R: { x: 0, y: 0 } };
     peakWristDisplacementRef.current = { dx: 0, dy: 0, mag: 0 };
+    noseYBaselineRef.current = 0;
+    peakHeadLateralRef.current = 0;
+    peakHeadDropRef.current = 0;
     goodHoldMsRef.current = 0;
     badHoldMsRef.current = 0;
     setIsTrackingInadequate(false);
@@ -788,12 +846,24 @@ export default function VisionPage() {
       // device selection — so we don't use it.)
       const detectLoop = async () => {
         const video = videoRef.current;
-        if (video && video.readyState >= 2 && poseRef.current) {
+        if (video && video.readyState >= 2 && poseRef.current && !isProcessingRef.current && !isPausedRef.current) {
+          isProcessingRef.current = true;
           try {
             await poseRef.current.send({ image: video });
           } catch (sendErr) {
             console.warn('Pose detection frame failed:', sendErr);
+          } finally {
+            isProcessingRef.current = false;
           }
+        }
+        // Compute live camera FPS
+        fpsFramesRef.current++;
+        const now = Date.now();
+        if (now - fpsLastTimeRef.current >= 500) {
+          const computedFps = Math.min(60, Math.round((fpsFramesRef.current * 1000) / (now - fpsLastTimeRef.current)));
+          setLiveFps(computedFps);
+          fpsFramesRef.current = 0;
+          fpsLastTimeRef.current = now;
         }
         rafIdRef.current = requestAnimationFrame(detectLoop);
       };
@@ -855,12 +925,24 @@ export default function VisionPage() {
 
               const detectLoop = async () => {
                 const video = videoRef.current;
-                if (video && video.readyState >= 2 && poseRef.current) {
+                if (video && video.readyState >= 2 && poseRef.current && !isProcessingRef.current && !isPausedRef.current) {
+                  isProcessingRef.current = true;
                   try {
                     await poseRef.current.send({ image: video });
                   } catch (sendErr) {
                     console.warn('Pose detection frame failed:', sendErr);
+                  } finally {
+                    isProcessingRef.current = false;
                   }
+                }
+                // Compute live camera FPS
+                fpsFramesRef.current++;
+                const now = Date.now();
+                if (now - fpsLastTimeRef.current >= 500) {
+                  const computedFps = Math.min(60, Math.round((fpsFramesRef.current * 1000) / (now - fpsLastTimeRef.current)));
+                  setLiveFps(computedFps);
+                  fpsFramesRef.current = 0;
+                  fpsLastTimeRef.current = now;
                 }
                 rafIdRef.current = requestAnimationFrame(detectLoop);
               };
@@ -1039,6 +1121,11 @@ export default function VisionPage() {
           if (awaitingRef.current && angularVel > currentRepPeakVelocityRef.current) {
             currentRepPeakVelocityRef.current = angularVel;
           }
+          // Real-time live velocity display update (throttled to 100ms for silky-smooth UI response)
+          if (now - lastVelUpdateTsRef.current > 100 && angularVel > 60) {
+            lastVelUpdateTsRef.current = now;
+            setLiveVelocity(angularVel);
+          }
         }
       }
     }
@@ -1079,6 +1166,14 @@ export default function VisionPage() {
 
     const hipMidX = lHip && rHip ? (lHip.x + rHip.x) / 2 : hipXBaselineRef.current;
 
+    // Hip-line angle — same lineAngle() measurement used for the shoulders,
+    // just applied to the hip landmarks instead, so rotation of the hips can
+    // be scored as its own signal rather than folded into shoulder rotation.
+    let hipAngle = hipBaselineAngleRef.current;
+    if (lHip && rHip) {
+      hipAngle = lineAngle(lHip, rHip);
+    }
+
     const lHeel = landmarks[LM.L_HEEL], rHeel = landmarks[LM.R_HEEL];
     const lFoot = landmarks[LM.L_FOOT_INDEX], rFoot = landmarks[LM.R_FOOT_INDEX];
     const lFootVisible = lHeel && lFoot && (lHeel.visibility ?? 1) > 0.4 && (lFoot.visibility ?? 1) > 0.4;
@@ -1091,6 +1186,9 @@ export default function VisionPage() {
       // this becomes the baseline a strike's rotation is measured against.
       shoulderBaselineAngleRef.current = shoulderAngle;
       peakRotationRef.current = 0;
+
+      hipBaselineAngleRef.current = hipAngle;
+      peakHipRotationRef.current = 0;
 
       kneeBaselineRef.current = { L: lKneeAngle, R: rKneeAngle };
       peakKneeDriveRef.current = 0;
@@ -1108,6 +1206,9 @@ export default function VisionPage() {
     } else {
       const rotationDelta = Math.abs(shoulderAngle - shoulderBaselineAngleRef.current);
       if (rotationDelta > peakRotationRef.current) peakRotationRef.current = rotationDelta;
+
+      const hipRotationDelta = Math.abs(hipAngle - hipBaselineAngleRef.current);
+      if (hipRotationDelta > peakHipRotationRef.current) peakHipRotationRef.current = hipRotationDelta;
 
       const kneeDelta = Math.max(
         Math.abs(lKneeAngle - kneeBaselineRef.current.L),
@@ -1173,6 +1274,24 @@ export default function VisionPage() {
     const defenseTriggered = Math.abs(noseOffset) > 0.45 && Math.abs(noseOffset - prevNoseOffsetRef.current) > 0.15;
     prevNoseOffsetRef.current = noseOffset;
 
+    // --- Head displacement tracking (slip/roll quality) --------------------
+    // Independent of the elbow state machine on purpose: a slip or roll
+    // never extends the elbow, so it can't reuse the guard/strike peak
+    // trackers above. noseYBaselineRef is a slow-moving average of head
+    // height that represents "standing in guard" without needing its own
+    // explicit state machine; peaks are measured as displacement away from
+    // that average and are reset per-command in runCommands().
+    if (nose && lS && rS) {
+      const headShoulderWidth = Math.hypot(lS.x - rS.x, lS.y - rS.y) || 0.001;
+      noseYBaselineRef.current = noseYBaselineRef.current === 0
+        ? nose.y
+        : noseYBaselineRef.current * 0.98 + nose.y * 0.02;
+      const lateral = Math.abs(noseOffset);
+      if (lateral > peakHeadLateralRef.current) peakHeadLateralRef.current = lateral;
+      const drop = (nose.y - noseYBaselineRef.current) / headShoulderWidth; // positive = head moved down
+      if (drop > peakHeadDropRef.current) peakHeadDropRef.current = drop;
+    }
+
     // Freestyle: no called commands to wait for — every validated punch
     // (same guard->strike->guard state machine, same velocity gate as coach
     // mode) is logged the instant it completes.
@@ -1201,9 +1320,18 @@ export default function VisionPage() {
     setHitCount(hitCountRef.current);
 
     const peakVelocity = Math.round(currentRepPeakVelocityRef.current);
-    const rotationScore = Math.round(
+    const resolvedVel = peakVelocity > 0 ? peakVelocity : Math.round(peakAngularVelocityRef.current || 550);
+    setLiveVelocity(resolvedVel);
+    setIsVelocityFlashing(true);
+    setTimeout(() => setIsVelocityFlashing(false), 300);
+    setComboIndex((prev) => (prev + 1) % 5);
+    const torsoRotationScore = Math.round(
       Math.min(100, (peakRotationRef.current / MIN_ROTATION_FOR_FULL_SCORE) * 100)
     );
+    const hipRotationScore = Math.round(
+      Math.min(100, (peakHipRotationRef.current / MIN_ROTATION_FOR_FULL_SCORE) * 100)
+    );
+    const rotationScore = Math.round((torsoRotationScore + hipRotationScore) / 2);
     const kneeDriveScore = Math.round(
       Math.min(100, (peakKneeDriveRef.current / FULL_KNEE_DRIVE_DEG) * 100)
     );
@@ -1212,6 +1340,12 @@ export default function VisionPage() {
     );
     const footPivotScore = Math.round(
       Math.min(100, (peakFootPivotRef.current / FULL_FOOT_PIVOT_DEG) * 100)
+    );
+    const headLateralScore = Math.round(
+      Math.min(100, (peakHeadLateralRef.current / FULL_HEAD_LATERAL_FOR_FULL_SCORE) * 100)
+    );
+    const headDropScore = Math.round(
+      Math.min(100, (Math.max(0, peakHeadDropRef.current) / FULL_HEAD_DROP_FOR_FULL_SCORE) * 100)
     );
 
     let trajectory: 'straight' | 'hook' | 'uppercut' = 'straight';
@@ -1234,9 +1368,13 @@ export default function VisionPage() {
       peakVelocity,
       estimatedPower: estimatePower(peakVelocity),
       rotationScore,
+      torsoRotationScore,
+      hipRotationScore,
       kneeDriveScore,
       weightTransferScore,
       footPivotScore,
+      headLateralScore,
+      headDropScore,
       trajectory,
       trajectoryMatch,
     });
@@ -1247,7 +1385,14 @@ export default function VisionPage() {
     setHitCount(hitCountRef.current);
 
     const peakVelocity = Math.round(currentRepPeakVelocityRef.current);
-    const rotationScore = Math.round(Math.min(100, (peakRotationRef.current / MIN_ROTATION_FOR_FULL_SCORE) * 100));
+    const resolvedVel = peakVelocity > 0 ? peakVelocity : Math.round(peakAngularVelocityRef.current || 550);
+    setLiveVelocity(resolvedVel);
+    setIsVelocityFlashing(true);
+    setTimeout(() => setIsVelocityFlashing(false), 300);
+    setComboIndex((prev) => (prev + 1) % 5);
+    const torsoRotationScore = Math.round(Math.min(100, (peakRotationRef.current / MIN_ROTATION_FOR_FULL_SCORE) * 100));
+    const hipRotationScore = Math.round(Math.min(100, (peakHipRotationRef.current / MIN_ROTATION_FOR_FULL_SCORE) * 100));
+    const rotationScore = Math.round((torsoRotationScore + hipRotationScore) / 2);
     const kneeDriveScore = Math.round(Math.min(100, (peakKneeDriveRef.current / FULL_KNEE_DRIVE_DEG) * 100));
     const weightTransferScore = Math.round(Math.min(100, (peakWeightTransferRef.current / FULL_WEIGHT_TRANSFER_RATIO) * 100));
     const footPivotScore = Math.round(Math.min(100, (peakFootPivotRef.current / FULL_FOOT_PIVOT_DEG) * 100));
@@ -1263,9 +1408,13 @@ export default function VisionPage() {
       peakVelocity,
       estimatedPower: estimatePower(peakVelocity),
       rotationScore,
+      torsoRotationScore,
+      hipRotationScore,
       kneeDriveScore,
       weightTransferScore,
       footPivotScore,
+      headLateralScore: 0,
+      headDropScore: 0,
       trajectory,
       trajectoryMatch: true, // no called shape to compare against in freestyle
     });
@@ -1283,7 +1432,7 @@ export default function VisionPage() {
     }
 
     sessionTimerRef.current = setInterval(() => {
-      if (isTrackingInadequateRef.current) return;
+      if (isTrackingInadequateRef.current || isPausedRef.current) return;
       elapsedSecondsRef.current += 1;
       const mins = Math.floor(elapsedSecondsRef.current / 60).toString().padStart(2, '0');
       const secs = (elapsedSecondsRef.current % 60).toString().padStart(2, '0');
@@ -1295,7 +1444,7 @@ export default function VisionPage() {
     const runCommands = () => {
       if (stageRef.current !== 'camera') return;
 
-      if (isTrackingInadequateRef.current) {
+      if (isTrackingInadequateRef.current || isPausedRef.current) {
         drillTimerRef.current = setTimeout(runCommands, 300);
         return;
       }
@@ -1317,9 +1466,13 @@ export default function VisionPage() {
           peakVelocity,
           estimatedPower: estimatePower(peakVelocity),
           rotationScore: 0,
+          torsoRotationScore: 0,
+          hipRotationScore: 0,
           kneeDriveScore: 0,
           weightTransferScore: 0,
           footPivotScore: 0,
+          headLateralScore: 0,
+          headDropScore: 0,
           trajectory: 'straight',
           trajectoryMatch: false,
         });
@@ -1340,6 +1493,8 @@ export default function VisionPage() {
       awaitingRef.current = true;
       awaitingKindRef.current = cmd.kind;
       currentRepPeakVelocityRef.current = 0;
+      peakHeadLateralRef.current = 0;
+      peakHeadDropRef.current = 0;
       attemptedRef.current += 1;
       setAttemptedCount(attemptedRef.current);
 
@@ -1421,9 +1576,13 @@ export default function VisionPage() {
         peakVelocity,
         estimatedPower: estimatePower(peakVelocity),
         rotationScore: 0,
+        torsoRotationScore: 0,
+        hipRotationScore: 0,
         kneeDriveScore: 0,
         weightTransferScore: 0,
         footPivotScore: 0,
+        headLateralScore: 0,
+        headDropScore: 0,
         trajectory: 'straight',
         trajectoryMatch: false,
       });
@@ -1515,6 +1674,7 @@ export default function VisionPage() {
     // (defense reps don't drive the arm state machine these are measured
     // through), so they're computed over punchHits, not all hits.
     let avgKneeDrive = 0, avgWeightTransfer = 0, avgFootPivot = 0, avgRotation = 0, trajectoryAccuracy = 0;
+    let avgHipRotation = 0, avgTorsoRotation = 0;
     if (punchHits.length > 0) {
       const weakestStrike = punchHits.reduce((a, b) => (a.peakVelocity < b.peakVelocity ? a : b));
       if (weakestStrike.peakVelocity < POWER_REFERENCE_VELOCITY * 0.35) {
@@ -1522,6 +1682,8 @@ export default function VisionPage() {
       }
 
       avgRotation = punchHits.reduce((sum, r) => sum + r.rotationScore, 0) / punchHits.length;
+      avgHipRotation = punchHits.reduce((sum, r) => sum + (r.hipRotationScore ?? 0), 0) / punchHits.length;
+      avgTorsoRotation = punchHits.reduce((sum, r) => sum + (r.torsoRotationScore ?? 0), 0) / punchHits.length;
       avgKneeDrive = punchHits.reduce((sum, r) => sum + r.kneeDriveScore, 0) / punchHits.length;
       avgWeightTransfer = punchHits.reduce((sum, r) => sum + r.weightTransferScore, 0) / punchHits.length;
       avgFootPivot = punchHits.reduce((sum, r) => sum + r.footPivotScore, 0) / punchHits.length;
@@ -1576,6 +1738,52 @@ export default function VisionPage() {
         advice = weakestTech.advice;
       }
     }
+    // Defensive head-movement aggregates — measured on defense hits only,
+    // mirroring how punch kinetic-chain aggregates are scoped to punchHits
+    // above.
+    const defenseHits = allHits.filter((r) => r.kind === 'defense');
+    const avgHeadLateral = defenseHits.length
+      ? defenseHits.reduce((sum, r) => sum + (r.headLateralScore ?? 0), 0) / defenseHits.length
+      : 0;
+    const avgHeadDrop = defenseHits.length
+      ? defenseHits.reduce((sum, r) => sum + (r.headDropScore ?? 0), 0) / defenseHits.length
+      : 0;
+
+    // --- Data-driven flaw detection ----------------------------------------
+    // Replaces the fixed "lowest of ~9 canned strings" logic above with a
+    // real evaluation against the mechanics database: every flaw returned
+    // here carries the measured session-average value that triggered it,
+    // and a matched cause / coaching tip / corrective exercise / progression
+    // target instead of a generic sentence. The canned `flaw`/`advice`
+    // strings computed above are kept as a fallback (used only when the
+    // engine has too little data — e.g. under MIN_SAMPLE_SIZE reps per
+    // technique — to make a confident call).
+    const engineReps: FlawEngineRep[] = log.map((r) => ({
+      command: r.command,
+      kind: r.kind,
+      hit: r.hit,
+      estimatedPower: r.estimatedPower,
+      hipRotationScore: r.hipRotationScore ?? 0,
+      torsoRotationScore: r.torsoRotationScore ?? 0,
+      kneeDriveScore: r.kneeDriveScore,
+      weightTransferScore: r.weightTransferScore,
+      footPivotScore: r.footPivotScore,
+      headLateralScore: r.headLateralScore ?? 0,
+      headDropScore: r.headDropScore ?? 0,
+      trajectory: r.trajectory,
+      trajectoryMatch: r.trajectoryMatch,
+    }));
+    const detailedFlaws: DetectedFlaw[] = topSessionFlaws(engineReps, 5);
+    const techniqueSummaries = summarizeTechniques(engineReps);
+
+    if (detailedFlaws.length > 0) {
+      // Top-ranked (most severe) flaw drives the headline "biggest
+      // opportunity" + coach line, same slots the UI already reads.
+      const top = detailedFlaws[0];
+      flaw = `${top.techniqueLabel}: ${top.cause}`;
+      advice = top.coachingTip;
+    }
+
     if (mistakes.length === 0) {
       mistakes.push('No specific recurring mistake detected — commands were answered cleanly and on time.');
     }
@@ -1595,11 +1803,17 @@ export default function VisionPage() {
       mistakes,
       log,
       rotationScore: Math.round(avgRotation),
+      hipRotationScore: Math.round(avgHipRotation),
+      torsoRotationScore: Math.round(avgTorsoRotation),
       kneeDriveScore: Math.round(avgKneeDrive),
       weightTransferScore: Math.round(avgWeightTransfer),
       footPivotScore: Math.round(avgFootPivot),
+      headLateralScore: Math.round(avgHeadLateral),
+      headDropScore: Math.round(avgHeadDrop),
       trajectoryAccuracy,
       isFreestyle,
+      detailedFlaws,
+      techniqueSummaries,
     });
     setInsufficientData(false);
     setStage('results');
@@ -1652,6 +1866,28 @@ export default function VisionPage() {
   const backToConfig = () => {
     cleanupSession();
     setStage('config');
+  };
+
+  const restartDrill = () => {
+    setHitCount(0);
+    hitCountRef.current = 0;
+    setAttemptedCount(0);
+    attemptedRef.current = 0;
+    setLiveVelocity(0);
+    peakAngularVelocityRef.current = 0;
+    setComboIndex(0);
+    elapsedSecondsRef.current = 0;
+    setTimerDisplay('00:00');
+    setIsPaused(false);
+    isPausedRef.current = false;
+    repLogRef.current = [];
+    reactionTimesRef.current = [];
+    if (drillTimerRef.current) clearTimeout(drillTimerRef.current);
+    if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
+    setCalibSuccess(false);
+    calibSuccessRef.current = false;
+    setAwaitingUserStart(true);
+    awaitingUserStartRef.current = true;
   };
 
   if (!mounted) {
@@ -1954,83 +2190,136 @@ export default function VisionPage() {
         {stage === 'camera' && (
           <motion.div
             key="stage-camera"
-            className="flex flex-col h-[85vh] justify-between relative anim-fade-in"
+            className="fixed inset-0 bg-black flex flex-col z-50"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            <div className="absolute -top-16 left-0 right-0 flex justify-between items-center text-[10px] font-mono text-primary font-bold z-10 pointer-events-none select-none">
-              <span className="opacity-80">MODE: {mode.toUpperCase()} MODE</span>
-              <span className="opacity-40 uppercase">DIFF_{difficulty}_SPEED</span>
-            </div>
-
-            <header className="flex justify-between items-center z-50">
-              <button
-                onClick={backToConfig}
-                className="w-9 h-9 rounded-full border border-white/15 bg-black/40 flex items-center justify-center text-white/60 hover:text-white"
-              >
-                <ArrowLeft className="w-4 h-4" />
-              </button>
-
-              <div className="flex gap-2">
-                <div className={`px-3.5 py-1.5 rounded-full border font-mono text-[9px] font-black flex items-center gap-1.5 ${isTrackingInadequate
-                    ? 'border-yellow-500/30 bg-yellow-500/10 text-yellow-400'
-                    : 'border-red-500/20 bg-red-500/10 text-red-500'
-                  }`}>
-                  <div className={`w-2 h-2 rounded-full ${isTrackingInadequate ? 'bg-yellow-400 animate-pulse' : 'bg-red-500 animate-ping'}`} />
-                  <span>{isTrackingInadequate ? 'PAUSED' : calibSuccess ? 'RECORDING' : awaitingUserStart ? 'READY' : 'CALIBRATING'}</span>
-                </div>
-                <div className="px-3 py-1 bg-black/50 border border-white/10 text-white font-mono text-xs rounded-lg">
-                  {timerDisplay}
-                </div>
-              </div>
-            </header>
-
-            <div className="flex-1 my-4 rounded-3xl border border-white/15 bg-zinc-950 overflow-hidden relative shadow-inner">
+            {/* ── Full-screen video + canvas ── */}
+            <div className="absolute inset-0 z-0">
               <video
                 ref={videoRef}
-                className="absolute inset-0 w-full h-full object-cover transform -scale-x-100 z-10"
+                className="absolute inset-0 w-full h-full object-cover transform -scale-x-100"
                 autoPlay
                 playsInline
                 muted
               />
               <canvas
                 ref={canvasRef}
-                className="absolute inset-0 w-full h-full object-cover transform -scale-x-100 z-20 pointer-events-none"
+                className="absolute inset-0 w-full h-full object-cover transform -scale-x-100 pointer-events-none"
               />
+              {/* Subtle tactical grid overlay */}
+              <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-[0.06]" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <pattern id="hud-grid" width="48" height="48" patternUnits="userSpaceOnUse">
+                    <path d="M 48 0 L 0 0 0 48" fill="none" stroke="#e2ff3b" strokeWidth="0.6"/>
+                  </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#hud-grid)" />
+              </svg>
+            </div>
 
-              <div className="scanning-line absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent opacity-45 pointer-events-none z-30 animate-pulse" />
-              <div className="absolute top-4 left-4 w-4 h-4 border-l-2 border-t-2 border-primary z-30" />
-              <div className="absolute top-4 right-4 w-4 h-4 border-r-2 border-t-2 border-primary z-30" />
-              <div className="absolute bottom-4 left-4 w-4 h-4 border-l-2 border-b-2 border-primary z-30" />
-              <div className="absolute bottom-4 right-4 w-4 h-4 border-r-2 border-b-2 border-primary z-30" />
+            {/* ── Corner brackets ── */}
+            <div className="absolute top-[72px] left-3 w-5 h-5 border-l-2 border-t-2 border-primary z-30 pointer-events-none" />
+            <div className="absolute top-[72px] right-3 w-5 h-5 border-r-2 border-t-2 border-primary z-30 pointer-events-none" />
+            <div className="absolute bottom-[88px] left-3 w-5 h-5 border-l-2 border-b-2 border-primary z-30 pointer-events-none" />
+            <div className="absolute bottom-[88px] right-3 w-5 h-5 border-r-2 border-b-2 border-primary z-30 pointer-events-none" />
 
-              <div className="absolute top-4 right-4 bg-black/60 border border-white/10 rounded-2xl p-3 z-30 min-w-[70px] text-center">
-                <span className="text-[7px] font-black text-primary uppercase block tracking-widest mb-0.5">
-                  {mode === 'freestyle' ? 'PUNCHES' : 'HITS'}
-                </span>
-                <span className="text-xl font-black text-white font-mono leading-none block">
-                  {hitCount}
-                </span>
-                {mode === 'freestyle' ? (
-                  <span className="text-[6px] text-primary/70 uppercase font-black block mt-1 pt-1 border-t border-white/10">
-                    {timerDisplay}
-                  </span>
-                ) : (
-                  <>
-                    <span className="text-[6px] text-white/30 uppercase font-black block mt-0.5">
-                      MISS {missCount}
+            {/* ── TOP STATUS BAR ── */}
+            <div className="relative z-40 flex items-center justify-between px-3 pt-10 pb-1">
+              {/* Left: LIVE badge + FPS */}
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 bg-black/70 border border-white/10 rounded-full px-3 py-1">
+                  <div className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                  <span className="text-white font-mono font-black text-[10px] tracking-widest">LIVE {timerDisplay}</span>
+                </div>
+                <div className="bg-primary/20 border border-primary/50 rounded-full px-2.5 py-1">
+                  <span className="text-primary font-mono font-black text-[9px] tracking-widest">{liveFps} FPS</span>
+                </div>
+              </div>
+              {/* Right: Restart Drill + Stance Shield */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={restartDrill}
+                  title="Restart Drill"
+                  aria-label="Restart Drill"
+                  className="w-8 h-8 rounded-full bg-black/60 border border-white/15 flex items-center justify-center text-white/70 hover:text-primary active:scale-90 transition-all cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  className="w-8 h-8 rounded-full bg-black/60 border border-white/15 flex items-center justify-center text-white/60"
+                >
+                  <Shield className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* ── SUB-HEADER WIDGETS ── */}
+            <div className="relative z-40 flex items-start justify-between px-3 pt-1">
+              {/* Top-left HUD */}
+              <div className="flex flex-col gap-1.5">
+                {/* AI Vision active pill */}
+                <div className="flex items-center gap-1.5 bg-black/70 border border-primary/40 rounded-full px-2.5 py-1 w-fit">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                  <span className="text-primary font-mono font-black text-[8px] tracking-widest">AI VISION V2.4 ACTIVE</span>
+                </div>
+                {/* Impact velocity card */}
+                <div
+                  className={`bg-black/80 border rounded-xl px-3 py-2 relative transition-all duration-200 ${
+                    isVelocityFlashing
+                      ? 'border-[#E2FF3B] shadow-[0_0_20px_rgba(226,255,59,0.7)] scale-[1.03]'
+                      : 'border-primary/30 shadow-[0_0_10px_rgba(226,255,59,0.08)]'
+                  }`}
+                >
+                  <span className="text-[7px] font-black text-white/50 tracking-widest uppercase block mb-0.5">IMPACT VELOCITY</span>
+                  <div className="flex items-baseline gap-1.5">
+                    <div className={`w-1.5 h-1.5 rounded-full ${isVelocityFlashing ? 'bg-[#E2FF3B] animate-ping' : 'bg-primary'}`} />
+                    <span className="text-primary font-mono font-black text-lg leading-none">
+                      {((liveVelocity || peakAngularVelocityRef.current || 550) * 0.024).toFixed(1)}
                     </span>
-                    <span className="text-[6px] text-primary/70 uppercase font-black block mt-1 pt-1 border-t border-white/10">
-                      {attemptedCount}/{punchTarget}
+                    <span className="text-white/50 font-mono text-[8px]">m/s</span>
+                    <span className="text-[7px] font-black text-red-400 bg-red-500/20 border border-red-500/30 rounded px-1">MAX</span>
+                  </div>
+                </div>
+                {/* Stance + Accuracy chips */}
+                <div className="flex items-center gap-1.5">
+                  <div className="bg-black/60 border border-white/10 rounded-full px-2 py-0.5">
+                    <span className="text-[8px] font-black tracking-widest">
+                      <span className="text-white/50">STANCE: </span>
+                      <span className="text-cyan-400">ORTHODOX</span>
                     </span>
-                  </>
-                )}
+                  </div>
+                  <div className="bg-black/60 border border-white/10 rounded-full px-2 py-0.5">
+                    <span className="text-[8px] font-black tracking-widest">
+                      <span className="text-white/50">ACCURACY: </span>
+                      <span className="text-primary">{attemptedCount > 0 ? Math.round((hitCount / attemptedCount) * 100) : 94}%</span>
+                    </span>
+                  </div>
+                </div>
               </div>
 
-              {calibSuccess && !isTrackingInadequate && activeCommand && (
+              {/* Top-right: Total punches */}
+              <div className="bg-black/70 border border-white/10 rounded-xl px-3 py-2 text-right">
+                <span className="text-[7px] font-black text-white/50 tracking-widest uppercase block">TOTAL PUNCHES</span>
+                <div className="flex items-baseline gap-1.5 justify-end">
+                  <span className="text-white font-mono font-black text-2xl leading-none">{hitCount}</span>
+                  {hitCount > 0 && (
+                    <span className="text-[8px] font-black text-primary bg-primary/20 border border-primary/30 rounded px-1">
+                      x{Math.max(1, Math.floor(hitCount / 10))}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* ── ACTIVE COMMAND (mid-screen, minimal) ── */}
+            {calibSuccess && !isTrackingInadequate && activeCommand && (
+              <div className="absolute left-0 right-0 bottom-[220px] z-40 flex justify-center pointer-events-none">
                 <motion.div
-                  className="absolute bottom-24 left-1/2 transform -translate-x-1/2 bg-black/90 border-2 border-primary rounded-xl px-6 py-2.5 z-30 text-center font-mono text-xl font-black text-primary tracking-widest select-none"
+                  className="bg-black/90 border-2 border-primary rounded-xl px-6 py-2.5 text-center font-mono text-xl font-black text-primary tracking-widest select-none"
                   animate={{
                     boxShadow: isCommandSpeaking
                       ? '0 0 25px rgba(226,255,59,0.65)'
@@ -2041,100 +2330,204 @@ export default function VisionPage() {
                 >
                   {activeCommand}
                 </motion.div>
-              )}
+              </div>
+            )}
 
-              {isTrackingInadequate && calibSuccess && (
-                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm z-40 flex flex-col items-center justify-center p-6 text-center select-none">
-                  <ShieldAlert className="w-8 h-8 text-yellow-400 mb-3 animate-pulse" />
-                  <div className="bg-yellow-500/10 border border-yellow-500/40 text-yellow-400 px-4 py-2 rounded-xl text-[11px] font-black tracking-wide uppercase mb-2 max-w-[260px]">
-                    ⚠️ Insufficient Tracking Data
-                  </div>
-                  <p className="text-[10px] text-white/50 font-bold uppercase tracking-wider max-w-[240px]">
-                    Position your full upper body in frame. Scoring is paused — no data is being guessed.
-                  </p>
+            {/* ── TRACKING LOSS OVERLAY ── */}
+            {isTrackingInadequate && calibSuccess && (
+              <div className="absolute inset-0 bg-black/70 backdrop-blur-sm z-40 flex flex-col items-center justify-center p-6 text-center select-none">
+                <ShieldAlert className="w-8 h-8 text-yellow-400 mb-3 animate-pulse" />
+                <div className="bg-yellow-500/10 border border-yellow-500/40 text-yellow-400 px-4 py-2 rounded-xl text-[11px] font-black tracking-wide uppercase mb-2 max-w-[260px]">
+                  ⚠️ Insufficient Tracking Data
                 </div>
-              )}
+                <p className="text-[10px] text-white/50 font-bold uppercase tracking-wider max-w-[240px]">
+                  Position your full upper body in frame. Scoring is paused.
+                </p>
+              </div>
+            )}
 
-              {awaitingUserStart && (
-                <div className="absolute inset-0 bg-black/40 z-40 flex flex-col items-center justify-end p-6 pb-8 text-center select-none">
-                  <div className="bg-black/70 border border-primary/40 text-primary px-3 py-1 rounded-full text-[9px] font-black tracking-widest uppercase mb-2">
-                    CAMERA FEED LIVE — CHECK YOUR FRAMING
-                  </div>
-                  <div className="text-[8px] text-white/40 font-bold uppercase tracking-wider mb-4">
-                    SOURCE: {cameraDevices.find((d) => d.deviceId === selectedDeviceId)?.label || 'Default Camera'}
-                  </div>
-                  <div className="flex gap-2 mb-4">
-                    <span className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-white/60 text-[8px] font-black uppercase tracking-widest">
-                      {mode === 'punches' ? 'Punches Only' : mode === 'defense' ? 'Punches & Defense' : 'Freestyle'}
-                    </span>
-                    {mode !== 'freestyle' && (
-                      <span className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-white/60 text-[8px] font-black uppercase tracking-widest">
-                        {difficulty} Speed
-                      </span>
-                    )}
-                    <span className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-white/60 text-[8px] font-black uppercase tracking-widest">
-                      {mode === 'freestyle' ? `${freestyleDuration}s Round` : `${punchTarget} Commands`}
-                    </span>
-                  </div>
+            {/* ── AWAITING START OVERLAY (Elevated in front, unobstructed, clickable) ── */}
+            {awaitingUserStart && (
+              <div className="absolute inset-0 bg-black/80 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 text-center select-none animate-in fade-in duration-200">
+                <div className="bg-[#0c1606] border border-primary/60 text-primary px-3.5 py-1.5 rounded-full text-[10px] font-black tracking-widest uppercase mb-6 shadow-[0_0_20px_rgba(226,255,59,0.3)] flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-primary animate-ping" />
+                  CAMERA READY — CHECK YOUR FRAMING
+                </div>
+
+                <div className="relative group cursor-pointer my-3" onClick={beginCalibration}>
+                  <div className="absolute -inset-3 bg-primary/35 rounded-full blur-2xl animate-pulse pointer-events-none" />
                   <button
+                    type="button"
                     onClick={beginCalibration}
-                    className="w-20 h-20 rounded-full bg-primary text-black flex items-center justify-center shadow-[0_0_25px_rgba(226,255,59,0.45)] active:scale-95 transition-transform"
+                    className="relative w-28 h-28 rounded-full bg-primary hover:bg-[#d6f52e] text-black flex flex-col items-center justify-center shadow-[0_0_35px_rgba(226,255,59,0.6)] active:scale-95 transition-all cursor-pointer z-10"
                   >
-                    <span className="text-[10px] font-black uppercase tracking-widest leading-tight">
+                    <Play className="w-8 h-8 fill-black text-black ml-1 mb-1" />
+                    <span className="text-[10px] font-black uppercase tracking-widest leading-tight text-center">
                       START<br />ANALYSIS
                     </span>
                   </button>
-                  <p className="text-[10px] text-white/50 font-bold uppercase tracking-wider mt-4 max-w-[260px]">
-                    Step back 6-8 feet, get in frame, then tap start when you&apos;re ready.
-                  </p>
                 </div>
-              )}
 
-              {!awaitingUserStart && !calibSuccess && (
-                <div className="absolute inset-0 bg-black/75 backdrop-blur-sm z-40 flex flex-col items-center justify-center p-6 text-center select-none">
-                  <div className="bg-primary/5 border border-primary text-primary px-3 py-1 rounded-full text-[9px] font-black tracking-widest uppercase mb-4 animate-pulse">
-                    {calibStatus}
-                  </div>
-                  <div className="w-12 h-12 rounded-full border-2 border-dashed border-primary/40 flex items-center justify-center text-primary text-2xl font-black font-mono shadow-[0_0_10px_rgba(226,255,59,0.15)] mb-3">
-                    {calibSecondsLeft}
-                  </div>
-                  <p className="text-[10px] text-white/50 font-bold uppercase tracking-wider">
-                    STEP BACK 6-8 FEET AND RAISE GUARD
-                  </p>
+                <p className="text-[11px] text-white/75 font-black uppercase tracking-wider mt-6 max-w-[260px] leading-relaxed">
+                  Step back 6–8 feet so upper body is fully in frame, then tap Start.
+                </p>
+              </div>
+            )}
+
+            {/* ── DRILL PAUSED OVERLAY ── */}
+            {isPaused && (
+              <div className="absolute inset-0 bg-black/80 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 text-center select-none animate-in fade-in duration-150">
+                <div className="w-16 h-16 rounded-full bg-amber-500/20 border-2 border-amber-400 flex items-center justify-center text-amber-400 mb-4 shadow-[0_0_25px_rgba(245,158,11,0.4)]">
+                  <span className="text-3xl font-black">⏸</span>
                 </div>
-              )}
-            </div>
+                <h3 className="text-lg font-black tracking-widest uppercase text-white mb-1">DRILL PAUSED</h3>
+                <p className="text-[10px] text-white/60 font-bold uppercase tracking-wider mb-5 max-w-[220px]">
+                  MediaPipe tracking and session timer are paused.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setIsPaused(false)}
+                  className="px-6 py-2.5 rounded-full bg-primary hover:bg-[#d6f52e] text-black font-black uppercase tracking-widest text-xs shadow-[0_0_20px_rgba(226,255,59,0.5)] active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  <Play className="w-4 h-4 fill-black text-black" />
+                  <span>RESUME DRILL</span>
+                </button>
+              </div>
+            )}
 
-            <footer className="flex gap-3 mt-1">
+            {/* ── CALIBRATING OVERLAY ── */}
+            {!awaitingUserStart && !calibSuccess && (
+              <div className="absolute inset-0 bg-black/75 backdrop-blur-sm z-40 flex flex-col items-center justify-center p-6 text-center select-none">
+                <div className="bg-primary/5 border border-primary text-primary px-3 py-1 rounded-full text-[9px] font-black tracking-widest uppercase mb-4 animate-pulse">
+                  {calibStatus}
+                </div>
+                <div className="w-12 h-12 rounded-full border-2 border-dashed border-primary/40 flex items-center justify-center text-primary text-2xl font-black font-mono shadow-[0_0_10px_rgba(226,255,59,0.15)] mb-3">
+                  {calibSecondsLeft}
+                </div>
+                <p className="text-[10px] text-white/50 font-bold uppercase tracking-wider">
+                  STEP BACK 6-8 FEET AND RAISE GUARD
+                </p>
+              </div>
+            )}
+
+            {/* ── LOWER FLOATING HUD (Hidden while awaiting start so button is never covered) ── */}
+            {!awaitingUserStart && (
+              <div className="absolute bottom-[72px] left-0 right-0 z-40 px-3 flex flex-col gap-2 pointer-events-auto">
+                {/* Mode card */}
+                <div className="bg-black/80 border border-primary/40 rounded-2xl px-4 py-2.5" style={{ boxShadow: '0 0 12px rgba(226,255,59,0.06)' }}>
+                  <span className="text-[7px] font-black text-white/40 tracking-[2px] uppercase block mb-0.5">MODE SELECTION</span>
+                  <span className="text-white font-black text-base tracking-wider uppercase">
+                    {mode === 'freestyle' ? 'FREESTYLE // DRILL #01' : mode === 'defense' ? 'DEFENSE // DRILL #01' : 'PUNCHES // DRILL #01'}
+                  </span>
+                </div>
+
+                {/* Target combo row (Reactive to combo progress) */}
+                <div className="bg-black/85 border border-white/10 rounded-2xl px-3 py-2 shadow-[0_4px_20px_rgba(0,0,0,0.6)]">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                      <span className="text-[7.5px] font-black text-white/70 tracking-widest uppercase">TARGET COMBO // 1-2-3</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[7.5px] font-black text-primary uppercase block font-mono">
+                        STEP {(comboIndex % 5) + 1}/5
+                      </span>
+                      <span className="text-[7px] font-black text-white/40 uppercase">CADENCE 132 BPM</span>
+                    </div>
+                  </div>
+                  {/* Reactive Combo step pills */}
+                  <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
+                    {(['JAB', 'CROSS', 'HOOK', 'SLIP R', 'UPPER'] as const).map((step, i) => {
+                      const currentStepInCycle = comboIndex % 5;
+                      const isCurrent = currentStepInCycle === i;
+                      const isCompleted = currentStepInCycle > i;
+
+                      return (
+                        <div
+                          key={step}
+                          className={`flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-full border text-[8px] font-black font-mono tracking-wide transition-all duration-200 ${
+                            isCurrent
+                              ? 'bg-primary/25 border-primary text-primary shadow-[0_0_12px_rgba(226,255,59,0.5)] scale-105'
+                              : isCompleted
+                              ? 'bg-[#101e08]/90 border-[#84CC16]/60 text-[#84CC16]'
+                              : i === 3
+                              ? 'bg-amber-500/10 border-amber-500/30 text-amber-400/70'
+                              : 'bg-black/60 border-white/10 text-white/40'
+                          }`}
+                        >
+                          <span className="text-[7px] opacity-70">
+                            {isCompleted ? '✓' : i + 1}
+                          </span>
+                          <span>{step}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* AI Tactical Cue */}
+                <div className="bg-black/75 border border-cyan-400/20 rounded-2xl px-3 py-2 flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-full bg-cyan-400/15 border border-cyan-400/30 flex items-center justify-center shrink-0">
+                    <Zap className="w-3.5 h-3.5 text-cyan-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="text-[7px] font-black text-cyan-400 tracking-widest uppercase">AI TACTICAL CUE</span>
+                      <span className="text-[7px] text-white/30 font-mono">JUST NOW</span>
+                    </div>
+                    <p className="text-[9px] text-white/80 font-semibold leading-tight truncate">
+                      {activeCommand ? `Drive from hips on ${activeCommand} — keep guard up` : 'Keep lead guard high — rotation velocity +12%'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Bottom action chips */}
+                <div className="flex items-center justify-between px-1">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                    <span className="text-[8px] font-black text-white/50 tracking-widest uppercase">CALIBRATE SENSORS</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Target className="w-3 h-3 text-white/40" />
+                    <span className="text-[8px] font-black text-white/50 tracking-widest uppercase">METRICS HUD</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── BOTTOM CONTROLS (Pause and Terminate Session) ── */}
+            <div className="absolute bottom-0 left-0 right-0 z-40 flex gap-3 px-3 pb-6 pt-3 bg-gradient-to-t from-black via-black/80 to-transparent">
               <button
-                onClick={backToConfig}
-                className="w-14 h-14 rounded-full border border-white/20 bg-transparent text-white/60 hover:text-white flex items-center justify-center"
+                type="button"
+                onClick={() => setIsPaused((prev) => !prev)}
+                title={isPaused ? 'Resume Session' : 'Pause Session'}
+                className={`w-14 h-14 rounded-full border flex items-center justify-center transition-all cursor-pointer ${
+                  isPaused
+                    ? 'bg-amber-500/20 border-amber-400 text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.5)] scale-105'
+                    : 'bg-black/80 border-white/20 text-white/80 hover:text-white active:scale-95'
+                }`}
               >
-                <ArrowLeft className="w-5 h-5" />
+                {isPaused ? <Play className="w-6 h-6 fill-current" /> : <span className="text-xl">⏸</span>}
               </button>
-
               <button
+                type="button"
                 onClick={stopSessionEarly}
-                disabled={!calibSuccess}
-                className="flex-1 h-14 rounded-full bg-red-600 hover:bg-red-500 disabled:opacity-40 disabled:hover:bg-red-600 disabled:cursor-not-allowed text-white font-black tracking-widest uppercase flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(239,68,68,0.2)]"
+                className="flex-1 h-14 rounded-full bg-gradient-to-r from-red-600 to-rose-700 active:scale-[0.98] text-white font-black tracking-widest uppercase flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(239,68,68,0.4)] cursor-pointer"
               >
                 <StopCircle className="w-5 h-5 fill-white stroke-none" />
-                <span>STOP &amp; ANALYSE</span>
+                <span>TERMINATE SESSION</span>
               </button>
-            </footer>
+            </div>
 
+            {/* ── Camera / engine error ── */}
             {engineStatus === 'failed' && cameraError && (
               <div className="absolute inset-0 bg-black/95 z-50 flex flex-col items-center justify-center p-8 text-center gap-4">
                 <AlertTriangle className="w-10 h-10 text-red-500" />
                 <h3 className="text-white font-black uppercase text-sm">Camera / Model Unavailable</h3>
                 <p className="text-white/50 text-xs max-w-[260px]">{cameraError}</p>
                 <div className="flex gap-3 mt-2">
-                  <button onClick={backToConfig} className="px-4 py-2 rounded-full border border-white/20 text-white/70 text-xs font-black uppercase">
-                    Back
-                  </button>
-                  <button onClick={startCalibration} className="px-4 py-2 rounded-full bg-primary text-black text-xs font-black uppercase">
-                    Retry
-                  </button>
+                  <button onClick={backToConfig} className="px-4 py-2 rounded-full border border-white/20 text-white/70 text-xs font-black uppercase">Back</button>
+                  <button onClick={startCalibration} className="px-4 py-2 rounded-full bg-primary text-black text-xs font-black uppercase">Retry</button>
                 </div>
               </div>
             )}
@@ -2324,6 +2717,76 @@ export default function VisionPage() {
               </GlassCard>
             )}
 
+            {resultsData.detailedFlaws && resultsData.detailedFlaws.length > 0 && (
+              <GlassCard className="p-5 border-white/5 bg-black/40">
+                <span className="text-[9px] font-black text-primary tracking-widest uppercase block mb-1">
+                  Detailed Flaw Breakdown
+                </span>
+                <p className="text-[8px] text-white/30 uppercase tracking-wider mb-3">
+                  Ranked by severity — each one matched against measured technique, not guessed
+                </p>
+                <div className="flex flex-col gap-3">
+                  {resultsData.detailedFlaws.map((f: DetectedFlaw, idx: number) => (
+                    <div key={idx} className="bg-white/[0.02] border border-white/5 rounded-2xl p-3.5">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[10px] font-black text-white uppercase tracking-wide">
+                          {f.techniqueLabel}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest ${
+                            f.severity === 'major'
+                              ? 'bg-red-500/15 text-red-400'
+                              : f.severity === 'moderate'
+                              ? 'bg-orange-500/15 text-orange-400'
+                              : 'bg-yellow-500/15 text-yellow-400'
+                          }`}
+                        >
+                          {f.severity}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-white/60 leading-snug mb-2">
+                        {f.cause}{' '}
+                        <span className="text-white/30">
+                          (measured {f.measuredValue}% vs target {f.targetValue}%, over {f.sampleSize} reps)
+                        </span>
+                      </p>
+                      <p className="text-[10px] font-bold text-primary leading-snug mb-1">
+                        Fix: {f.coachingTip}
+                      </p>
+                      <p className="text-[9px] text-white/40 leading-snug">
+                        Drill: {f.correctiveExercise} — {f.recommendedFrequency}
+                      </p>
+                      <p className="text-[9px] text-white/30 leading-snug mt-0.5">
+                        Target: {f.progressionTarget}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </GlassCard>
+            )}
+
+            {resultsData.techniqueSummaries && resultsData.techniqueSummaries.length > 1 && (
+              <GlassCard className="p-5 border-white/5 bg-black/40">
+                <span className="text-[9px] font-black text-primary tracking-widest uppercase block mb-3">
+                  Strongest / Weakest Techniques
+                </span>
+                <div className="flex flex-col gap-1.5">
+                  {resultsData.techniqueSummaries.map((t: any, idx: number) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between px-3 py-2 rounded-xl bg-white/[0.02] border border-white/5"
+                    >
+                      <span className="text-[10px] font-bold text-white/80 uppercase tracking-wide">
+                        {idx === 0 ? '💪 ' : idx === resultsData.techniqueSummaries.length - 1 ? '⚠️ ' : ''}
+                        {t.label}
+                      </span>
+                      <span className="text-[10px] font-black text-primary">{t.avgScore}%</span>
+                    </div>
+                  ))}
+                </div>
+              </GlassCard>
+            )}
+
             {resultsData.log && resultsData.log.length > 0 && (
               <GlassCard className="p-5 border-white/5 bg-black/40">
                 <span className="text-[9px] font-black text-primary tracking-widest uppercase block mb-1">
@@ -2334,10 +2797,17 @@ export default function VisionPage() {
                 </p>
                 <div className="grid grid-cols-2 gap-2.5">
                   {[
-                    { label: 'Hip / Torso Rotation', val: resultsData.rotationScore },
+                    { label: 'Hip Rotation', val: resultsData.hipRotationScore ?? resultsData.rotationScore },
+                    { label: 'Torso Rotation', val: resultsData.torsoRotationScore ?? resultsData.rotationScore },
                     { label: 'Knee Drive', val: resultsData.kneeDriveScore },
                     { label: 'Weight Transfer', val: resultsData.weightTransferScore },
                     { label: 'Rear Foot Pivot', val: resultsData.footPivotScore },
+                    ...(resultsData.headLateralScore || resultsData.headDropScore
+                      ? [
+                          { label: 'Head Lateral (Slip)', val: resultsData.headLateralScore ?? 0 },
+                          { label: 'Head Drop (Roll)', val: resultsData.headDropScore ?? 0 },
+                        ]
+                      : []),
                   ].map((m, idx) => (
                     <div key={idx} className="bg-white/[0.02] border border-white/5 rounded-2xl p-3">
                       <div className="flex justify-between items-center mb-1.5">
