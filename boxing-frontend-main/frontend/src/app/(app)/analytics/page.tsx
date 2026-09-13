@@ -821,6 +821,36 @@ export default function AnalyticsPage() {
                   </GlassCard>
                 </div>
 
+                <GlassCard className="p-4 border-primary/20 bg-black/45 overflow-hidden">
+                  <div className="flex items-center justify-between mb-1">
+                    <div>
+                      <span className="text-[9px] font-black text-primary tracking-widest uppercase block">Performance Profile</span>
+                      <span className="text-[8px] text-white/35 uppercase tracking-wider">Six-axis movement signature</span>
+                    </div>
+                    <span className="text-[8px] font-black text-white/35 uppercase tracking-wider">{activeVision.mode === 'defense' ? 'DEFENSE MAP' : 'STRIKE MAP'}</span>
+                  </div>
+                  <HexagonGraph
+                    accent={activeVision.mode === 'defense' ? '#fb7185' : '#e2ff3b'}
+                    metrics={activeVision.mode === 'defense'
+                      ? [
+                          { label: 'Lateral', value: activeVision.head_lateral_score ?? 0 },
+                          { label: 'Drop', value: activeVision.head_drop_score ?? 0 },
+                          { label: 'Tracking', value: activeVision.tracking_score ?? 0 },
+                          { label: 'Accuracy', value: activeVision.accuracy },
+                          { label: 'Reflex', value: activeVision.reflex_score ?? 0 },
+                          { label: 'Volume', value: Math.min(100, (activeVision.hits ?? activeVision.punches) * 5) },
+                        ]
+                      : [
+                          { label: 'Power', value: activeVision.power_score ?? 0 },
+                          { label: 'Hip', value: activeVision.hip_rotation_score ?? 0 },
+                          { label: 'Torso', value: activeVision.torso_rotation_score ?? 0 },
+                          { label: 'Knee', value: activeVision.knee_drive_score ?? 0 },
+                          { label: 'Transfer', value: activeVision.weight_transfer_score ?? 0 },
+                          { label: 'Pivot', value: activeVision.foot_pivot_score ?? 0 },
+                        ]}
+                  />
+                </GlassCard>
+
                 <GlassCard className="p-5 border-white/5 bg-black/40">
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-[9px] font-black text-primary tracking-widest uppercase">

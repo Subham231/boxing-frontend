@@ -2,11 +2,9 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Loader2, Swords, Flag } from 'lucide-react';
+import { ArrowLeft, Loader2, Swords, Flag, Mic, MicOff, Settings, Volume2, VolumeX } from 'lucide-react';
 import { firebaseAuth } from '@/lib/firebase';
 import { supabase } from '@/lib/supabase';
-import { GlassCard } from '@/components/ui/GlassCard';
-import { NeonButton } from '@/components/ui/NeonButton';
 
 type SparCommand = { command: string; kind: 'punch' | 'defense'; callAtMs: number };
 const PUNCH_EXTEND_DEG = 155;
@@ -69,6 +67,9 @@ export default function SparMatchClient() {
   const [statusLine, setStatusLine] = useState('Connecting…');
   const [opponentLeft, setOpponentLeft] = useState(false);
   const [opponentLeftReason, setOpponentLeftReason] = useState('Opponent left the match.');
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
+  const voiceEnabledRef = useRef(true);
 
   const authHeaders = useCallback(async () => {
     const user = firebaseAuth.currentUser;
@@ -78,7 +79,7 @@ export default function SparMatchClient() {
 
   const speak = (text: string) => {
     try {
-      if (typeof window === 'undefined' || !window.speechSynthesis) return;
+      if (!voiceEnabledRef.current || typeof window === 'undefined' || !window.speechSynthesis) return;
       const u = new SpeechSynthesisUtterance(text);
       u.rate = 1.05;
       window.speechSynthesis.cancel();
@@ -542,91 +543,69 @@ export default function SparMatchClient() {
   };
 
   return (
-    <div className="min-h-[100dvh] bg-[#0A0A0A] text-white p-4 pb-8 font-sans">
-      <header className="flex items-center justify-between mb-4">
-        <button
-          onClick={() => router.push('/spar')}
-          className="w-10 h-10 rounded-full border border-white/10 bg-white/5 flex items-center justify-center text-white/60"
-        >
-          <ArrowLeft className="w-4 h-4" />
-        </button>
-        <div className="text-center">
-          <div className="text-[9px] font-black text-primary uppercase tracking-widest flex items-center gap-1 justify-center">
-            <Swords className="w-3 h-3" /> LIVE SPARRING
+    <div className="fixed inset-0 z-50 overflow-hidden bg-[#050706] text-white font-sans">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,rgba(33,55,43,0.22),transparent_58%)]" />
+      <div className="absolute inset-0 z-10 pointer-events-none opacity-20 bg-[linear-gradient(rgba(255,255,255,0.025)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.025)_1px,transparent_1px)] bg-[size:44px_44px]" />
+
+      <main className="relative z-20 mx-auto h-full w-full max-w-[760px] flex flex-col px-3 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(0.8rem,env(safe-area-inset-bottom))]">
+        <header className="flex items-center justify-between shrink-0">
+          <button onClick={() => router.push('/spar')} aria-label="Back to spar lobby" className="w-10 h-10 rounded-full border border-white/15 bg-black/50 flex items-center justify-center text-white/70">
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+          <div className="flex items-center gap-2 rounded-full border border-primary/30 bg-black/65 px-3 py-1.5">
+            <span className="w-2 h-2 rounded-full bg-primary shadow-[0_0_8px_rgba(226,255,59,0.9)]" />
+            <span className="text-[10px] font-black tracking-widest text-primary uppercase">Live Spar</span>
+            <span className="text-[9px] font-mono text-white/70 uppercase">{phase === 'live' ? 'RD 2' : statusLine}</span>
           </div>
-          <div className="text-[10px] text-white/40 font-bold uppercase">{statusLine}</div>
-        </div>
-        <button
-          onClick={forfeit}
-          className="w-10 h-10 rounded-full border border-red-500/30 bg-red-500/10 flex items-center justify-center text-red-400"
-          title="Forfeit"
-        >
-          <Flag className="w-4 h-4" />
-        </button>
-      </header>
+          <button onClick={forfeit} aria-label="Surrender" className="w-10 h-10 rounded-full border border-red-500/50 bg-red-500/10 flex items-center justify-center text-red-400">
+            <Flag className="w-4 h-4" />
+          </button>
+        </header>
 
-      {error && (
-        <GlassCard className="p-4 mb-4 border-red-500/30 text-[11px] text-red-400 font-semibold">{error}</GlassCard>
-      )}
-
-      {opponentLeft && (
-        <GlassCard className="p-4 mb-4 border-orange-500/30 bg-orange-500/10 text-[11px] text-orange-200 font-semibold">
-          {opponentLeftReason}
-          <div className="mt-3 flex gap-2">
-            <button
-              onClick={() => router.push('/spar')}
-              className="flex-1 rounded-xl bg-primary text-black px-3 py-2 font-black uppercase tracking-widest text-[10px]"
-            >
-              Exit to lobby
-            </button>
+        <div className="mt-3 flex items-center justify-between shrink-0">
+          <div className="rounded-xl border border-white/10 bg-black/65 px-3 py-2 min-w-[76px]">
+            <span className="block text-[7px] font-black uppercase tracking-widest text-white/45">Landed</span>
+            <span className="text-xl font-black text-primary leading-none">{hits}<span className="text-[10px] text-white/35"> / {hits + misses}</span></span>
           </div>
-        </GlassCard>
-      )}
+          <div className="text-right rounded-xl border border-white/10 bg-black/65 px-3 py-2 min-w-[76px]">
+            <span className="block text-[7px] font-black uppercase tracking-widest text-white/45">Opp. Pace</span>
+            <span className="text-xl font-black text-amber-400 leading-none">{hits + misses ? Math.round((hits / (hits + misses)) * 100) : 0}<span className="text-[9px] text-amber-400/60">% par</span></span>
+          </div>
+        </div>
 
-      <div className="grid grid-cols-2 gap-2 mb-3">
-        <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-black border border-white/10">
-          <video ref={localVideoRef} playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
-          <span className="absolute bottom-2 left-2 text-[8px] font-black uppercase bg-black/60 px-2 py-0.5 rounded">You</span>
-        </div>
-        <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-black border border-primary/20">
-          <video ref={remoteVideoRef} playsInline className="w-full h-full object-cover" />
-          <span className="absolute bottom-2 left-2 text-[8px] font-black uppercase bg-black/60 px-2 py-0.5 rounded">Opponent</span>
-        </div>
-      </div>
+        <section className="relative mt-2 flex-1 min-h-0 overflow-hidden rounded-[28px] border border-white/10 bg-black shadow-[0_0_45px_rgba(0,0,0,0.7)]">
+          <video ref={remoteVideoRef} playsInline className="absolute inset-0 h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/35 via-transparent to-black/65 pointer-events-none" />
+          <div className="absolute left-3 top-3 rounded-full border border-white/15 bg-black/60 px-2.5 py-1 text-[8px] font-black uppercase tracking-widest text-white/70">Opponent</div>
 
-      <div className="grid grid-cols-3 gap-2 mb-4">
-        <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-center">
-          <div className="text-[8px] font-black uppercase tracking-widest text-white/40">HITS</div>
-          <div className="mt-0.5 text-xl font-black text-primary">{hits}</div>
-        </div>
-        <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-center">
-          <div className="text-[8px] font-black uppercase tracking-widest text-white/40">MISSES</div>
-          <div className="mt-0.5 text-xl font-black text-red-300">{misses}</div>
-        </div>
-        <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-center">
-          <div className="text-[8px] font-black uppercase tracking-widest text-white/40">TOTAL</div>
-          <div className="mt-0.5 text-xl font-black text-white">{hits + misses}</div>
-        </div>
-      </div>
+          <div className="absolute bottom-3 right-3 h-[31%] w-[31%] min-h-[120px] min-w-[96px] overflow-hidden rounded-2xl border-2 border-primary bg-black shadow-[0_0_22px_rgba(226,255,59,0.28)]">
+            <video ref={localVideoRef} playsInline muted className="h-full w-full object-cover scale-x-[-1]" />
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-2 pt-5 text-[8px] font-black uppercase tracking-widest text-primary">You</div>
+            <div className="absolute right-2 top-2 rounded-full bg-black/65 p-1 text-white/70"><Mic className="h-3 w-3" /></div>
+          </div>
 
-      <GlassCard className="p-5 border-primary/30 bg-primary/[0.05] mb-4 text-center">
-        <div className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-2">Coach Call</div>
-        <div className="text-3xl font-black italic uppercase text-primary tracking-tight min-h-[2.5rem]">
-          {phase === 'setup' ? <Loader2 className="w-8 h-8 animate-spin mx-auto" /> : currentCommand || '…'}
-        </div>
-      </GlassCard>
+          {error && <div className="absolute left-3 right-3 top-14 rounded-xl border border-red-500/40 bg-black/80 p-3 text-[10px] font-semibold text-red-300">{error}</div>}
+          {opponentLeft && <div className="absolute inset-x-3 top-1/2 -translate-y-1/2 rounded-2xl border border-orange-400/40 bg-black/90 p-4 text-center text-[11px] font-semibold text-orange-200">{opponentLeftReason}<button onClick={() => router.push('/spar')} className="mt-3 block w-full rounded-xl bg-primary px-3 py-2 text-[10px] font-black uppercase tracking-widest text-black">Exit to lobby</button></div>}
+        </section>
 
-      {phase === 'live' && (
-        <NeonButton className="w-full h-16 text-base" onClick={registerHit}>
-          CAMERA AUTO-DETECT <span className="text-[9px] opacity-60">MANUAL FALLBACK</span>
-        </NeonButton>
-      )}
+        <section className="mt-2 shrink-0 rounded-2xl border border-amber-400/45 bg-black/85 p-3 shadow-[0_0_20px_rgba(245,158,11,0.08)]">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-amber-400"><Swords className="h-3 w-3" /> AI Coach Commands</span>
+            <span className="rounded border border-white/15 px-2 py-1 text-[7px] font-mono uppercase tracking-widest text-white/55">{phase === 'submitting' ? 'Uploading' : 'Live sequence'}</span>
+          </div>
+          <div className="grid grid-cols-4 gap-1.5">
+            {['JAB', 'CROSS', 'SLIP R', 'L-HOOK'].map((command, index) => <div key={command} className={`rounded-lg border px-1 py-2 text-center ${currentCommand.toUpperCase().includes(command.replace('SLIP R', 'SLIP RIGHT').replace('L-HOOK', 'HOOK')) ? 'border-primary bg-primary/15 text-primary' : 'border-white/10 bg-white/[0.03] text-white/45'}`}><span className="block text-[7px] font-mono">0{index + 1}</span><span className="text-[9px] font-black uppercase">{command}</span><span className="block text-[6px] uppercase">{index === 0 ? 'Hit' : index === 1 ? 'Right hand' : 'Defense'}</span></div>)}
+          </div>
+          <div className="mt-2 flex items-center gap-2 text-[8px] font-semibold text-white/60"><span className="text-primary">✦</span>{phase === 'setup' ? 'Connecting to your opponent…' : currentCommand ? `Execute ${currentCommand} now` : 'Stay light, keep your guard high.'}</div>
+        </section>
 
-      {phase === 'submitting' && (
-        <div className="flex items-center justify-center gap-2 text-primary font-black text-xs uppercase tracking-widest py-4">
-          <Loader2 className="w-4 h-4 animate-spin" /> Waiting for opponent…
-        </div>
-      )}
+        <footer className="mt-2 flex items-center gap-2 rounded-2xl border border-white/10 bg-[#171a19] p-2 shrink-0">
+          <button onClick={forfeit} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#ff3b3b] text-[11px] font-black uppercase tracking-widest text-white shadow-[0_4px_16px_rgba(255,59,59,0.25)]"><Flag className="h-4 w-4" /> Surrender</button>
+          <button onClick={() => { const next = !voiceEnabledRef.current; voiceEnabledRef.current = next; setVoiceEnabled(next); if (!next) window.speechSynthesis?.cancel(); }} aria-label={voiceEnabled ? 'Mute coach voice' : 'Enable coach voice'} className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/15 bg-white/[0.06] text-white/75">{voiceEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}</button>
+          <button onClick={() => setShowSettings((open) => !open)} aria-label="Open spar settings" className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/15 bg-white/[0.06] text-white/75"><Settings className="h-4 w-4" /></button>
+        </footer>
+        {showSettings && <div className="absolute bottom-20 right-3 z-30 rounded-xl border border-white/15 bg-[#161a18] p-3 text-[9px] font-black uppercase tracking-widest text-white/70 shadow-2xl"><button onClick={() => { const next = !voiceEnabledRef.current; voiceEnabledRef.current = next; setVoiceEnabled(next); if (!next) window.speechSynthesis?.cancel(); }} className="flex items-center gap-2">{voiceEnabled ? <Mic className="h-3.5 w-3.5 text-primary" /> : <MicOff className="h-3.5 w-3.5 text-red-400" />} Coach voice {voiceEnabled ? 'on' : 'off'}</button></div>}
+      </main>
     </div>
   );
 }
