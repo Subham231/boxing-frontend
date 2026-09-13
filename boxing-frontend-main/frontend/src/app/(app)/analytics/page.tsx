@@ -26,12 +26,42 @@ import { useRankState } from '@/lib/rank-client';
 
 interface VisionSession {
   date: string;
+  mode?: 'punches' | 'defense' | 'freestyle';
   punches: number;
+  hits?: number;
+  misses?: number;
+  attempted?: number;
   score: number;
   reflex_tier: string;
   avg_reflex_ms: number;
+  accuracy: number;
+  power_score?: number;
+  tracking_score?: number;
+  reflex_score?: number;
+  rotation_score?: number;
+  hip_rotation_score?: number;
+  torso_rotation_score?: number;
+  knee_drive_score?: number;
+  weight_transfer_score?: number;
+  foot_pivot_score?: number;
+  head_lateral_score?: number;
+  head_drop_score?: number;
+  trajectory_accuracy?: number;
   flaw: string;
   advice: string;
+  detailed_flaws?: Array<{
+    techniqueLabel: string;
+    measuredValue: number;
+    targetValue: number;
+    severity: string;
+    cause: string;
+    coachingTip: string;
+    correctiveExercise: string;
+    recommendedFrequency: string;
+    progressionTarget: string;
+    sampleSize: number;
+  }>;
+  technique_summaries?: Array<{ label: string; avgScore: number; sampleSize: number }>;
   raw_data?: {
     drill_data?: Array<{
       command: string;
@@ -39,6 +69,24 @@ interface VisionSession {
       reflex_time_ms: number;
       extension_speed_ms: number;
       form_notes: string;
+    }>;
+    reps?: Array<{
+      index: number;
+      command: string;
+      kind: 'punch' | 'defense';
+      hit: boolean;
+      reactionMs: number | null;
+      peakVelocity: number;
+      estimatedPower: number;
+      torsoRotationScore: number;
+      hipRotationScore: number;
+      kneeDriveScore: number;
+      weightTransferScore: number;
+      footPivotScore: number;
+      headLateralScore: number;
+      headDropScore: number;
+      trajectory: string;
+      trajectoryMatch: boolean;
     }>;
   };
 }
@@ -52,6 +100,65 @@ interface PlannerSession {
   date: string;
   name: string;
   impact: string;
+}
+
+interface HexMetric {
+  label: string;
+  value: number;
+}
+
+function HexagonGraph({ metrics, accent = '#e2ff3b' }: { metrics: HexMetric[]; accent?: string }) {
+  const size = 240;
+  const center = size / 2;
+  const radius = 78;
+  const angleFor = (index: number) => (-Math.PI / 2) + (index * Math.PI * 2) / 6;
+  const point = (index: number, scale: number) => {
+    const angle = angleFor(index);
+    return `${(center + Math.cos(angle) * radius * scale).toFixed(1)},${(center + Math.sin(angle) * radius * scale).toFixed(1)}`;
+  };
+  const outline = Array.from({ length: 6 }, (_, index) => point(index, 1)).join(' ');
+  const rings = [0.33, 0.66, 1].map((scale) => (
+    <polygon key={scale} points={Array.from({ length: 6 }, (_, index) => point(index, scale)).join(' ')} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="1" />
+  ));
+  const values = Array.from({ length: 6 }, (_, index) => metrics[index]?.value ?? 0);
+  const dataPoints = values.map((value, index) => point(index, Math.max(0.04, Math.min(100, value)) / 100)).join(' ');
+
+  return (
+    <div className="flex items-center justify-center gap-4 py-1">
+      <div className="relative w-[240px] h-[240px] shrink-0">
+        <svg viewBox={`0 0 ${size} ${size}`} className="w-full h-full" role="img" aria-label="Six-axis biomechanics graph">
+          <polygon points={outline} fill="rgba(255,255,255,0.015)" stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
+          {rings}
+          {Array.from({ length: 6 }, (_, index) => (
+            <line key={index} x1={center} y1={center} x2={point(index, 1).split(',')[0]} y2={point(index, 1).split(',')[1]} stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
+          ))}
+          <polygon points={dataPoints} fill={`${accent}22`} stroke={accent} strokeWidth="2" />
+          {values.map((value, index) => {
+            const [x, y] = point(index, Math.max(0.04, Math.min(100, value)) / 100).split(',');
+            return <circle key={index} cx={x} cy={y} r="3.5" fill={accent} stroke="#090b0d" strokeWidth="2" />;
+          })}
+        </svg>
+        {metrics.slice(0, 6).map((metric, index) => {
+          const angle = angleFor(index);
+          const x = 50 + Math.cos(angle) * 48;
+          const y = 50 + Math.sin(angle) * 48;
+          return (
+            <span key={metric.label} className="absolute -translate-x-1/2 -translate-y-1/2 text-[7px] font-black uppercase tracking-wider text-white/50 whitespace-nowrap" style={{ left: `${x}%`, top: `${y}%` }}>
+              {metric.label}
+            </span>
+          );
+        })}
+      </div>
+      <div className="hidden sm:flex flex-col gap-2 min-w-[92px]">
+        {metrics.slice(0, 6).map((metric) => (
+          <div key={metric.label} className="flex items-center justify-between gap-2 text-[8px] font-mono">
+            <span className="text-white/40 uppercase">{metric.label}</span>
+            <span className="font-black" style={{ color: accent }}>{Math.round(metric.value)}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export default function AnalyticsPage() {
@@ -714,6 +821,96 @@ export default function AnalyticsPage() {
                   </GlassCard>
                 </div>
 
+                <GlassCard className="p-5 border-white/5 bg-black/40">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[9px] font-black text-primary tracking-widest uppercase">
+                      Biomechanics Summary
+                    </span>
+                    <span className="text-[8px] font-black text-white/40 uppercase tracking-wider">
+                      {(activeVision.mode || 'punches').toUpperCase()} MODE
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {[
+                      ...(activeVision.mode === 'defense'
+                        ? [
+                            ['Head Lateral', activeVision.head_lateral_score],
+                            ['Head Drop', activeVision.head_drop_score],
+                          ]
+                        : [
+                            ['Power', activeVision.power_score],
+                            ['Hip Rotation', activeVision.hip_rotation_score],
+                            ['Torso Rotation', activeVision.torso_rotation_score],
+                            ['Knee Drive', activeVision.knee_drive_score],
+                            ['Weight Transfer', activeVision.weight_transfer_score],
+                            ['Foot Pivot', activeVision.foot_pivot_score],
+                            ['Trajectory', activeVision.trajectory_accuracy],
+                          ]),
+                    ].filter((metric): metric is [string, number] => typeof metric[1] === 'number').map(([label, value]) => (
+                      <div key={label} className="bg-black/40 border border-white/5 rounded-xl p-3">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[7px] font-black text-white/40 uppercase tracking-wider">{label}</span>
+                          <span className="text-[10px] font-black text-primary">{value}%</span>
+                        </div>
+                        <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                          <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(100, Math.max(0, value))}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 mt-3">
+                    {[
+                      ['Hits', activeVision.hits ?? activeVision.punches],
+                      ['Misses', activeVision.misses ?? 0],
+                      ['Accuracy', activeVision.accuracy],
+                    ].map(([label, value]) => (
+                      <div key={label} className="text-center border border-white/5 rounded-xl py-2">
+                        <div className="text-xs font-black text-white">{value}{label === 'Accuracy' ? '%' : ''}</div>
+                        <span className="text-[6px] font-black text-white/35 uppercase tracking-wider">{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </GlassCard>
+
+                {activeVision.detailed_flaws && activeVision.detailed_flaws.length > 0 && (
+                  <GlassCard className="p-5 border-white/5 bg-black/40">
+                    <span className="text-[9px] font-black text-primary tracking-widest uppercase block mb-3">
+                      Measured Coaching Opportunities
+                    </span>
+                    <div className="flex flex-col gap-3">
+                      {activeVision.detailed_flaws.map((flaw, idx) => (
+                        <div key={`${flaw.techniqueLabel}-${idx}`} className="border border-white/5 bg-white/[0.02] rounded-xl p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[10px] font-black text-white uppercase">{flaw.techniqueLabel}</span>
+                            <span className="text-[7px] font-black text-orange-400 uppercase">{flaw.severity}</span>
+                          </div>
+                          <p className="text-[9px] text-white/55 leading-snug mt-1">
+                            {flaw.cause} <span className="text-white/30">({flaw.measuredValue}% measured vs {flaw.targetValue}% target, {flaw.sampleSize} reps)</span>
+                          </p>
+                          <p className="text-[9px] text-primary font-bold mt-1">Fix: {flaw.coachingTip}</p>
+                          <p className="text-[8px] text-white/35 mt-1">{flaw.correctiveExercise} | {flaw.recommendedFrequency} | {flaw.progressionTarget}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </GlassCard>
+                )}
+
+                {activeVision.technique_summaries && activeVision.technique_summaries.length > 0 && (
+                  <GlassCard className="p-5 border-white/5 bg-black/40">
+                    <span className="text-[9px] font-black text-primary tracking-widest uppercase block mb-3">
+                      Technique Merits
+                    </span>
+                    <div className="flex flex-col gap-2">
+                      {activeVision.technique_summaries.map((summary, idx) => (
+                        <div key={`${summary.label}-${idx}`} className="flex items-center justify-between border border-white/5 rounded-xl px-3 py-2">
+                          <span className="text-[9px] font-black text-white/75 uppercase">{summary.label}</span>
+                          <span className="text-[9px] font-black text-primary">{summary.avgScore}% <span className="text-white/30">/ {summary.sampleSize} reps</span></span>
+                        </div>
+                      ))}
+                    </div>
+                  </GlassCard>
+                )}
+
                 {/* Precision Breakdown */}
                 <div className="flex flex-col gap-4">
                   <span className="text-[10px] font-black tracking-[2px] text-white uppercase select-none">
@@ -759,6 +956,36 @@ export default function AnalyticsPage() {
                     )}
                   </div>
                 </div>
+
+                {activeVision.raw_data?.reps && activeVision.raw_data.reps.length > 0 && (
+                  <GlassCard className="p-5 border-white/5 bg-black/40">
+                    <span className="text-[9px] font-black text-primary tracking-widest uppercase block mb-1">
+                      Complete Measurement Log
+                    </span>
+                    <p className="text-[8px] text-white/30 uppercase tracking-wider mb-3">
+                      Every stored rep, including the measured motion signals
+                    </p>
+                    <div className="overflow-x-auto">
+                      <div className="min-w-[620px] flex flex-col gap-1.5">
+                        <div className="grid grid-cols-8 gap-2 px-2 text-[7px] font-black text-white/30 uppercase tracking-wider">
+                          <span>Rep</span><span>Call</span><span>Result</span><span>Power</span><span>Hip</span><span>Torso</span><span>Legs</span><span>Head</span>
+                        </div>
+                        {activeVision.raw_data.reps.map((rep) => (
+                          <div key={rep.index} className="grid grid-cols-8 gap-2 items-center px-2 py-2 rounded-lg bg-black/40 border border-white/5 text-[8px] font-mono">
+                            <span className="text-white/35">{rep.index}</span>
+                            <span className="text-white/75 uppercase">{rep.command}</span>
+                            <span className={rep.hit ? 'text-primary' : 'text-red-400'}>{rep.hit ? 'HIT' : 'MISS'}</span>
+                            <span className="text-white/60">{rep.estimatedPower}%</span>
+                            <span className="text-white/60">{rep.hipRotationScore}%</span>
+                            <span className="text-white/60">{rep.torsoRotationScore}%</span>
+                            <span className="text-white/60">{rep.kneeDriveScore}%</span>
+                            <span className="text-white/60">{rep.kind === 'defense' ? `${rep.headLateralScore}/${rep.headDropScore}` : rep.trajectory}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </GlassCard>
+                )}
 
                 {/* Session select dropdown overlay */}
                 {visionHistory.length > 1 && (

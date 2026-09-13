@@ -1483,9 +1483,9 @@ export default function VisionPage() {
         return;
       }
 
-      const pool = modeRef.current === 'punches'
-        ? PUNCH_COMMANDS
-        : [...PUNCH_COMMANDS, ...DEFENSE_COMMANDS];
+      const pool = modeRef.current === 'defense'
+        ? DEFENSE_COMMANDS
+        : PUNCH_COMMANDS;
       const cmd = pool[Math.floor(Math.random() * pool.length)];
 
       setActiveCommand(cmd.text);
@@ -1829,13 +1829,31 @@ export default function VisionPage() {
       // pulled straight from the actual computed results, nothing invented.
       logVisionSession({
         date: new Date().toISOString(),
+        mode: resultsData.isFreestyle ? 'freestyle' : modeRef.current,
         punches: resultsData.log.filter((r: RepLogEntry) => r.kind === 'punch').length,
+        hits: resultsData.hits,
+        misses: resultsData.misses,
+        attempted: resultsData.hits + resultsData.misses,
         score: resultsData.overallScore,
         reflex_tier: resultsData.avgReflex ? getReflexTier(resultsData.avgReflex / 1000) : '--',
         avg_reflex_ms: resultsData.avgReflex ?? 0,
         accuracy: resultsData.accuracy,
+        power_score: resultsData.powerScore,
+        tracking_score: resultsData.stanceScore,
+        reflex_score: resultsData.reflexScore,
+        rotation_score: resultsData.rotationScore,
+        hip_rotation_score: resultsData.hipRotationScore,
+        torso_rotation_score: resultsData.torsoRotationScore,
+        knee_drive_score: resultsData.kneeDriveScore,
+        weight_transfer_score: resultsData.weightTransferScore,
+        foot_pivot_score: resultsData.footPivotScore,
+        head_lateral_score: resultsData.headLateralScore,
+        head_drop_score: resultsData.headDropScore,
+        trajectory_accuracy: resultsData.trajectoryAccuracy,
         flaw: resultsData.flaw,
         advice: resultsData.advice,
+        detailed_flaws: resultsData.detailedFlaws,
+        technique_summaries: resultsData.techniqueSummaries,
         raw_data: {
           drill_data: resultsData.log.map((r: RepLogEntry) => ({
             command: r.command,
@@ -1844,6 +1862,7 @@ export default function VisionPage() {
             extension_speed_ms: r.reactionMs ?? 0,
             form_notes: r.hit ? 'Clean strike, on time.' : 'Missed — no clean strike detected within the window.',
           })),
+          reps: resultsData.log,
         },
       });
 
