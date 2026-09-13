@@ -15,11 +15,22 @@ export async function POST(
     return NextResponse.json({ error: 'Database not configured.' }, { status: 500 });
   }
 
-  const { data: match } = await supabaseAdmin
+  let { data: match, error: matchErr } = await supabaseAdmin
     .from('spar_matches')
-    .select('id, player_a_uid, player_b_uid, status')
+    .select('id, player_a_uid, player_b_uid, status, match_started_at')
     .eq('id', params.matchId)
     .maybeSingle();
+
+  // Degrade gracefully if the synced-clock migration has not been applied.
+  if (matchErr) {
+    console.error('[spar/ready] match_started_at column missing — apply supabase/reflex-schema-v22.sql', matchErr);
+    const fallback = await supabaseAdmin
+      .from('spar_matches')
+      .select('id, player_a_uid, player_b_uid, status')
+      .eq('id', params.matchId)
+      .maybeSingle();
+    match = fallback.data ? { ...fallback.data, match_started_at: null } : null;
+  }
 
   if (!match) return NextResponse.json({ error: 'Match not found.' }, { status: 404 });
   if (match.player_a_uid !== auth.uid && match.player_b_uid !== auth.uid) {
@@ -28,6 +39,36 @@ export async function POST(
 
   if (match.status === 'pending') {
     await supabaseAdmin.from('spar_matches').update({ status: 'active' }).eq('id', params.matchId);
+  }
+
+  // Set the shared command-clock origin once, then return the stored value to
+  // both fighters so their command sequence stays synchronized.
+  let matchStartedAt = match.match_started_at as string | null;
+  if (!matchStartedAt) {
+    const nowIso = new Date().toISOString();
+    try {
+      const { data: claimed, error: claimErr } = await supabaseAdmin
+        .from('spar_matches')
+        .update({ match_started_at: nowIso })
+        .eq('id', params.matchId)
+        .is('match_started_at', null)
+        .select('match_started_at')
+        .maybeSingle();
+      if (claimErr) throw claimErr;
+      if (claimed?.match_started_at) {
+        matchStartedAt = claimed.match_started_at;
+      } else {
+        const { data: refetched } = await supabaseAdmin
+          .from('spar_matches')
+          .select('match_started_at')
+          .eq('id', params.matchId)
+          .maybeSingle();
+        matchStartedAt = refetched?.match_started_at ?? nowIso;
+      }
+    } catch (e) {
+      console.error('[spar/ready] could not persist match_started_at — apply supabase/reflex-schema-v22.sql', e);
+      matchStartedAt = nowIso;
+    }
   }
 
   // Build ICE servers array with multiple STUN servers for better NAT traversal
@@ -67,5 +108,9 @@ export async function POST(
     });
   }
 
-  return NextResponse.json({ ok: true, iceServers });
+  return NextResponse.json({
+    ok: true,
+    iceServers,
+    matchStartedAtMs: new Date(matchStartedAt).getTime(),
+  });
 }

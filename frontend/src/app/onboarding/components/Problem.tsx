@@ -391,10 +391,10 @@ const Identity: React.FC = () => {
             <footer className="mt-3 flex flex-col gap-2">
                 <button
                     onClick={handleSignUp}
-                    disabled={checkingPhone}
+                    disabled={checkingEmail}
                     className="btn-primary w-full h-12 flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider disabled:opacity-50 shadow-[0_0_20px_rgba(226,255,59,0.3)]"
                 >
-                    {checkingPhone ? 'CHECKING NUMBER...' : 'CONFIRM & CONTINUE'} <ChevronRight size={16} />
+                    {checkingEmail ? 'CHECKING EMAIL...' : 'CONFIRM & CONTINUE'} <ChevronRight size={16} />
                 </button>
                 <button onClick={prevStep} className="text-[10px] font-black text-white/40 hover:text-white uppercase tracking-widest py-0.5 mx-auto">
                     Back

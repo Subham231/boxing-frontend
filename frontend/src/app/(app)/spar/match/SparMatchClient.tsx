@@ -89,22 +89,17 @@ export default function SparMatchClient() {
     return { Authorization: `Bearer ${await user.getIdToken()}`, 'Content-Type': 'application/json' };
   }, []);
 
+  // The coach uses the sparai voice pack only. Missing clips stay silent.
   const speak = (text: string) => {
     if (!voiceEnabledRef.current) return;
-    playVoiceEvent(text, () => {
-      try {
-        if (typeof window === 'undefined' || !window.speechSynthesis) return;
-        const u = new SpeechSynthesisUtterance(text);
-        u.rate = 1.05;
-        u.volume = 1;
-        u.pitch = 1;
-        window.speechSynthesis.cancel();
-        window.speechSynthesis.speak(u);
-      } catch { /* ignore */ }
-    });
+    try { window.speechSynthesis?.cancel(); } catch { /* ignore */ }
+    playVoiceEvent(text, () => { /* voice pack only */ });
   };
 
-  useEffect(() => { preloadVoicePack(); }, []);
+  useEffect(() => {
+    preloadVoicePack();
+    try { window.speechSynthesis?.cancel(); } catch { /* ignore */ }
+  }, []);
   useEffect(() => {
     const unlock = () => unlockVoicePack();
     window.addEventListener('pointerdown', unlock, { once: true });
@@ -303,6 +298,8 @@ export default function SparMatchClient() {
         });
         const readyData = await readyRes.json();
         const iceServers = readyData.iceServers || [{ urls: 'stun:stun.l.google.com:19302' }];
+        const matchStartedAtMs: number =
+          typeof readyData.matchStartedAtMs === 'number' ? readyData.matchStartedAtMs : Date.now();
 
         // Fail fast with an accurate message instead of letting the browser
         // throw an opaque error deep inside getUserMedia. Both of these are
@@ -440,7 +437,7 @@ export default function SparMatchClient() {
         setPhase('live');
         connected = true;
         window.clearTimeout(overallTimeout);
-        matchStartRef.current = Date.now();
+        matchStartRef.current = matchStartedAtMs;
         speak('Fight');
       } catch (e: any) {
         window.clearTimeout(overallTimeout);
