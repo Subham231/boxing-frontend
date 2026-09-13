@@ -111,6 +111,6 @@ export async function POST(
   return NextResponse.json({
     ok: true,
     iceServers,
-    matchStartedAtMs: new Date(matchStartedAt).getTime(),
+    matchStartedAtMs: matchStartedAt ? new Date(matchStartedAt).getTime() : Date.now(),
   });
 }
