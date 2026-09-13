@@ -3,7 +3,7 @@
 import React, { useState, useRef } from 'react';
 import { useOnboarding } from '@/context/OnboardingContext';
 import { Camera, Upload, ChevronRight, UserCircle2, Sparkles, Flame, Check } from 'lucide-react';
-import { checkPhoneExists } from '@/lib/firebase-auth';
+import { checkEmailExists } from '@/lib/firebase-auth';
 
 const RING_NAME_SUGGESTIONS = ['TITAN', 'SHADOW', 'VIPER', 'THUNDER', 'IRONCLAD', 'STRIKER'];
 const PROFESSION_SUGGESTIONS = ['Student', 'Engineer', 'Athlete', 'Entrepreneur', 'Doctor', 'Coach', 'Artist', 'Other'];
@@ -20,7 +20,7 @@ const Identity: React.FC = () => {
 
     const [signupError, setSignupError] = useState<string | null>(null);
     const [existingAccount, setExistingAccount] = useState(false);
-    const [checkingPhone, setCheckingPhone] = useState(false);
+    const [checkingEmail, setCheckingEmail] = useState(false);
 
     const startCamera = async () => {
         try {
@@ -97,7 +97,7 @@ const Identity: React.FC = () => {
         const age = Number(data.age) || 0;
         const profession = (data.profession || '').trim();
         const promiseWord = (data.promiseWord || '').trim();
-        const phone = (data.phone || '').trim();
+        const email = (data.email || '').trim();
 
         // 1. Name Validation: Mandatory, > 3 and < 20 limit
         if (!name) {
@@ -121,20 +121,20 @@ const Identity: React.FC = () => {
             return;
         }
 
-        // 4. Phone Validation: Mandatory
-        if (!phone || phone === '+91') {
-            setSignupError('Phone number is mandatory.');
+        // 4. Email Validation: Mandatory first signup identity
+        if (!email) {
+            setSignupError('Email address is mandatory.');
             return;
         }
-        if (!/^\+[1-9]\d{7,14}$/.test(phone)) {
-            setSignupError('Enter your phone number in valid international format, e.g. +919876543210.');
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            setSignupError('Enter a valid email address.');
             return;
         }
 
         setExistingAccount(false);
-        setCheckingPhone(true);
+        setCheckingEmail(true);
         try {
-            if (await checkPhoneExists(phone)) {
+            if (await checkEmailExists(email)) {
                 setExistingAccount(true);
                 setSignupError('You already have an account. Try logging in.');
                 return;
@@ -145,13 +145,13 @@ const Identity: React.FC = () => {
                 age: age,
                 profession: profession || 'Fighter',
                 promiseWord: promiseWord.toUpperCase(),
-                phone 
+                email
             });
             nextStep();
         } catch (e: any) {
-            setSignupError(e?.message || 'Could not verify phone number. Please try again.');
+            setSignupError(e?.message || 'Could not check email address. Please try again.');
         } finally {
-            setCheckingPhone(false);
+            setCheckingEmail(false);
         }
     };
 
@@ -160,17 +160,28 @@ const Identity: React.FC = () => {
             <header className="text-left mb-2">
                 <div className="flex items-center gap-1.5 mb-1 text-[9px] font-black text-primary uppercase tracking-widest">
                     <Sparkles size={12} />
-                    <span>STEP 01 ?" FIGHTER PROFILE</span>
+                    <span>STEP 01 — FIGHTER PROFILE</span>
                 </div>
                 <h1 className="text-2xl sm:text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
                     Setup your <span className="text-primary">Identity</span>
                 </h1>
                 <p className="text-white/60 text-xs mt-1 font-semibold leading-relaxed">
-                    Set up your athlete credentials to personalize your AI training protocol.
+                    Start with your email, then set up your athlete credentials for a personalized AI training protocol.
                 </p>
             </header>
 
             <main className="flex-1 flex flex-col gap-3.5 my-auto overflow-y-auto pr-0.5">
+                <div className="flex flex-col gap-1.5">
+                    <label className="text-[9px] font-black tracking-widest text-primary uppercase">Email Address</label>
+                    <input
+                        type="email"
+                        autoComplete="email"
+                        value={data.email || ''}
+                        onChange={(e) => updateData({ email: e.target.value })}
+                        placeholder="you@email.com"
+                        className="w-full bg-transparent border-b border-white/20 py-2 text-xl font-bold outline-none focus:border-primary transition-all tracking-tight"
+                    />
+                </div>
                 {/* Photo / Avatar Capture */}
                 <div className="flex flex-col gap-1.5">
                     <label className="text-[9px] font-black tracking-widest text-primary uppercase flex items-center justify-between">

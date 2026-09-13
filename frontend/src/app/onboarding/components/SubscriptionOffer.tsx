@@ -243,7 +243,7 @@ const SubscriptionOffer: React.FC = () => {
           </div>
         ) : (
           <div className="rounded-3xl border border-white/10 bg-black/30 p-4 text-[11px] font-semibold text-white/50 text-center">
-            Verify your phone first to unlock your referral code.
+            Verify your email first to unlock your referral code.
           </div>
         )}
       </main>
