@@ -24,6 +24,7 @@ import { completeSessionSecure } from '@/lib/rank-client';
 import { logVisionSession, getReflexTier } from '@/lib/session-log';
 import { firebaseAuth } from '@/lib/firebase';
 import { topSessionFlaws, summarizeTechniques, DetectedFlaw, FlawEngineRep } from '@/lib/coach/flawEngine';
+import { playVoiceEvent, preloadVoicePack } from '@/lib/voice-pack';
 
 // ---------------------------------------------------------------------------
 // Landmark indices we care about (MediaPipe Pose / BlazePose 33-point model)
@@ -545,6 +546,8 @@ export default function VisionPage() {
     window.speechSynthesis.onvoiceschanged = loadVoices;
   }, []);
 
+  useEffect(() => { preloadVoicePack(); }, []);
+
   const pickVoice = (profile: string): SpeechSynthesisVoice | undefined => {
     if (voiceForProfileRef.current[profile]) return voiceForProfileRef.current[profile];
     const voices = voicesCacheRef.current.length ? voicesCacheRef.current : (synthRef.current?.getVoices() ?? []);
@@ -572,47 +575,47 @@ export default function VisionPage() {
   // that are genuinely synced to what the fighter hears, not to network/
   // engine latency, which can be 100-500ms on remote "Online" voices.
   const speakCommand = (text: string, onStart?: () => void, onEnd?: () => void) => {
-    if (!synthRef.current || isMutedRef.current) {
+    if (isMutedRef.current) {
       onStart?.();
       onEnd?.();
       return;
     }
-    try {
-      synthRef.current.cancel();
-      const utterance = new SpeechSynthesisUtterance(normalizeForSpeech(text));
-      const profile = voiceProfileRef.current;
-      const voice = pickVoice(profile);
-      if (voice) {
-        utterance.voice = voice;
-        utterance.lang = voice.lang;
-      }
-      
-      // Maximum projection settings for long distance (10-15ft away)
-      utterance.volume = 1.0; // 100% max hardware volume output
-      const baseRate = difficultyRef.current === 'hard' ? 1.05 : difficultyRef.current === 'easy' ? 0.85 : 0.95;
-      utterance.rate = profile === 'steel' ? baseRate * 0.9 : profile === 'athena' ? baseRate * 1.08 : baseRate * 1.18;
-      utterance.pitch = profile === 'steel' ? 0.78 : profile === 'athena' ? 1.28 : 1.65;
-
-      let fired = false;
-      const fireStart = () => {
-        if (fired) return;
-        fired = true;
+    const fallback = () => {
+      if (!synthRef.current) {
         onStart?.();
-      };
-      utterance.onstart = fireStart;
-      utterance.onend = () => onEnd?.();
-      utterance.onerror = () => {
-        fireStart();
         onEnd?.();
-      };
-      synthRef.current.speak(utterance);
-      // Safety net: cap wait to prevent desync
-      setTimeout(fireStart, 150);
-    } catch (e) {
-      console.warn('Speech failed:', e);
-      onStart?.();
-      onEnd?.();
-    }
+        return;
+      }
+      try {
+        synthRef.current.cancel();
+        const utterance = new SpeechSynthesisUtterance(normalizeForSpeech(text));
+        const profile = voiceProfileRef.current;
+        const voice = pickVoice(profile);
+        if (voice) {
+          utterance.voice = voice;
+          utterance.lang = voice.lang;
+        }
+        utterance.volume = 1.0;
+        const baseRate = difficultyRef.current === 'hard' ? 1.05 : difficultyRef.current === 'easy' ? 0.85 : 0.95;
+        utterance.rate = profile === 'steel' ? baseRate * 0.9 : profile === 'athena' ? baseRate * 1.08 : baseRate * 1.18;
+        utterance.pitch = profile === 'steel' ? 0.78 : profile === 'athena' ? 1.28 : 1.65;
+        let fired = false;
+        const fireStart = () => {
+          if (fired) return;
+          fired = true;
+          onStart?.();
+        };
+        utterance.onstart = fireStart;
+        utterance.onend = () => onEnd?.();
+        utterance.onerror = () => { fireStart(); onEnd?.(); };
+        synthRef.current.speak(utterance);
+        setTimeout(fireStart, 150);
+      } catch {
+        onStart?.();
+        onEnd?.();
+      }
+    };
+    playVoiceEvent(text, fallback, onStart, onEnd);
   };
 
   // -------------------------------------------------------------------------

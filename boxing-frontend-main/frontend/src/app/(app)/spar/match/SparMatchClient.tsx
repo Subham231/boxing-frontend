@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Loader2, Swords, Flag, Mic, MicOff, Settings, Volume2, VolumeX } from 'lucide-react';
 import { firebaseAuth } from '@/lib/firebase';
 import { supabase } from '@/lib/supabase';
+import { playVoiceEvent, preloadVoicePack } from '@/lib/voice-pack';
 
 type SparCommand = { command: string; kind: 'punch' | 'defense'; callAtMs: number };
 const PUNCH_EXTEND_DEG = 155;
@@ -68,6 +69,7 @@ export default function SparMatchClient() {
   const [opponentLeft, setOpponentLeft] = useState(false);
   const [opponentLeftReason, setOpponentLeftReason] = useState('Opponent left the match.');
   const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [micEnabled, setMicEnabled] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const voiceEnabledRef = useRef(true);
 
@@ -78,14 +80,19 @@ export default function SparMatchClient() {
   }, []);
 
   const speak = (text: string) => {
-    try {
-      if (!voiceEnabledRef.current || typeof window === 'undefined' || !window.speechSynthesis) return;
-      const u = new SpeechSynthesisUtterance(text);
-      u.rate = 1.05;
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(u);
-    } catch { /* ignore */ }
+    if (!voiceEnabledRef.current) return;
+    playVoiceEvent(text, () => {
+      try {
+        if (typeof window === 'undefined' || !window.speechSynthesis) return;
+        const u = new SpeechSynthesisUtterance(text);
+        u.rate = 1.05;
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(u);
+      } catch { /* ignore */ }
+    });
   };
+
+  useEffect(() => { preloadVoicePack(); }, []);
 
   const cleanup = useCallback(() => {
     try {
@@ -542,6 +549,14 @@ export default function SparMatchClient() {
     }
   };
 
+  const toggleMicrophone = () => {
+    const next = !micEnabled;
+    localStreamRef.current?.getAudioTracks().forEach((track) => {
+      track.enabled = next;
+    });
+    setMicEnabled(next);
+  };
+
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-[#050706] text-white font-sans">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,rgba(33,55,43,0.22),transparent_58%)]" />
@@ -581,7 +596,7 @@ export default function SparMatchClient() {
           <div className="absolute bottom-3 right-3 h-[31%] w-[31%] min-h-[120px] min-w-[96px] overflow-hidden rounded-2xl border-2 border-primary bg-black shadow-[0_0_22px_rgba(226,255,59,0.28)]">
             <video ref={localVideoRef} playsInline muted className="h-full w-full object-cover scale-x-[-1]" />
             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-2 pt-5 text-[8px] font-black uppercase tracking-widest text-primary">You</div>
-            <div className="absolute right-2 top-2 rounded-full bg-black/65 p-1 text-white/70"><Mic className="h-3 w-3" /></div>
+            <div className={`absolute right-2 top-2 rounded-full p-1 ${micEnabled ? 'bg-black/65 text-white/70' : 'bg-red-500/80 text-white'}`}><span className="sr-only">Microphone {micEnabled ? 'on' : 'off'}</span>{micEnabled ? <Mic className="h-3 w-3" /> : <MicOff className="h-3 w-3" />}</div>
           </div>
 
           {error && <div className="absolute left-3 right-3 top-14 rounded-xl border border-red-500/40 bg-black/80 p-3 text-[10px] font-semibold text-red-300">{error}</div>}
@@ -601,10 +616,10 @@ export default function SparMatchClient() {
 
         <footer className="mt-2 flex items-center gap-2 rounded-2xl border border-white/10 bg-[#171a19] p-2 shrink-0">
           <button onClick={forfeit} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-[#ff3b3b] text-[11px] font-black uppercase tracking-widest text-white shadow-[0_4px_16px_rgba(255,59,59,0.25)]"><Flag className="h-4 w-4" /> Surrender</button>
-          <button onClick={() => { const next = !voiceEnabledRef.current; voiceEnabledRef.current = next; setVoiceEnabled(next); if (!next) window.speechSynthesis?.cancel(); }} aria-label={voiceEnabled ? 'Mute coach voice' : 'Enable coach voice'} className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/15 bg-white/[0.06] text-white/75">{voiceEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}</button>
+          <button onClick={toggleMicrophone} aria-label={micEnabled ? 'Mute microphone' : 'Unmute microphone'} className={`flex h-12 w-12 items-center justify-center rounded-xl border border-white/15 ${micEnabled ? 'bg-white/[0.06] text-white/75' : 'bg-red-500/20 text-red-300 border-red-500/40'}`}>{micEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}</button>
           <button onClick={() => setShowSettings((open) => !open)} aria-label="Open spar settings" className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/15 bg-white/[0.06] text-white/75"><Settings className="h-4 w-4" /></button>
         </footer>
-        {showSettings && <div className="absolute bottom-20 right-3 z-30 rounded-xl border border-white/15 bg-[#161a18] p-3 text-[9px] font-black uppercase tracking-widest text-white/70 shadow-2xl"><button onClick={() => { const next = !voiceEnabledRef.current; voiceEnabledRef.current = next; setVoiceEnabled(next); if (!next) window.speechSynthesis?.cancel(); }} className="flex items-center gap-2">{voiceEnabled ? <Mic className="h-3.5 w-3.5 text-primary" /> : <MicOff className="h-3.5 w-3.5 text-red-400" />} Coach voice {voiceEnabled ? 'on' : 'off'}</button></div>}
+        {showSettings && <div className="absolute bottom-20 right-3 z-30 rounded-xl border border-white/15 bg-[#161a18] p-3 text-[9px] font-black uppercase tracking-widest text-white/70 shadow-2xl"><button onClick={() => { const next = !voiceEnabledRef.current; voiceEnabledRef.current = next; setVoiceEnabled(next); if (!next) window.speechSynthesis?.cancel(); }} className="flex items-center gap-2">{voiceEnabled ? <Volume2 className="h-3.5 w-3.5 text-primary" /> : <VolumeX className="h-3.5 w-3.5 text-red-400" />} Coach voice {voiceEnabled ? 'on' : 'off'}</button></div>}
       </main>
     </div>
   );
