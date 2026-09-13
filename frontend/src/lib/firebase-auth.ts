@@ -353,6 +353,9 @@ export async function resendVerificationEmail(user: User): Promise<void> {
  */
 export async function refreshEmailVerified(user: User): Promise<boolean> {
   await reload(user);
+  // The ID token can still contain the pre-verification claim after reload.
+  // Force a fresh token before protected profile APIs inspect email_verified.
+  await user.getIdToken(true);
   return user.emailVerified;
 }
 

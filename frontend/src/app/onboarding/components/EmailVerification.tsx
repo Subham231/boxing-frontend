@@ -9,6 +9,7 @@ import {
   signUpWithEmail,
   resendVerificationEmail,
   refreshEmailVerified,
+  ensureUserProfile,
   saveProfileDetails,
   formatEmailAuthError,
 } from '@/lib/firebase-auth';
@@ -94,6 +95,10 @@ const EmailVerification: React.FC = () => {
         return;
       }
 
+      // Create the private profile row first. Email signup creates the
+      // Firebase account before verification, while profile details are
+      // intentionally stored only after the verified token is accepted.
+      await ensureUserProfile(user);
       const avatar = typeof window !== 'undefined' ? localStorage.getItem('boxing_user_avatar') || undefined : undefined;
       const savedProfile = await saveProfileDetails(user, {
         displayName: data.ringName,

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyFirebaseIdToken } from '@/lib/server/firebase-admin';
 import { supabaseAdmin } from '@/lib/server/supabase-admin';
+import { requireVerifiedFirebaseUid } from '@/lib/server/require-firebase';
 
 export const runtime = 'nodejs';
 
@@ -9,18 +9,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Server not configured.' }, { status: 500 });
   }
 
-  const authHeader = req.headers.get('authorization') || '';
-  const idToken = authHeader.replace('Bearer ', '');
-  if (!idToken) {
-    return NextResponse.json({ error: 'Missing auth token.' }, { status: 401 });
-  }
-
-  let decoded;
-  try {
-    decoded = await verifyFirebaseIdToken(idToken);
-  } catch {
-    return NextResponse.json({ error: 'Invalid or expired token.' }, { status: 401 });
-  }
+  const auth = await requireVerifiedFirebaseUid(req);
+  if ('error' in auth) return auth.error;
 
   const body = await req.json().catch(() => ({}));
   const onboardingData = body.onboardingData && typeof body.onboardingData === 'object' ? body.onboardingData : undefined;
@@ -52,7 +42,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ updated: false, reason: 'Nothing to update.' });
   }
 
-  const { data, error } = await supabaseAdmin.from('reflex_profiles').update(update).eq('uid', decoded.uid).select('*').maybeSingle();
+  const { data, error } = await supabaseAdmin
+    .from('reflex_profiles')
+    .update(update)
+    .eq('uid', auth.uid)
+    .select('*')
+    .maybeSingle();
   if (error) {
     return NextResponse.json({ updated: false, error: error.message }, { status: 500 });
   }
