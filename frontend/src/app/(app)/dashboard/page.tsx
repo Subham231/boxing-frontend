@@ -7,33 +7,19 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Flame, 
   Play, 
-  Calendar, 
   Zap, 
   Brain, 
-  User, 
-  Trophy, 
   Target, 
   Check, 
   Activity,
   ChevronRight,
-  Sparkles,
   Award,
   Swords
 } from 'lucide-react';
-import {
-  SwordsNeonIcon,
-  FlameNeonIcon,
-  TargetNeonIcon,
-  ZapNeonIcon,
-  BrainNeonIcon,
-  TrophyNeonIcon,
-} from '@/components/ui/NeonIcons';
 import { getDailyWorkout } from '@/lib/workout-data';
 import { StreakManager } from '@/lib/streak-manager';
-import { useFirebaseUser } from '@/lib/useFirebaseUser';
 import { useRankState } from '@/lib/rank-client';
 import { useMyProfile } from '@/lib/profile-client';
-import WeeklyLeaderboard from '@/components/reflex/WeeklyLeaderboard';
 import { ProgressRing } from '@/components/ui/ProgressRing';
 import { RankBadge } from '@/components/ui/RankBadge';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -41,13 +27,10 @@ import { NeonButton } from '@/components/ui/NeonButton';
 import WelcomeIntro, { WELCOME_INTRO_KEY } from '@/components/tutorial/WelcomeIntro';
 import SpotlightTour, { TourStep } from '@/components/tutorial/SpotlightTour';
 import { SparFreePromoModal } from '@/components/ui/SparFreePromoModal';
-import { HomePromoDealsBanner } from '@/components/ui/HomePromoDealsBanner';
-import { FeatureShowcaseTemplates } from '@/components/dashboard/FeatureShowcaseTemplates';
 
 const TUTORIAL_DONE_KEY = 'boxing_tutorial_done';
 
 export default function DashboardPage() {
-  const { user: fbUser } = useFirebaseUser();
   const { rankState } = useRankState();
   const { profile: myProfile } = useMyProfile();
   const router = useRouter();
@@ -69,14 +52,6 @@ export default function DashboardPage() {
 
   // Get daily workout for today
   const todayWorkout = useMemo(() => getDailyWorkout(), []);
-
-  // Calculate greeting based on local time
-  const greeting = useMemo(() => {
-    const hours = new Date().getHours();
-    if (hours < 12) return 'MORNING';
-    if (hours < 18) return 'AFTERNOON';
-    return 'EVENING';
-  }, []);
 
   useEffect(() => {
     // Load onboarding data
@@ -225,16 +200,6 @@ export default function DashboardPage() {
       title: "Start Session",
       desc: "Tap this to begin your daily training drills. Each session keeps your streak alive!",
       selector: '.start-btn-ref',
-    },
-    {
-      title: "Skill Focus",
-      desc: "Your tactical power modules: GRIND for workouts, PLANNER for your weekly layout, REFLEX for speed, and GURU for techniques.",
-      selector: '.skills-ref',
-    },
-    {
-      title: "Live Analyser",
-      desc: "Record your workouts using our computer vision engine to analyse form, velocity & slip reaction in real-time.",
-      selector: '.analyser-ref',
     },
     {
       title: "Rank Tiers",
@@ -411,96 +376,6 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        {/* Live 1v1 Spar & Limited Deals Spotlight Banner */}
-        <HomePromoDealsBanner />
-
-        {/* Skill Focus Strips */}
-        <div>
-          <div className="flex items-center gap-3 mb-4 select-none">
-            <div className="h-px flex-1 bg-gradient-to-r from-transparent to-white/10" />
-            <span className="text-[9px] font-black tracking-[4px] text-white/30 uppercase">SKILL FOCUS</span>
-            <div className="h-px flex-1 bg-gradient-to-l from-transparent to-white/10" />
-          </div>
-
-          <div className="grid grid-cols-4 gap-3.5 skills-ref">
-            <Link 
-              href="/training" 
-              className="flex flex-col items-center gap-2 p-3 bg-black/40 border border-orange-500/20 rounded-2xl hover:border-orange-500/50 hover:bg-orange-500/10 transition-all duration-300 no-underline active:scale-95"
-            >
-              <div className="w-11 h-11 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-500 shadow-[0_0_12px_rgba(249,115,22,0.2)]">
-                <FlameNeonIcon className="w-5 h-5 text-orange-400" />
-              </div>
-              <span className="text-[9px] font-black tracking-wider text-orange-400 uppercase">GRIND</span>
-            </Link>
-
-            <Link 
-              href="/planner" 
-              className="flex flex-col items-center gap-2 p-3 bg-black/40 border border-purple-500/20 rounded-2xl hover:border-purple-500/50 hover:bg-purple-500/10 transition-all duration-300 no-underline active:scale-95"
-            >
-              <div className="w-11 h-11 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400 shadow-[0_0_12px_rgba(168,85,247,0.2)]">
-                <Calendar className="w-5 h-5 drop-shadow-[0_0_8px_rgba(168,85,247,0.7)]" />
-              </div>
-              <span className="text-[9px] font-black tracking-wider text-purple-400 uppercase">PLANNER</span>
-            </Link>
-
-            <Link 
-              href="/reflex" 
-              className="flex flex-col items-center gap-2 p-3 bg-black/40 border border-cyan-500/20 rounded-2xl hover:border-cyan-500/50 hover:bg-cyan-500/10 transition-all duration-300 no-underline active:scale-95"
-            >
-              <div className="w-11 h-11 rounded-xl bg-cyan-500/10 flex items-center justify-center text-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.2)]">
-                <ZapNeonIcon className="w-5 h-5 text-cyan-400" />
-              </div>
-              <span className="text-[9px] font-black tracking-wider text-cyan-400 uppercase">REFLEX</span>
-            </Link>
-
-            <Link 
-              href="/guru" 
-              className="flex flex-col items-center gap-2 p-3 bg-black/40 border border-pink-500/20 rounded-2xl hover:border-pink-500/50 hover:bg-pink-500/10 transition-all duration-300 no-underline active:scale-95"
-            >
-              <div className="w-11 h-11 rounded-xl bg-pink-500/10 flex items-center justify-center text-pink-400 shadow-[0_0_12px_rgba(236,72,153,0.2)]">
-                <BrainNeonIcon className="w-5 h-5 text-pink-400" />
-              </div>
-              <span className="text-[9px] font-black tracking-wider text-pink-400 uppercase">GURU</span>
-            </Link>
-          </div>
-        </div>
-
-        {/* Dynamic Theme Feature Showcase Templates */}
-        <FeatureShowcaseTemplates />
-
-        {/* Live Analyser banner */}
-        <div className="relative mt-2 analyser-ref">
-          <div className="absolute -top-3.5 right-6 z-10">
-            <div className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-gradient-to-r from-orange-500 to-yellow-400 text-[8px] font-black text-black tracking-widest shadow-[0_0_8px_rgba(249,115,22,0.3)] uppercase">
-              <Flame className="w-2.5 h-2.5 fill-black stroke-none" />
-              <span>{streak}D STREAK</span>
-            </div>
-          </div>
-          
-          <Link 
-            href="/vision"
-            className="flex items-center justify-between p-5 bg-black/40 border border-primary/20 rounded-3xl hover:border-primary/50 hover:bg-primary/5 transition-all duration-300 shadow-[0_0_20px_rgba(226,255,59,0.05)] no-underline group"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center text-primary group-hover:scale-110 transition-transform duration-300">
-                <Zap className="w-5 h-5 animate-pulse" />
-              </div>
-              <div>
-                <span className="text-[9px] font-black tracking-[2px] text-primary uppercase block mb-1">
-                  AI VISION SYSTEM
-                </span>
-                <h3 className="text-lg font-black uppercase text-white tracking-wide italic">
-                  LIVE ANALYSER
-                </h3>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-1.5 text-[9px] font-black text-white/40 tracking-wider">
-              <span className="text-primary font-black">ACTIVE</span>
-              <ChevronRight className="w-4 h-4 opacity-30 group-hover:translate-x-1 transition-transform" />
-            </div>
-          </Link>
-        </div>
       </div>
 
       {/* Tutorial Overlay Systems */}
