@@ -83,8 +83,8 @@ export function evaluateSessionFlaws(reps: FlawEngineRep[]): DetectedFlaw[] {
 
   const flaws: DetectedFlaw[] = [];
 
-  for (const [techniqueKey, techReps] of byTechnique.entries()) {
-    if (techReps.length < MIN_SAMPLE_SIZE) continue;
+  byTechnique.forEach((techReps, techniqueKey) => {
+    if (techReps.length < MIN_SAMPLE_SIZE) return;
     const mechanics = MECHANICS_DATABASE[techniqueKey];
 
     for (const rule of mechanics.flaws) {
@@ -107,7 +107,7 @@ export function evaluateSessionFlaws(reps: FlawEngineRep[]): DetectedFlaw[] {
         sampleSize: techReps.length,
       });
     }
-  }
+  });
 
   // Rank by severity first, then by how far below/above target (worse first).
   flaws.sort((a, b) => {
@@ -153,10 +153,10 @@ export function summarizeTechniques(reps: FlawEngineRep[]): TechniqueSummary[] {
   }
 
   const summaries: TechniqueSummary[] = [];
-  for (const [key, techReps] of byTechnique.entries()) {
+  byTechnique.forEach((techReps, key) => {
     const mechanics = MECHANICS_DATABASE[key];
     const targetEntries = Object.keys(mechanics.targets) as FlawMetric[];
-    if (targetEntries.length === 0) continue;
+    if (targetEntries.length === 0) return;
     // Primary metric = the technique's first/most defining target (e.g. hip
     // rotation for the cross, knee drive for the uppercut).
     const primaryMetric = targetEntries[0];
@@ -168,7 +168,7 @@ export function summarizeTechniques(reps: FlawEngineRep[]): TechniqueSummary[] {
       avgScore: Math.round(avg),
       sampleSize: techReps.length,
     });
-  }
+  });
 
   return summaries.sort((a, b) => b.avgScore - a.avgScore);
 }
