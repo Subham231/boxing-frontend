@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Loader2, Swords, Trophy, Play, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Loader2, Swords, Trophy, AlertCircle, Video, Mic, Wifi } from 'lucide-react';
 import { firebaseAuth } from '@/lib/firebase';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
@@ -18,6 +18,10 @@ type SparStatus = {
   freeSparAvailable: boolean;
   freeSparUnlocked: boolean;
   planName: string | null;
+  queueOnline: number;
+  estimatedWaitSeconds: number;
+  rankLabel: string;
+  mmr: number | null;
 };
 
 type LeaderRow = {
@@ -84,8 +88,18 @@ export default function SparLobbyPage() {
   }, [refresh]);
 
   useEffect(() => {
+    const timer = window.setInterval(() => refresh(), 5000);
+    return () => window.clearInterval(timer);
+  }, [refresh]);
+
+  useEffect(() => {
     loadLeaderboard(leaderboardPeriod);
   }, [leaderboardPeriod, loadLeaderboard]);
+
+  const currentUserUid = firebaseAuth.currentUser?.uid;
+  const currentRank = currentUserUid
+    ? leaderboard.findIndex((row) => row.uid === currentUserUid) + 1
+    : 0;
 
   const startSearch = async () => {
     const generation = ++searchGenerationRef.current;
@@ -144,19 +158,22 @@ export default function SparLobbyPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-white p-6 pb-24 font-sans">
-      <header className="flex items-center gap-4 mb-6">
+    <div className="min-h-screen bg-[#0d0d0d] px-4 pb-24 pt-3 font-sans text-white">
+      <header className="mx-auto mb-5 flex w-full max-w-[500px] items-center gap-3">
         <button
           aria-label="Back to sparring"
           onClick={() => router.push('/spar')}
-          className="w-10 h-10 rounded-full border border-white/10 bg-white/5 flex items-center justify-center text-white/60 hover:text-white transition-all"
+          className="flex h-12 w-12 items-center justify-center rounded-full bg-[#242424] text-white/80 transition hover:text-white"
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft className="h-6 w-6" />
         </button>
-        <div>
-          <span className="text-[10px] font-black text-primary tracking-widest uppercase block">LIVE 1V1</span>
-          <h1 className="text-2xl font-black italic uppercase leading-none">FIND OPPONENT</h1>
+        <div className="flex-1">
+          <span className="block text-[12px] font-black uppercase tracking-wider text-primary">LIVE 1V1</span>
+          <h1 className="text-[21px] font-black italic uppercase leading-none">FIND OPPONENT</h1>
         </div>
+        <span className="rounded-full border border-[#37372f] bg-[#242424] px-3 py-2 text-[11px] font-black uppercase text-[#d0d0b8]">
+          <span className="mr-1 text-primary">●</span> {status?.rankLabel || 'UNRANKED'} {status?.mmr ? `• ${status.mmr} MMR` : ''}
+        </span>
       </header>
 
       {loading ? (
@@ -164,24 +181,19 @@ export default function SparLobbyPage() {
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
       ) : (
-        <div className="flex flex-col gap-4">
-          <GlassCard className="p-5 border-primary/20 bg-primary/[0.03] flex flex-col gap-3">
-            <div className="flex items-center gap-3">
-              <Swords className="w-6 h-6 text-primary" />
-              <div>
-                <div className="text-sm font-black uppercase">
-                  {status?.mode === 'paid' ? status.planName : 'Free Spar (Daily)'}
-                </div>
-                <div className="text-[10px] text-white/50 font-bold uppercase tracking-wide">
-                  {status?.mode === 'paid'
-                    ? status.sparDailyLimit < 0
-                      ? 'Unlimited spars today'
-                      : `${status.sparDailyUsed}/${status.sparDailyLimit} used today`
-                    : status?.freeSparAvailable
-                      ? '1 free spar available today'
-                      : 'Free spar used — come back tomorrow or subscribe'}
+        <div className="mx-auto flex w-full max-w-[500px] flex-col gap-5">
+          <GlassCard className="rounded-3xl border-[#35352e] bg-[#1c1c1c] p-7">
+            <div className="flex items-center gap-5">
+              <div className="flex h-[70px] w-[70px] items-center justify-center rounded-2xl border border-[#3b4130] bg-[#292b29]">
+                <Swords className="h-9 w-9 text-primary" />
+              </div>
+              <div className="flex-1">
+                <div className="text-[22px] font-black uppercase leading-tight">{status?.mode === 'paid' ? status.planName : 'Free Spar'}</div>
+                <div className="mt-1 text-[16px] font-black uppercase tracking-wide text-[#d0d0b8]">
+                  {status?.mode === 'paid' ? (status.sparDailyLimit < 0 ? 'Unlimited spars today' : `${status.sparDailyLimit - status.sparDailyUsed} spars remaining`) : '1 free spar available today'}
                 </div>
               </div>
+              <span className="rounded-md border border-primary/60 bg-primary/10 px-3 py-2 text-[14px] font-black uppercase text-primary">{status?.mode === 'paid' ? 'ACTIVE' : 'FREE'}</span>
             </div>
 
             {error && (
@@ -205,7 +217,7 @@ export default function SparLobbyPage() {
                 </button>
               </div>
             ) : (
-              <NeonButton className="w-full h-14" onClick={startSearch}>
+              <NeonButton className="mt-7 h-16 w-full text-[18px]" onClick={startSearch}>
                 {(
                   <>
                     FIND OPPONENT <Swords className="w-4 h-4 ml-1" />
@@ -213,6 +225,11 @@ export default function SparLobbyPage() {
                 )}
               </NeonButton>
             )}
+
+            <div className="mt-6 flex items-center justify-between border-t border-white/[0.08] pt-4 text-[13px] font-black uppercase tracking-wide text-[#d0d0b8]">
+              <span><span className="mr-2 text-primary">●</span>{status?.queueOnline || 0} FIGHTERS SEARCHING</span>
+              <span>EST. WAIT: ~{status?.estimatedWaitSeconds || 12}s</span>
+            </div>
 
             {status?.mode === 'free' && !status.freeSparAvailable && (
               <Link
@@ -224,25 +241,38 @@ export default function SparLobbyPage() {
             )}
           </GlassCard>
 
+          <div className="grid grid-cols-3 gap-2.5">
+            {[
+              { icon: Video, label: 'CAMERA', value: 'Ready (1080p)' },
+              { icon: Mic, label: 'AUDIO', value: 'Active Mic' },
+              { icon: Wifi, label: 'LATENCY', value: '24ms (Ranked)' },
+            ].map(({ icon: Icon, label, value }) => (
+              <div key={label} className="rounded-xl border border-[#35352e] bg-[#191919] px-3 py-4">
+                <div className="flex items-center gap-1 text-[10px] font-black uppercase text-[#d0d0b8]"><Icon className="h-4 w-4 text-primary" />{label}</div>
+                <div className="mt-3 whitespace-nowrap text-[12px] font-bold text-white">{value}</div>
+              </div>
+            ))}
+          </div>
+
           {/* Weekly & Monthly Sparring Leaderboard */}
-          <GlassCard className="p-5 border-white/10 bg-black/50">
-            <div className="flex items-center justify-between mb-4">
+          <section className="pb-24">
+            <div className="mb-5 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Trophy className="w-4 h-4 text-primary" />
-                <span className="text-[10px] font-black text-white/70 uppercase tracking-widest">
+                <Trophy className="h-7 w-7 text-primary" />
+                <span className="text-[22px] font-black uppercase tracking-wide text-[#f1f1ed]">
                   Spar Leaderboard
                 </span>
               </div>
 
               {/* Period Toggle */}
-              <div className="flex items-center bg-black/60 border border-white/10 rounded-xl p-0.5">
+              <div className="flex items-center rounded-xl border border-[#35352e] bg-[#242424] p-1">
                 <button
                   type="button"
                   onClick={() => setLeaderboardPeriod('weekly')}
                   className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                     leaderboardPeriod === 'weekly'
                       ? 'bg-primary text-black shadow-[0_0_10px_rgba(226,255,59,0.5)]'
-                      : 'text-white/40 hover:text-white'
+                        : 'text-[#d0d0b8] hover:text-white'
                   }`}
                 >
                   Weekly
@@ -253,7 +283,7 @@ export default function SparLobbyPage() {
                   className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                     leaderboardPeriod === 'monthly'
                       ? 'bg-primary text-black shadow-[0_0_10px_rgba(226,255,59,0.5)]'
-                      : 'text-white/40 hover:text-white'
+                        : 'text-[#d0d0b8] hover:text-white'
                   }`}
                 >
                   Monthly
@@ -261,10 +291,10 @@ export default function SparLobbyPage() {
               </div>
             </div>
 
-            <div className="text-[9px] text-white/40 font-bold uppercase tracking-wider mb-3">
+            <div className="mb-5 text-[14px] font-bold uppercase leading-relaxed tracking-wide text-[#d0d0b8]">
               {leaderboardPeriod === 'weekly'
-                ? '⚡ Resets every Monday · Ranked by Wins, Win Rate & Combat Score'
-                : '🏆 Resets 1st of every month · Ranked by Wins, Win Rate & Combat Score'}
+                ? '⚡ RESETS EVERY MONDAY · RANKED BY WINS, WR & COMBAT SCORE'
+                : '🏆 RESETS 1ST OF EVERY MONTH · RANKED BY WINS, WR & COMBAT SCORE'}
             </div>
 
             {loadingLeaderboard ? (
@@ -276,39 +306,35 @@ export default function SparLobbyPage() {
                 No matches recorded this {leaderboardPeriod === 'weekly' ? 'week' : 'month'} yet. Be the first to spar!
               </div>
             ) : (
-              <div className="flex flex-col gap-2.5">
+              <div className="flex flex-col gap-3.5">
                 {leaderboard.slice(0, 15).map((row, i) => (
                   <div
                     key={row.uid || i}
-                    className={`flex items-center justify-between p-3 rounded-2xl border transition-all ${
+                    className={`flex min-h-[105px] items-center justify-between rounded-2xl border px-5 py-4 transition-all ${
                       i === 0
-                        ? 'border-primary/40 bg-gradient-to-r from-primary/10 via-black/40 to-transparent'
-                        : i === 1
-                          ? 'border-amber-400/30 bg-amber-400/[0.04]'
-                          : i === 2
-                            ? 'border-orange-500/20 bg-orange-500/[0.03]'
-                            : 'border-white/5 bg-white/[0.02]'
+                          ? 'border-primary/70 bg-[#1c1c1c]'
+                        : 'border-[#292923] bg-[#1c1c1c]'
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
                       <span
-                        className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${
+                        className={`flex h-14 w-14 items-center justify-center rounded-full text-[17px] font-black ${
                           i === 0
                             ? 'bg-primary text-black font-black shadow-[0_0_8px_rgba(226,255,59,0.6)]'
                             : i === 1
                               ? 'bg-amber-400 text-black'
                               : i === 2
-                                ? 'bg-orange-500 text-black'
-                                : 'text-white/40 border border-white/10'
+                                ? 'bg-orange-500 text-white'
+                                : 'border border-[#35352e] bg-[#292929] text-white/60'
                         }`}
                       >
                         {i + 1}
                       </span>
                       <div>
-                        <div className="text-xs font-black text-white uppercase tracking-tight">
+                        <div className="text-[17px] font-black uppercase tracking-tight text-[#f1f1ed]">
                           {row.display_name}
                         </div>
-                        <div className="text-[9px] text-white/40 font-bold uppercase">
+                        <div className="text-[13px] font-bold uppercase text-[#d0d0b8]">
                           {row.matches_played} Matches · {row.wins}W - {row.losses}L
                         </div>
                       </div>
@@ -316,8 +342,8 @@ export default function SparLobbyPage() {
 
                     <div className="flex items-center gap-2 text-right">
                       <div className="flex flex-col items-end">
-                        <span className="text-xs font-black text-primary">{row.win_rate}% WR</span>
-                        <span className="text-[8px] font-black text-white/40 uppercase">
+                        <span className="text-[17px] font-black text-primary">{row.win_rate}% WR</span>
+                        <span className="text-[12px] font-black uppercase text-[#d0d0b8]">
                           {row.avg_score} Avg Score
                         </span>
                       </div>
@@ -326,7 +352,18 @@ export default function SparLobbyPage() {
                 ))}
               </div>
             )}
-          </GlassCard>
+          </section>
+
+          <div className="fixed inset-x-0 bottom-0 z-20 border-t border-white/[0.08] bg-[#0d0d0d]/95 px-4 pb-3 pt-3 backdrop-blur-md">
+            <div className="mx-auto flex w-full max-w-[500px] items-center gap-4 rounded-3xl border border-[#35352e] bg-[#1c1c1c] px-5 py-4">
+              <span className="flex h-14 w-14 items-center justify-center rounded-full border border-primary/60 bg-primary/10 text-[17px] font-black text-primary">#{currentRank || '—'}</span>
+              <div className="flex-1">
+                <div className="text-[17px] font-black uppercase text-[#f1f1ed]">YOU</div>
+                <div className="text-[13px] font-bold uppercase text-[#d0d0b8]">Live rank from Supabase</div>
+              </div>
+              <div className="text-right"><div className="text-[17px] font-black text-primary">{status?.rankLabel || 'UNRANKED'}</div><div className="text-[12px] font-black text-[#d0d0b8]">{status?.mmr || '—'} MMR</div></div>
+            </div>
+          </div>
         </div>
       )}
     </div>
