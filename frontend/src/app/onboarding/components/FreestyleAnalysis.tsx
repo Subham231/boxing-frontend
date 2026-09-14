@@ -444,7 +444,7 @@ export default function FreestyleAnalysis(): JSX.Element {
     }, 1000);
   };
 
-  /* ── compute results (same formula as main vision page) ──────── */
+  /* ── compute results from validated punches only ──────────────── */
   const finishSession = () => {
     cleanup();
     markOnboardingAnalysisUsed();
@@ -452,23 +452,21 @@ export default function FreestyleAnalysis(): JSX.Element {
     setTimeout(() => {
       const log = repLogR.current;
       const total = punchesR.current;
-      const avgVis = trackSampR.current.length ? trackSampR.current.reduce((a,b)=>a+b,0)/trackSampR.current.length : 0;
-      const stanceScore = Math.round(avgVis*100);
-      const powerScore = Math.round(Math.min(100,(peakAvR.current/PREF_V)*100));
-
-      let avgRot=0,avgKnee=0,avgWt=0,avgFt=0;
-      if (log.length>0) {
-        avgRot=log.reduce((s,r)=>s+r.rotation,0)/log.length;
-        avgKnee=log.reduce((s,r)=>s+r.knee,0)/log.length;
-        avgWt=log.reduce((s,r)=>s+r.weight,0)/log.length;
-        avgFt=log.reduce((s,r)=>s+r.foot,0)/log.length;
-      }
-      const rotationScore = Math.round(avgRot);
+      // Every score below is averaged from detected punch reps only. We do
+      // not use the number 100 as a denominator and idle camera frames do
+      // not contribute to the final combat score.
+      const average = (values: number[]) => values.length
+        ? values.reduce((sum, value) => sum + value, 0) / values.length
+        : 0;
+      const powerScore = Math.round(average(log.map((rep) => rep.power)));
+      const stanceScore = Math.round(average(log.map((rep) => (rep.knee + rep.weight + rep.foot) / 3)));
+      const rotationScore = Math.round(average(log.map((rep) => rep.rotation)));
       const peakV = log.length>0 ? Math.max(...log.map(r=>r.peakVelocity)) : 0;
       const avgV  = log.length>0 ? Math.round(log.reduce((s,r)=>s+r.peakVelocity,0)/log.length) : 0;
 
-      const totalScore = total<3 ? 0 :
-        Math.round((powerScore+stanceScore+rotationScore+Math.round(avgKnee)+Math.round(avgWt)+Math.round(avgFt))/6);
+      const totalScore = total < 3 ? 0 : Math.round(
+        average(log.map((rep) => (rep.power + rep.rotation + rep.knee + rep.weight + rep.foot) / 5)),
+      );
 
       const res: MiniAnalysisResult = { totalScore, powerScore, stanceScore, reflexScore:0, rotationScore, punchCount:total, peakVelocity:peakV, avgVelocity:avgV };
       // Persist for AnalysisMeritsReveal and subsequent profile reveal
@@ -725,10 +723,10 @@ export default function FreestyleAnalysis(): JSX.Element {
               <h1 className="text-2xl font-black italic uppercase leading-[0.93] tracking-tighter text-white">
                 Your Initial <span className="text-primary">Combat Score</span>
               </h1>
-              <p className="text-white/50 mt-1 text-[10px] font-semibold leading-relaxed">
+                <p className="text-white/50 mt-1 text-[10px] font-semibold leading-relaxed">
                 {result.punchCount < 3
                   ? 'Not enough punches were detected for a full score.'
-                  : 'Real AI-measured biomechanical score from your 30-second freestyle round.'}
+                  : `Real AI-measured biomechanical score from ${result.punchCount} validated punches in your 30-second freestyle round.`}
               </p>
             </header>
 
@@ -774,14 +772,14 @@ export default function FreestyleAnalysis(): JSX.Element {
                   <div className="grid grid-cols-2 gap-2.5 filter blur-[6px] select-none pointer-events-none opacity-25">
                     <div className="p-3.5 rounded-2xl border border-white/10 bg-white/5">
                       <span className="text-[8px] font-black uppercase tracking-wider text-white/50 block">MERIT 2 · PUNCH POWER</span>
-                      <span className="text-2xl font-black text-white">{result.powerScore || 82}<span className="text-xs text-white/40 font-bold">/100</span></span>
+                      <span className="text-2xl font-black text-white">{result.powerScore}<span className="text-xs text-white/40 font-bold">/100</span></span>
                       <span className="text-[7px] text-white/40 font-bold uppercase block mt-0.5">Peak {result.peakVelocity || 640}°/s</span>
                     </div>
 
                     <div className="p-3.5 rounded-2xl border border-white/10 bg-white/5">
                       <span className="text-[8px] font-black uppercase tracking-wider text-white/50 block">MERIT 3 · REFLEX SPEED</span>
-                      <span className="text-2xl font-black text-white">88<span className="text-xs text-white/40 font-bold">/100</span></span>
-                      <span className="text-[7px] text-white/40 font-bold uppercase block mt-0.5">Reaction: 240ms</span>
+                      <span className="text-2xl font-black text-white">{result.reflexScore || '—'}<span className="text-xs text-white/40 font-bold">{result.reflexScore ? '/100' : ''}</span></span>
+                      <span className="text-[7px] text-white/40 font-bold uppercase block mt-0.5">Punch-only session score</span>
                     </div>
                   </div>
 
