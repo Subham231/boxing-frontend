@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ChevronRight, Lock, Sparkles, Zap, Flame, ShieldAlert, CheckCircle2, Wrench } from 'lucide-react';
 import { useOnboarding } from '@/context/OnboardingContext';
@@ -15,6 +16,7 @@ function GradeLabel(score: number): { label: string; color: string } {
 }
 
 export default function AnalysisMeritsReveal(): JSX.Element {
+  const router = useRouter();
   const { nextStep, prevStep } = useOnboarding();
   const [result, setResult] = useState<MiniAnalysisResult | null>(null);
 
@@ -199,7 +201,7 @@ export default function AnalysisMeritsReveal(): JSX.Element {
               <Lock className="h-4 w-4 text-primary" />
             </div>
             <div className="text-xs font-black uppercase tracking-[0.18em] text-white">
-              ERROR DIAGNOSTICS & TACTICAL FIXES LOCKED
+              LOCKED MERITS & TACTICAL FIXES
             </div>
             <p className="mt-1 text-[9px] font-semibold leading-relaxed text-white/70 max-w-[270px]">
               Buy the plan to see all round-by-round flaw diagnostics, trajectory corrections, and personalized recovery drill fixes.
@@ -219,7 +221,13 @@ export default function AnalysisMeritsReveal(): JSX.Element {
           onClick={nextStep}
           className="btn-primary w-full h-14 flex items-center justify-center gap-2 text-sm font-black italic tracking-wider shadow-[0_0_30px_rgba(226,255,59,0.4)]"
         >
-          SEE PLAN TO UNLOCK FULL DIAGNOSTICS <ChevronRight size={18} />
+          SEE PLAN TO UNLOCK <ChevronRight size={18} />
+        </button>
+        <button
+          onClick={() => router.push('/settings')}
+          className="w-full h-12 flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/[0.04] text-[10px] font-black uppercase tracking-widest text-white/70 transition hover:border-primary/50 hover:text-primary"
+        >
+          GO TO PROFILE <ChevronRight size={16} />
         </button>
         <button
           onClick={prevStep}
