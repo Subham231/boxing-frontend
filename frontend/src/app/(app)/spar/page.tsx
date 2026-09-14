@@ -1,24 +1,22 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
   Loader2,
-  Play,
   AlertCircle,
-  Shield,
   Eye,
   Footprints,
   Camera,
-  Crown,
+  Mic,
+  Wifi,
+  Video,
+  Zap,
 } from 'lucide-react';
 import {
   SwordsNeonIcon,
   ShieldNeonIcon,
-  FlameNeonIcon,
-  TargetNeonIcon,
 } from '@/components/ui/NeonIcons';
 import { motion } from 'framer-motion';
 import { firebaseAuth } from '@/lib/firebase';
@@ -112,24 +110,25 @@ export default function SparIntroPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-white pb-28 font-sans relative overflow-hidden">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(249,115,22,0.12),transparent_55%),radial-gradient(ellipse_at_bottom,rgba(226,255,59,0.06),transparent_50%)]" />
+    <div className="min-h-screen bg-[#0d0d0d] pb-28 font-sans text-white">
+      <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(180deg,#0d0d0d_0%,#0a0a0a_100%)]" />
 
-      <div className="relative p-6 flex flex-col gap-5">
-        <header className="flex items-center gap-4">
+      <div className="relative mx-auto flex w-full max-w-[500px] flex-col gap-4 px-4 pb-6 pt-3">
+        <header className="flex items-center gap-3 px-0.5">
           <button
             onClick={() => router.push('/dashboard')}
-            className="w-10 h-10 rounded-full border border-white/10 bg-white/5 flex items-center justify-center text-white/60"
+            aria-label="Back to dashboard"
+            className="flex h-12 w-12 items-center justify-center rounded-full bg-[#242424] text-white/80 transition hover:bg-[#303030] hover:text-white"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="h-6 w-6" />
           </button>
           <div className="flex-1">
-            <span className="text-[10px] font-black text-orange-400 tracking-widest uppercase block">
-              Live 1v1
+            <span className="block text-[12px] font-black uppercase tracking-[0.12em] text-primary">
+              LIVE 1V1
             </span>
-            <h1 className="text-2xl font-black italic uppercase leading-none">Sparring</h1>
+            <h1 className="text-[21px] font-black italic uppercase leading-none tracking-tight text-white">SPARRING</h1>
           </div>
-          <span className="px-2.5 py-1 rounded-full bg-primary text-black text-[9px] font-black tracking-widest">
+          <span className="rounded-full bg-primary px-3 py-1 text-[11px] font-black uppercase tracking-wide text-black shadow-[0_0_14px_rgba(226,255,59,0.35)]">
             FREE
           </span>
         </header>
@@ -137,28 +136,44 @@ export default function SparIntroPage() {
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-2xl border border-orange-400/30 bg-gradient-to-br from-orange-500/15 via-black/40 to-transparent p-5 flex items-center gap-4"
+          className="rounded-2xl border border-[#35352e] bg-[#1c1c1c] p-5"
         >
-          <div
-            className="w-16 h-16 shrink-0 flex items-center justify-center text-orange-400"
-            style={{
-              clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-              background: 'linear-gradient(180deg, rgba(249,115,22,0.45), rgba(249,115,22,0.1))',
-            }}
-          >
-            <SwordsNeonIcon className="w-7 h-7 text-orange-400 drop-shadow-[0_0_10px_rgba(249,115,22,0.9)]" />
-          </div>
-          <div>
-            <p className="text-sm font-black uppercase tracking-wide text-white">Real-time opponent spar</p>
-            <p className="text-[11px] text-white/60 font-semibold leading-relaxed mt-1">
+          <div className="flex items-start gap-5">
+            <div className="flex h-[76px] w-[76px] shrink-0 items-center justify-center rounded-2xl border border-[#3b4130] bg-[#292b29]">
+              <SwordsNeonIcon className="h-9 w-9 text-primary drop-shadow-[0_0_10px_rgba(226,255,59,0.8)]" />
+            </div>
+            <div className="pt-0.5">
+              <p className="text-[19px] font-black uppercase leading-tight text-white">Real-time opponent spar</p>
+              <p className="mt-2 text-[16px] font-medium leading-[1.45] text-[#d0d0b8]">
               Match with a fighter in real-time. Follow the voice calls and fight for the top rank.
-            </p>
+              </p>
+            </div>
+          </div>
+          <div className="mt-5 flex items-center justify-between border-t border-white/[0.08] pt-3 text-[12px] font-black uppercase tracking-wider text-[#c8c8b0]">
+            <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-primary" /> QUEUE: LIVE MATCHMAKING</span>
+            <span>EST. WAIT: ~12s</span>
           </div>
         </motion.div>
 
+        <div className="grid grid-cols-3 gap-2.5">
+          {[
+            { icon: Video, label: 'CAMERA', value: 'Ready (1080p)' },
+            { icon: Mic, label: 'AUDIO', value: 'Active Mic' },
+            { icon: Wifi, label: 'LATENCY', value: '24ms (Ranked)' },
+          ].map(({ icon: Icon, label, value }) => (
+            <div key={label} className="rounded-xl border border-[#35352e] bg-[#191919] px-3 py-4">
+              <div className="flex items-center gap-1.5 text-[11px] font-black uppercase text-[#c8c8b0]"><Icon className="h-4 w-4 text-primary" /> {label}</div>
+              <div className="mt-3 whitespace-nowrap text-[14px] font-bold text-white">{value}</div>
+            </div>
+          ))}
+        </div>
+
         <section>
-          <h2 className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-3">Rules</h2>
-          <div className="flex flex-col gap-2.5">
+          <div className="mb-2 flex items-center justify-between px-0.5">
+            <h2 className="text-[15px] font-black uppercase tracking-wider text-[#d0d0b8]">RULES</h2>
+            <span className="text-[12px] font-black uppercase text-[#939383]">PROTOCOL V2.4</span>
+          </div>
+          <div className="flex flex-col gap-3.5">
             {RULES.map((r, i) => {
               const Icon = r.icon;
               return (
@@ -168,13 +183,13 @@ export default function SparIntroPage() {
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.05 * i }}
                 >
-                  <GlassCard className="p-4 border-white/5 bg-black/40 flex gap-3 items-start">
-                    <div className="w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
-                      <Icon className="w-4 h-4 text-primary" />
+                  <GlassCard className="flex min-h-[166px] items-start gap-5 rounded-2xl border-[#35352e] bg-[#1c1c1c] px-5 py-6">
+                    <div className="flex h-13 w-13 h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border border-[#35352e] bg-[#252525]">
+                      <Icon className="h-6 w-6 text-primary" />
                     </div>
                     <div>
-                      <div className="text-xs font-black uppercase text-white">{r.title}</div>
-                      <p className="text-[11px] text-white/55 font-semibold leading-relaxed mt-0.5">{r.body}</p>
+                      <div className="text-[19px] font-black uppercase leading-tight text-[#f1f1ed]">{r.title}</div>
+                      <p className="mt-2 text-[16px] font-medium leading-[1.5] text-[#d0d0b8]">{r.body}</p>
                     </div>
                   </GlassCard>
                 </motion.div>
@@ -184,21 +199,24 @@ export default function SparIntroPage() {
         </section>
 
         <section>
-          <h2 className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-3">Stance & setup</h2>
-          <div className="flex flex-col gap-2.5">
+          <div className="mb-2 flex items-center justify-between px-0.5">
+            <h2 className="text-[15px] font-black uppercase tracking-wider text-[#d0d0b8]">STANCE &amp; SETUP</h2>
+            <span className="text-[12px] font-black uppercase text-[#939383]">CALIBRATION</span>
+          </div>
+          <div className="flex flex-col gap-3.5">
             {STANCE.map((s, i) => {
               const Icon = s.icon;
               return (
                 <GlassCard
                   key={s.title}
-                  className="p-4 border-orange-400/15 bg-orange-500/[0.04] flex gap-3 items-start"
+                  className="flex min-h-[166px] items-start gap-5 rounded-2xl border-[#35352e] bg-[#1c1c1c] px-5 py-6"
                 >
-                  <div className="w-9 h-9 rounded-xl bg-orange-500/15 border border-orange-400/25 flex items-center justify-center shrink-0">
-                    <Icon className="w-4 h-4 text-orange-400" />
+                  <div className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border border-[#35352e] bg-[#252525]">
+                    <Icon className="h-6 w-6 text-primary" />
                   </div>
                   <div>
-                    <div className="text-xs font-black uppercase text-white">{s.title}</div>
-                    <p className="text-[11px] text-white/55 font-semibold leading-relaxed mt-0.5">{s.body}</p>
+                    <div className="text-[19px] font-black uppercase leading-tight text-[#f1f1ed]">{s.title}</div>
+                    <p className="mt-2 text-[16px] font-medium leading-[1.5] text-[#d0d0b8]">{s.body}</p>
                   </div>
                 </GlassCard>
               );
@@ -211,20 +229,26 @@ export default function SparIntroPage() {
             <Loader2 className="w-6 h-6 text-primary animate-spin" />
           </div>
         ) : (
-          <GlassCard className="p-5 border-primary/20 bg-primary/[0.03] flex flex-col gap-3">
+          <GlassCard className="flex flex-col gap-2 rounded-2xl border-[#35352e] bg-[#191919] p-4">
             {error && (
-              <div className="flex items-start gap-2 text-[11px] text-red-400 font-semibold">
-                <AlertCircle className="w-4 h-4 shrink-0" />
+                <div className="flex items-start gap-2 text-[11px] font-semibold text-red-400">
+                <AlertCircle className="h-4 w-4 shrink-0" />
                 {error}
               </div>
             )}
 
-            <NeonButton className="w-full h-14" onClick={onPrimary}>
-              START SPARRING <SwordsNeonIcon className="w-4 h-4 ml-1 text-black" glow={false} />
-            </NeonButton>
           </GlassCard>
         )}
       </div>
+
+      <footer className="fixed inset-x-0 bottom-0 z-20 border-t border-white/[0.08] bg-[#0d0d0d]/95 px-4 pb-3 pt-3 backdrop-blur-md">
+        <div className="mx-auto max-w-[500px]">
+          <NeonButton className="h-[74px] w-full text-[18px]" onClick={onPrimary}>
+            START SPARRING <SwordsNeonIcon className="ml-1 h-5 w-5 text-black" glow={false} />
+          </NeonButton>
+          <p className="mt-2 text-center text-[12px] font-bold tracking-wide text-[#aaa994]">● &nbsp;Ranked Rating: MMR 1,420 · Season 4 Tier: Diamond</p>
+        </div>
+      </footer>
     </div>
   );
 }
