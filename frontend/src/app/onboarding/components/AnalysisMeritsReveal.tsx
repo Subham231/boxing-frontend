@@ -224,10 +224,10 @@ export default function AnalysisMeritsReveal(): JSX.Element {
           SEE PLAN TO UNLOCK <ChevronRight size={18} />
         </button>
         <button
-          onClick={() => router.push('/settings')}
+          onClick={() => router.push('/spar')}
           className="w-full h-12 flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/[0.04] text-[10px] font-black uppercase tracking-widest text-white/70 transition hover:border-primary/50 hover:text-primary"
         >
-          GO TO PROFILE <ChevronRight size={16} />
+          TRY FREE SPARRING <ChevronRight size={16} />
         </button>
         <button
           onClick={prevStep}
