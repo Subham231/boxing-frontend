@@ -137,6 +137,41 @@ function SparResultsInner() {
             </div>
           </GlassCard>
 
+          {/* Performance Merits — power/reflex/form/in-game score. Free
+              users see this blurred with a subscribe prompt; the combat
+              accuracy/reaction numbers above stay free for everyone. */}
+          <GlassCard className="p-6 border-white/5 bg-black/40 relative overflow-hidden">
+            <div className="flex items-center justify-between mb-4">
+              <div className="text-[9px] font-black text-white/40 uppercase tracking-widest">PERFORMANCE MERITS</div>
+              <Shield className="w-3.5 h-3.5 text-primary/70" />
+            </div>
+
+            <div className={`grid grid-cols-2 gap-3 ${result.isPremiumLocked ? 'blur-md select-none pointer-events-none' : ''}`}>
+              {[
+                ['IN-GAME SCORE', result.yourResult?.score != null ? `${result.yourResult.score}` : '—'],
+                ['POWER', result.yourResult?.avgPower != null ? `${result.yourResult.avgPower}%` : '—'],
+                ['REFLEX', result.yourResult?.reflexScore != null ? `${result.yourResult.reflexScore}%` : '—'],
+                ['FORM', result.yourResult?.avgForm != null ? `${result.yourResult.avgForm}%` : '—'],
+              ].map(([label, val]) => (
+                <div key={label} className="p-3 rounded-xl bg-white/5 border border-white/5">
+                  <span className="text-[7px] text-white/40 uppercase block">{label}</span>
+                  <span className="text-lg font-black text-white">{val}</span>
+                </div>
+              ))}
+            </div>
+
+            {result.isPremiumLocked && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                <div className="-rotate-12 border-2 border-primary/70 bg-black/70 px-4 py-2 rounded-xl flex items-center gap-2">
+                  <Lock className="w-3.5 h-3.5 text-primary" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-primary whitespace-nowrap">
+                    Get Subscription To See Merits
+                  </span>
+                </div>
+              </div>
+            )}
+          </GlassCard>
+
           <NeonButton className="w-full h-14" onClick={() => router.push('/spar/lobby')}>
             <Swords className="w-4 h-4 mr-2" /> BACK TO LOBBY
           </NeonButton>

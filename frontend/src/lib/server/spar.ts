@@ -22,6 +22,9 @@ export interface SparResultBreakdown {
   hits: number;
   misses: number;
   avgReactionMs: number | null;
+  avgPower: number | null; // 0-100, peak wrist-speed-derived power on landed punches
+  avgForm: number | null; // 0-100, elbow-extension-derived technique quality on landed punches
+  reflexScore?: number | null; // 0-100, derived server-side from avgReactionMs so it can't be spoofed client-side
   score: number;
   perCommand: SparCommandResult[];
 }
@@ -148,6 +151,37 @@ export function computeSparScore(breakdown: SparResultBreakdown): number {
   const avg = breakdown.avgReactionMs;
   const speedFactor = avg == null ? 0.5 : Math.max(0, Math.min(1, (900 - avg) / 700));
   return Math.round((accuracy * 70 + speedFactor * 30) * 10) / 10;
+}
+
+/**
+ * Reflex score (0-100) for the results screen — computed server-side from
+ * avgReactionMs alone (never trusts a client-supplied reflex number) using
+ * the same reaction-time-to-quality mapping as the speed component of
+ * computeSparScore, just rescaled to a 0-100 display range.
+ */
+export function computeReflexScore(avgReactionMs: number | null): number | null {
+  if (avgReactionMs == null) return null;
+  const speedFactor = Math.max(0, Math.min(1, (900 - avgReactionMs) / 700));
+  return Math.round(speedFactor * 100);
+}
+
+function clampScore(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  return Math.round(Math.min(100, Math.max(0, value)));
+}
+
+/**
+ * Server-trusted normalization of the power/form numbers a client reports.
+ * The client computes these from real pose-tracking data (peak wrist speed,
+ * elbow extension), but since they arrive over the wire like any other
+ * client input, they're clamped to a sane 0-100 range here rather than
+ * trusted verbatim.
+ */
+export function normalizePowerAndForm(breakdown: SparResultBreakdown): { avgPower: number | null; avgForm: number | null } {
+  return {
+    avgPower: clampScore(breakdown.avgPower),
+    avgForm: clampScore(breakdown.avgForm),
+  };
 }
 
 export function pickWinner(

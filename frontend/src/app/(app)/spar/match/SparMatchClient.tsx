@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Loader2, Swords, Flag, Mic, MicOff, Settings, Volume2, VolumeX } from 'lucide-react';
 import { firebaseAuth } from '@/lib/firebase';
 import { supabase } from '@/lib/supabase';
-import { playVoiceEvent, preloadVoicePack, unlockVoicePack } from '@/lib/voice-pack';
+import { playVoiceEvent, preloadVoicePack, unlockVoicePack, stopVoicePack } from '@/lib/voice-pack';
 
 type SparCommand = { command: string; kind: 'punch' | 'defense'; callAtMs: number };
 const PUNCH_EXTEND_DEG = 155;
@@ -13,6 +13,7 @@ const PUNCH_RETRACT_DEG = 135;
 const MIN_PUNCH_ANGULAR_VELOCITY = 180;
 const MIN_PUNCH_WRIST_SPEED = 0.35;
 const MOTION_MEMORY_MS = 350;
+const FULL_WRIST_SPEED_FOR_FULL_POWER = 3.2; // normalized units/sec for a "full power" registered punch
 type MatchInfo = {
   matchId: string;
   opponentUid: string;
@@ -29,6 +30,8 @@ type CmdResult = {
   hit: boolean;
   reactionMs: number | null;
   trackingConfidence?: number;
+  power?: number; // 0-100, from peak normalized wrist speed during this command's window
+  form?: number; // 0-100, from how fully the elbow extended past the strike threshold
 };
 
 export default function SparMatchClient() {
@@ -58,6 +61,8 @@ export default function SparMatchClient() {
   const elbowStateRef = useRef<'guard' | 'strike'>('guard');
   const guardEnteredAtRef = useRef(0);
   const lastPunchMotionAtRef = useRef(0);
+  const peakWristSpeedForCmdRef = useRef(0); // peak normalized wrist speed since the current command was called — used as "power"
+  const elbowAtLastStrikeRef = useRef(0); // smoothed elbow angle at the instant a strike was registered — used as "form"
 
   const [match, setMatch] = useState<MatchInfo | null>(null);
   const [phase, setPhase] = useState<'setup' | 'live' | 'submitting' | 'done'>('setup');
@@ -90,9 +95,13 @@ export default function SparMatchClient() {
   }, []);
 
   // The coach uses the sparai voice pack only. Missing clips stay silent.
+  // Always stop whatever's currently playing first — this is the single
+  // voice output for the whole match; nothing should ever layer on top of
+  // it (see stopVoicePack's doc comment for why this matters).
   const speak = (text: string) => {
     if (!voiceEnabledRef.current) return;
     try { window.speechSynthesis?.cancel(); } catch { /* ignore */ }
+    stopVoicePack();
     playVoiceEvent(text, () => { /* voice pack only */ });
   };
 
@@ -205,6 +214,8 @@ export default function SparMatchClient() {
         hits: perCommand.filter((r) => r.hit).length,
         misses: perCommand.filter((r) => !r.hit).length,
         avgReactionMs,
+        avgPower: hitList.length ? Math.round(hitList.reduce((s, r) => s + (r.power || 0), 0) / hitList.length) : null,
+        avgForm: hitList.length ? Math.round(hitList.reduce((s, r) => s + (r.form || 0), 0) / hitList.length) : null,
         score: 0,
         perCommand,
       };
@@ -503,6 +514,9 @@ export default function SparMatchClient() {
           const shoulderWidth = Math.max(0.001, Math.hypot(leftShoulder.x - rightShoulder.x, leftShoulder.y - rightShoulder.y));
           if (previousWristRef.current && previousTime !== null) {
             wristSpeedRef.current = Math.hypot(wrist.x - previousWristRef.current.x, wrist.y - previousWristRef.current.y) / shoulderWidth / seconds;
+            if (wristSpeedRef.current > peakWristSpeedForCmdRef.current) {
+              peakWristSpeedForCmdRef.current = wristSpeedRef.current;
+            }
           }
           previousWristRef.current = { x: wrist.x, y: wrist.y };
           previousPoseTimeRef.current = now;
@@ -516,6 +530,7 @@ export default function SparMatchClient() {
           const recentMotion = now - lastPunchMotionAtRef.current <= MOTION_MEMORY_MS;
           if (elbowStateRef.current === 'guard' && rearmed && smoothed > PUNCH_EXTEND_DEG && recentMotion) {
             elbowStateRef.current = 'strike';
+            elbowAtLastStrikeRef.current = smoothed;
             if (current?.cmd.kind === 'punch' && !resultsRef.current.some((result) => result.index === current.index)) {
               registerHitRef.current?.();
             }
@@ -555,27 +570,61 @@ export default function SparMatchClient() {
     const interval = setInterval(() => {
       const elapsed = Date.now() - matchStartRef.current;
       setElapsedMs(elapsed);
+
+      // Find every command whose call time has passed and hasn't been
+      // spoken yet. If the tick was delayed (pose-tracking jank, a
+      // backgrounded tab, a GC pause) more than one can be "due" in the
+      // same tick — only the MOST RECENT of those is actually spoken;
+      // any earlier ones that were skipped are silently logged as misses.
+      // This is the fix for two different commands' audio overlapping:
+      // previously every due-and-unspoken command in the array was spoken
+      // in the same tick, which fired two different clips concurrently.
+      let dueIndex = -1;
       for (let i = 0; i < seq.length; i++) {
-        const cmd = seq[i];
-        if (elapsed >= cmd.callAtMs && !spokenRef.current.has(i)) {
-          if (currentCmdRef.current) {
-            const prev = currentCmdRef.current;
-            if (!resultsRef.current.some((r) => r.index === prev.index)) {
+        if (elapsed >= seq[i].callAtMs && !spokenRef.current.has(i)) {
+          dueIndex = i;
+        }
+      }
+
+      if (dueIndex !== -1) {
+        for (let i = 0; i <= dueIndex; i++) {
+          if (spokenRef.current.has(i)) continue;
+          spokenRef.current.add(i);
+          if (i !== dueIndex) {
+            // Skipped command — never spoken, logged as a miss so scoring
+            // still accounts for it.
+            if (!resultsRef.current.some((r) => r.index === i)) {
               resultsRef.current.push({
-                index: prev.index,
-                command: prev.cmd.command,
-                kind: prev.cmd.kind,
+                index: i,
+                command: seq[i].command,
+                kind: seq[i].kind,
                 hit: false,
                 reactionMs: null,
               });
               setMisses((m) => m + 1);
             }
           }
-          spokenRef.current.add(i);
-          currentCmdRef.current = { index: i, at: Date.now(), cmd };
-          setCurrentCommand(cmd.command);
-          speak(cmd.command);
         }
+
+        if (currentCmdRef.current) {
+          const prev = currentCmdRef.current;
+          if (!resultsRef.current.some((r) => r.index === prev.index)) {
+            resultsRef.current.push({
+              index: prev.index,
+              command: prev.cmd.command,
+              kind: prev.cmd.kind,
+              hit: false,
+              reactionMs: null,
+            });
+            setMisses((m) => m + 1);
+          }
+        }
+
+        const cmd = seq[dueIndex];
+        currentCmdRef.current = { index: dueIndex, at: Date.now(), cmd };
+        peakWristSpeedForCmdRef.current = 0;
+        setCurrentCommand(cmd.command);
+        speak(cmd.command);
       }
 
       const last = seq[seq.length - 1];
@@ -607,6 +656,10 @@ export default function SparMatchClient() {
     if (!cur || phase !== 'live') return;
     if (resultsRef.current.some((r) => r.index === cur.index)) return;
     const reactionMs = Date.now() - cur.at;
+    const power = Math.round(Math.min(100, (peakWristSpeedForCmdRef.current / FULL_WRIST_SPEED_FOR_FULL_POWER) * 100));
+    const form = Math.round(
+      Math.min(100, Math.max(0, ((elbowAtLastStrikeRef.current - PUNCH_EXTEND_DEG) / (180 - PUNCH_EXTEND_DEG)) * 100))
+    );
     resultsRef.current.push({
       index: cur.index,
       command: cur.cmd.command,
@@ -614,6 +667,8 @@ export default function SparMatchClient() {
       hit: true,
       reactionMs,
       trackingConfidence: 0.85,
+      power,
+      form,
     });
     setHits((h) => h + 1);
     setCurrentCommand(`${cur.cmd.command} ✓`);

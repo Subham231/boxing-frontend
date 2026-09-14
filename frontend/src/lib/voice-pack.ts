@@ -167,3 +167,21 @@ export function unlockVoicePack(): void {
     });
   });
 }
+
+/**
+ * Stop every cached voice clip immediately. Call this right before playing
+ * a new command so a still-playing previous clip can never overlap with the
+ * next one — without this, two different commands whose timers fire close
+ * together each get their own <audio> element (one per event, cached) and
+ * both play concurrently, which is what produced "two voices talking over
+ * each other" during a match.
+ */
+export function stopVoicePack(): void {
+  if (typeof window === 'undefined') return;
+  audioCache.forEach((audio) => {
+    try {
+      audio.pause();
+      audio.currentTime = 0;
+    } catch { /* ignore */ }
+  });
+}

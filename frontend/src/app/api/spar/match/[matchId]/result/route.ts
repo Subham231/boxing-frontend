@@ -56,5 +56,10 @@ export async function GET(
     yourResult: match.player_a_uid === uid ? match.player_a_result : match.player_b_result,
     opponentResult: match.player_a_uid === uid ? match.player_b_result : match.player_a_result,
     isPaidMatch: match.is_paid_match,
+    // Whether the VIEWER has an active subscription — separate from
+    // isPaidMatch (which describes the match tier both fighters were
+    // paired at). This is what actually gates the detailed merits
+    // (power/reflex/form breakdown) on the results screen.
+    isPremiumLocked: !entitlement.active,
   });
 }

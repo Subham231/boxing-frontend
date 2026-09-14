@@ -3,6 +3,8 @@ import { requireFirebaseUid } from '@/lib/server/require-firebase';
 import { supabaseAdmin } from '@/lib/server/supabase-admin';
 import {
   computeSparScore,
+  computeReflexScore,
+  normalizePowerAndForm,
   pickWinner,
   validateSparResult,
   type SparCommand,
@@ -50,6 +52,8 @@ export async function POST(
 
   const normalized: SparResultBreakdown = {
     ...breakdown,
+    ...normalizePowerAndForm(breakdown),
+    reflexScore: computeReflexScore(breakdown.avgReactionMs ?? null),
     score: computeSparScore(breakdown),
   };
 
