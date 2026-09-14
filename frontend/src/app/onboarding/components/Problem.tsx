@@ -1,15 +1,18 @@
 ﻿'use client';
 
 import React, { useState, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { useOnboarding } from '@/context/OnboardingContext';
 import { Camera, Upload, ChevronRight, UserCircle2, Sparkles, Flame, Check } from 'lucide-react';
+import { emailAccountExists } from '@/lib/firebase-auth';
 
 const RING_NAME_SUGGESTIONS = ['TITAN', 'SHADOW', 'VIPER', 'THUNDER', 'IRONCLAD', 'STRIKER'];
 const PROFESSION_SUGGESTIONS = ['Student', 'Engineer', 'Athlete', 'Entrepreneur', 'Doctor', 'Coach', 'Artist', 'Other'];
 const PROMISE_SUGGESTIONS = ['DISCIPLINE', 'RELENTLESS', 'CHAMPION', 'UNSTOPPABLE', 'WARRIOR', 'FOCUS'];
 
 const Identity: React.FC = () => {
-    const { data, updateData, nextStep, prevStep } = useOnboarding();
+    const router = useRouter();
+    const { data, updateData, persistProgress, nextStep, prevStep } = useOnboarding();
     const [cameraActive, setCameraActive] = useState(false);
     const [previewUrl, setPreviewUrl] = useState<string | null>(
         typeof window !== 'undefined' ? localStorage.getItem('boxing_user_avatar') : null
@@ -18,6 +21,13 @@ const Identity: React.FC = () => {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [signupError, setSignupError] = useState<string | null>(null);
+    const [checkingAccount, setCheckingAccount] = useState(false);
+    const [existingAccount, setExistingAccount] = useState(false);
+
+    const goToLogin = () => {
+        persistProgress();
+        router.push('/login');
+    };
 
     const startCamera = async () => {
         try {
@@ -128,14 +138,36 @@ const Identity: React.FC = () => {
             return;
         }
 
-        updateData({
-            ringName: name,
-            age: age,
-            profession: profession || 'Fighter',
-            promiseWord: promiseWord.toUpperCase(),
-            email,
-        });
-        nextStep();
+        setCheckingAccount(true);
+        try {
+            if (await emailAccountExists(email)) {
+                setExistingAccount(true);
+                setSignupError('This email already has an account. Log in to continue.');
+                return;
+            }
+
+            updateData({
+                ringName: name,
+                age,
+                profession: profession || 'Fighter',
+                promiseWord: promiseWord.toUpperCase(),
+                email,
+            });
+            nextStep();
+        } catch {
+            // Firebase may hide account existence for enumeration protection;
+            // the create-account step still handles email-already-in-use.
+            updateData({
+                ringName: name,
+                age,
+                profession: profession || 'Fighter',
+                promiseWord: promiseWord.toUpperCase(),
+                email,
+            });
+            nextStep();
+        } finally {
+            setCheckingAccount(false);
+        }
     };
 
     return (
@@ -160,7 +192,11 @@ const Identity: React.FC = () => {
                         type="email"
                         autoComplete="email"
                         value={data.email || ''}
-                        onChange={(e) => updateData({ email: e.target.value })}
+                        onChange={(e) => {
+                            setExistingAccount(false);
+                            setSignupError(null);
+                            updateData({ email: e.target.value });
+                        }}
                         placeholder="you@email.com"
                         className="w-full bg-transparent border-b border-white/20 py-2 text-xl font-bold outline-none focus:border-primary transition-all tracking-tight"
                     />
@@ -347,14 +383,24 @@ const Identity: React.FC = () => {
                         {signupError}
                     </div>
                 )}
+                {existingAccount && (
+                    <button
+                        type="button"
+                        onClick={goToLogin}
+                        className="btn-primary w-full h-11 flex items-center justify-center gap-2 text-xs"
+                    >
+                        ALREADY HAVE AN ACCOUNT? LOG IN <ChevronRight size={16} />
+                    </button>
+                )}
             </main>
 
             <footer className="mt-3 flex flex-col gap-2">
                 <button
                     onClick={handleSignUp}
+                    disabled={checkingAccount}
                     className="btn-primary w-full h-12 flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider disabled:opacity-50 shadow-[0_0_20px_rgba(226,255,59,0.3)]"
                 >
-                    CONFIRM & CONTINUE <ChevronRight size={16} />
+                    {checkingAccount ? 'CHECKING ACCOUNT...' : 'CONFIRM & CONTINUE'} <ChevronRight size={16} />
                 </button>
                 <button onClick={prevStep} className="text-[10px] font-black text-white/40 hover:text-white uppercase tracking-widest py-0.5 mx-auto">
                     Back

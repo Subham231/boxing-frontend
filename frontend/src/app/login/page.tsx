@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, ShieldCheck, Eye, EyeOff } from 'lucide-react';
 import { ensureUserProfile, loginWithEmail, formatEmailAuthError } from '@/lib/firebase-auth';
+import { cacheProfileLocally } from '@/lib/profile-client';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -35,7 +36,10 @@ export default function LoginPage() {
         router.replace('/verify-email');
         return;
       }
-      const { profile } = await ensureUserProfile(user);
+      await user.getIdToken(true);
+      const { profile, sessionToken } = await ensureUserProfile(user);
+      cacheProfileLocally(profile);
+      if (sessionToken) localStorage.setItem('sparai_session_token', sessionToken);
       const onboardingData = (profile.onboarding_data ?? {}) as Record<string, unknown>;
       router.replace(onboardingData.onboarding_completed ? '/dashboard' : '/onboarding');
     } catch (loginError) {

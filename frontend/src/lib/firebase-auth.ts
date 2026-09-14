@@ -5,6 +5,7 @@ import {
   signOut as firebaseSignOut,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  fetchSignInMethodsForEmail,
   sendEmailVerification,
   sendPasswordResetEmail,
   linkWithCredential,
@@ -313,6 +314,12 @@ export function formatEmailAuthError(error: unknown): string {
       return cleaned || 'Something went wrong. Please try again.';
     }
   }
+}
+
+/** Returns the Firebase sign-in methods registered for an email address. */
+export async function emailAccountExists(email: string): Promise<boolean> {
+  const methods = await fetchSignInMethodsForEmail(firebaseAuth, email.trim().toLowerCase());
+  return methods.length > 0;
 }
 
 /**
