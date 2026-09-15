@@ -110,7 +110,7 @@ export default function SparIntroPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0d0d0d] pb-28 font-sans text-white">
+    <div className="min-h-screen bg-[#0d0d0d] pb-[calc(190px+env(safe-area-inset-bottom,0px))] font-sans text-white">
       <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(180deg,#0d0d0d_0%,#0a0a0a_100%)]" />
 
       <div className="relative mx-auto flex w-full max-w-[500px] flex-col gap-4 px-4 pb-6 pt-3">
@@ -143,8 +143,8 @@ export default function SparIntroPage() {
               <SwordsNeonIcon className="h-9 w-9 text-primary drop-shadow-[0_0_10px_rgba(226,255,59,0.8)]" />
             </div>
             <div className="pt-0.5">
-              <p className="text-[19px] font-black uppercase leading-tight text-white">Real-time opponent spar</p>
-              <p className="mt-2 text-[16px] font-medium leading-[1.45] text-[#d0d0b8]">
+              <p className="text-[clamp(15px,4.8vw,19px)] font-black uppercase leading-tight text-white">Real-time opponent spar</p>
+              <p className="mt-2 text-[clamp(12px,3.8vw,16px)] font-medium leading-[1.45] text-[#d0d0b8]">
               Match with a fighter in real-time. Follow the voice calls and fight for the top rank.
               </p>
             </div>
@@ -184,12 +184,12 @@ export default function SparIntroPage() {
                   transition={{ delay: 0.05 * i }}
                 >
                   <GlassCard className="flex min-h-[166px] items-start gap-5 rounded-2xl border-[#35352e] bg-[#1c1c1c] px-5 py-6">
-                    <div className="flex h-13 w-13 h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border border-[#35352e] bg-[#252525]">
+                    <div className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border border-[#35352e] bg-[#252525]">
                       <Icon className="h-6 w-6 text-primary" />
                     </div>
                     <div>
-                      <div className="text-[19px] font-black uppercase leading-tight text-[#f1f1ed]">{r.title}</div>
-                      <p className="mt-2 text-[16px] font-medium leading-[1.5] text-[#d0d0b8]">{r.body}</p>
+                      <div className="text-[clamp(15px,4.8vw,19px)] font-black uppercase leading-tight text-[#f1f1ed]">{r.title}</div>
+                      <p className="mt-2 text-[clamp(12px,3.8vw,16px)] font-medium leading-[1.5] text-[#d0d0b8]">{r.body}</p>
                     </div>
                   </GlassCard>
                 </motion.div>
@@ -215,8 +215,8 @@ export default function SparIntroPage() {
                     <Icon className="h-6 w-6 text-primary" />
                   </div>
                   <div>
-                    <div className="text-[19px] font-black uppercase leading-tight text-[#f1f1ed]">{s.title}</div>
-                    <p className="mt-2 text-[16px] font-medium leading-[1.5] text-[#d0d0b8]">{s.body}</p>
+                    <div className="text-[clamp(15px,4.8vw,19px)] font-black uppercase leading-tight text-[#f1f1ed]">{s.title}</div>
+                    <p className="mt-2 text-[clamp(12px,3.8vw,16px)] font-medium leading-[1.5] text-[#d0d0b8]">{s.body}</p>
                   </div>
                 </GlassCard>
               );
@@ -241,7 +241,7 @@ export default function SparIntroPage() {
         )}
       </div>
 
-      <footer className="fixed inset-x-0 bottom-0 z-20 border-t border-white/[0.08] bg-[#0d0d0d]/95 px-4 pb-3 pt-3 backdrop-blur-md">
+      <footer className="fixed inset-x-0 bottom-[calc(80px+env(safe-area-inset-bottom,0px))] z-20 border-t border-white/[0.08] bg-[#0d0d0d]/95 px-4 pb-3 pt-3 backdrop-blur-md">
         <div className="mx-auto max-w-[500px]">
           <NeonButton className="h-[74px] w-full text-[18px]" onClick={onPrimary}>
             START SPARRING <SwordsNeonIcon className="ml-1 h-5 w-5 text-black" glow={false} />

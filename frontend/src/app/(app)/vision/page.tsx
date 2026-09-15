@@ -19,6 +19,7 @@ import {
   Play
 } from 'lucide-react';
 import { GlassCard } from '@/components/ui/GlassCard';
+import { ProgressRing } from '@/components/ui/ProgressRing';
 import { NeonButton } from '@/components/ui/NeonButton';
 import { completeSessionSecure } from '@/lib/rank-client';
 import { logVisionSession, getReflexTier } from '@/lib/session-log';
@@ -167,6 +168,62 @@ const POWER_REFERENCE_VELOCITY = 900;
 
 function estimatePower(peakVelocity: number): number {
   return Math.round(Math.min(100, Math.max(0, (peakVelocity / POWER_REFERENCE_VELOCITY) * 100)));
+}
+
+// --- New merit formulas (Stability, Swiftness) ------------------------------
+// Both are built entirely from signals the capture loop was already
+// recording per rep (repLog) and per session (elapsedSecondsRef) — no new
+// tracking machinery, just a new way of interpreting existing measurements.
+
+// A rep's overall "form composite" — the same underlying per-rep scores the
+// mechanics database already grades individual flaws against, collapsed
+// into one number per rep purely so Stability can measure how much that
+// number swings rep-to-rep (consistency), which is a different question
+// than the flaw engine's "was the average good or bad".
+function repFormComposite(r: { kind: 'punch' | 'defense'; torsoRotationScore?: number; hipRotationScore?: number; kneeDriveScore: number; weightTransferScore: number; footPivotScore: number; headLateralScore?: number; headDropScore?: number }): number {
+  if (r.kind === 'defense') {
+    // A slip mainly registers on headLateral, a roll mainly on headDrop —
+    // taking the max of the two (instead of averaging them together) avoids
+    // diluting a clean slip's score with an irrelevant near-zero roll metric.
+    const headSignal = Math.max(r.headLateralScore ?? 0, r.headDropScore ?? 0);
+    return (headSignal + r.kneeDriveScore) / 2;
+  }
+  return (
+    ((r.torsoRotationScore ?? 0) + (r.hipRotationScore ?? 0) + r.kneeDriveScore + r.weightTransferScore + r.footPivotScore) / 5
+  );
+}
+
+// A stdDev of this size or more across a session's reps is treated as
+// "maximally inconsistent" (score floors at 0); 0 stdDev is perfectly
+// repeatable technique (score caps at 100). Calibrated against the 0-100
+// scale the underlying metrics already use.
+const MAX_EXPECTED_FORM_STDDEV = 35;
+
+function computeStabilityScore(hits: Array<Parameters<typeof repFormComposite>[0]>, fallbackTrackingScore: number): number {
+  if (hits.length < 2) {
+    // Can't measure rep-to-rep consistency from a single data point — fall
+    // back to how steadily the fighter held the frame instead, which is
+    // the existing trackingConfidence signal, not a new invented number.
+    return fallbackTrackingScore;
+  }
+  const composites = hits.map(repFormComposite);
+  const mean = composites.reduce((a, b) => a + b, 0) / composites.length;
+  const variance = composites.reduce((sum, c) => sum + (c - mean) ** 2, 0) / composites.length;
+  const stdDev = Math.sqrt(variance);
+  return Math.round(Math.min(100, Math.max(0, 100 - (stdDev / MAX_EXPECTED_FORM_STDDEV) * 100)));
+}
+
+// "Excellent" output tempo reference, in landed strikes/defensive reps per
+// minute of active session time — a brisk combo pace on pads/shadowboxing.
+// Swiftness measures throughput (how fast reps kept coming), which is a
+// different dimension from Reflex (latency to start each individual rep)
+// and Power (force of each individual strike).
+const SWIFTNESS_REFERENCE_PER_MINUTE = 45;
+
+function computeSwiftnessScore(hitCount: number, activeSeconds: number): number {
+  const activeMinutes = Math.max(activeSeconds, 1) / 60;
+  const perMinute = hitCount / activeMinutes;
+  return Math.round(Math.min(100, Math.max(0, (perMinute / SWIFTNESS_REFERENCE_PER_MINUTE) * 100)));
 }
 
 // Per-rep peak strike speed, color-coded by hit/miss. Every bar is a real
@@ -431,6 +488,18 @@ export default function VisionPage() {
   const noseYBaselineRef = useRef(0); // slow EMA of nose.y — the "at rest" head height
   const peakHeadLateralRef = useRef(0); // peak |noseOffset| (normalized) this command window — slip quality
   const peakHeadDropRef = useRef(0); // peak downward nose displacement (normalized) this command window — roll quality
+
+  // Defense-specific knee-bend tracking (roll/bob-and-weave leg drive).
+  // A roll/slip never triggers the elbow guard->strike state machine, so
+  // kneeBaselineRef/peakKneeDriveRef above — which only update outside
+  // "guard" state — permanently read 0 for every defense rep (they're
+  // reset to 0 on every single frame while the elbow stays in guard,
+  // which it always does during a roll). This keeps its own slow EMA
+  // baseline per knee, exactly like noseYBaselineRef above, so ROLL_UNDER
+  // gets a genuine, independently-measured knee-drive score instead of a
+  // permanent stale 0 that made the "no leg bend" flaw fire every time.
+  const defenseKneeBaselineRef = useRef({ L: 0, R: 0 });
+  const peakDefenseKneeDriveRef = useRef(0);
 
   // -------------------------------------------------------------------------
   // Mount / MediaPipe script loading
@@ -788,6 +857,8 @@ export default function VisionPage() {
     noseYBaselineRef.current = 0;
     peakHeadLateralRef.current = 0;
     peakHeadDropRef.current = 0;
+    defenseKneeBaselineRef.current = { L: 0, R: 0 };
+    peakDefenseKneeDriveRef.current = 0;
     goodHoldMsRef.current = 0;
     badHoldMsRef.current = 0;
     setIsTrackingInadequate(false);
@@ -1311,6 +1382,24 @@ export default function VisionPage() {
       if (drop > peakHeadDropRef.current) peakHeadDropRef.current = drop;
     }
 
+    // --- Defense knee-bend tracking (roll/bob quality) ----------------------
+    // Same independence rationale as the head tracking above: measured off
+    // a slow EMA baseline rather than the punch guard/strike cycle, so a
+    // roll's actual leg drive gets scored instead of always reading 0.
+    if (lKneeL && rKneeL) {
+      defenseKneeBaselineRef.current.L = defenseKneeBaselineRef.current.L === 0
+        ? lKneeAngle
+        : defenseKneeBaselineRef.current.L * 0.98 + lKneeAngle * 0.02;
+      defenseKneeBaselineRef.current.R = defenseKneeBaselineRef.current.R === 0
+        ? rKneeAngle
+        : defenseKneeBaselineRef.current.R * 0.98 + rKneeAngle * 0.02;
+      const defenseKneeBend = Math.max(
+        Math.abs(lKneeAngle - defenseKneeBaselineRef.current.L),
+        Math.abs(rKneeAngle - defenseKneeBaselineRef.current.R)
+      );
+      if (defenseKneeBend > peakDefenseKneeDriveRef.current) peakDefenseKneeDriveRef.current = defenseKneeBend;
+    }
+
     // Freestyle: no called commands to wait for — every validated punch
     // (same guard->strike->guard state machine, same velocity gate as coach
     // mode) is logged the instant it completes.
@@ -1352,7 +1441,12 @@ export default function VisionPage() {
     );
     const rotationScore = Math.round((torsoRotationScore + hipRotationScore) / 2);
     const kneeDriveScore = Math.round(
-      Math.min(100, (peakKneeDriveRef.current / FULL_KNEE_DRIVE_DEG) * 100)
+      Math.min(
+        100,
+        (kind === 'defense'
+          ? peakDefenseKneeDriveRef.current / FULL_KNEE_DRIVE_DEG
+          : peakKneeDriveRef.current / FULL_KNEE_DRIVE_DEG) * 100
+      )
     );
     const weightTransferScore = Math.round(
       Math.min(100, (peakWeightTransferRef.current / FULL_WEIGHT_TRANSFER_RATIO) * 100)
@@ -1515,6 +1609,7 @@ export default function VisionPage() {
       currentRepPeakVelocityRef.current = 0;
       peakHeadLateralRef.current = 0;
       peakHeadDropRef.current = 0;
+      peakDefenseKneeDriveRef.current = 0;
       attemptedRef.current += 1;
       setAttemptedCount(attemptedRef.current);
 
@@ -1684,6 +1779,13 @@ export default function VisionPage() {
     const allHits = log.filter((r) => r.hit);
     const hitsOnly = allHits.filter((r) => r.reactionMs !== null);
     const punchHits = allHits.filter((r) => r.kind === 'punch');
+
+    // New merits: Stability (rep-to-rep consistency of form) and Swiftness
+    // (output tempo) — see computeStabilityScore/computeSwiftnessScore for
+    // the formulas. Both are derived purely from data already in `log` and
+    // `elapsedSecondsRef`, nothing invented.
+    const stabilityScore = computeStabilityScore(allHits, stanceScore);
+    const swiftnessScore = computeSwiftnessScore(hitCountRef.current, elapsedSecondsRef.current);
     if (hitsOnly.length > 0) {
       const slowest = hitsOnly.reduce((a, b) => ((a.reactionMs ?? 0) > (b.reactionMs ?? 0) ? a : b));
       if ((slowest.reactionMs ?? 0) > 700) {
@@ -1814,6 +1916,8 @@ export default function VisionPage() {
       powerScore,
       stanceScore,
       reflexScore,
+      stabilityScore,
+      swiftnessScore,
       accuracy,
       avgReflex: avgReaction,
       hits: hitCountRef.current,
@@ -1862,6 +1966,8 @@ export default function VisionPage() {
         power_score: resultsData.powerScore,
         tracking_score: resultsData.stanceScore,
         reflex_score: resultsData.reflexScore,
+        stability_score: resultsData.stabilityScore,
+        swiftness_score: resultsData.swiftnessScore,
         rotation_score: resultsData.rotationScore,
         hip_rotation_score: resultsData.hipRotationScore,
         torso_rotation_score: resultsData.torsoRotationScore,
@@ -2726,6 +2832,42 @@ export default function VisionPage() {
                     </span>
                   </div>
                 ))}
+              </div>
+            </GlassCard>
+
+            {/* Performance Merits — five circular-progress cards, arranged
+                vertically. Overall/Power/Reflex reuse the exact scores
+                already computed above (no new formula for these); Stability
+                and Swiftness are genuinely new formulas (see
+                computeStabilityScore / computeSwiftnessScore) built from
+                data the capture loop was already recording. */}
+            <GlassCard className="p-5 border-primary/20 bg-black/40">
+              <span className="text-[9px] font-black text-primary tracking-widest uppercase block mb-4">
+                Performance Merits
+              </span>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { label: 'Overall', value: resultsData.overallScore },
+                  { label: 'Power', value: resultsData.powerScore },
+                  { label: 'Reflex', value: resultsData.reflexScore },
+                  { label: 'Stability', value: resultsData.stabilityScore },
+                ].map((merit) => (
+                  <div
+                    key={merit.label}
+                    className="flex flex-col items-center gap-2 bg-white/[0.02] border border-white/5 rounded-2xl py-4"
+                  >
+                    <ProgressRing progress={merit.value ?? 0} size={76} strokeWidth={6} />
+                    <span className="text-[8px] font-black text-white/50 uppercase tracking-widest">
+                      {merit.label}
+                    </span>
+                  </div>
+                ))}
+                <div className="col-span-2 flex flex-col items-center gap-2 bg-white/[0.02] border border-white/5 rounded-2xl py-4">
+                  <ProgressRing progress={resultsData.swiftnessScore ?? 0} size={76} strokeWidth={6} />
+                  <span className="text-[8px] font-black text-white/50 uppercase tracking-widest">
+                    Swiftness
+                  </span>
+                </div>
               </div>
             </GlassCard>
 

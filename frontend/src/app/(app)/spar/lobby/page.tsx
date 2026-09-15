@@ -158,7 +158,7 @@ export default function SparLobbyPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#0d0d0d] px-4 pb-24 pt-3 font-sans text-white">
+    <div className="min-h-screen bg-[#0d0d0d] px-4 pb-[calc(210px+env(safe-area-inset-bottom,0px))] pt-3 font-sans text-white">
       <header className="mx-auto mb-5 flex w-full max-w-[500px] items-center gap-3">
         <button
           aria-label="Back to sparring"
@@ -255,7 +255,7 @@ export default function SparLobbyPage() {
           </div>
 
           {/* Weekly & Monthly Sparring Leaderboard */}
-          <section className="pb-24">
+          <section className="pb-[calc(170px+env(safe-area-inset-bottom,0px))]">
             <div className="mb-5 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Trophy className="h-7 w-7 text-primary" />
@@ -354,7 +354,7 @@ export default function SparLobbyPage() {
             )}
           </section>
 
-          <div className="fixed inset-x-0 bottom-0 z-20 border-t border-white/[0.08] bg-[#0d0d0d]/95 px-4 pb-3 pt-3 backdrop-blur-md">
+          <div className="fixed inset-x-0 bottom-[calc(80px+env(safe-area-inset-bottom,0px))] z-20 border-t border-white/[0.08] bg-[#0d0d0d]/95 px-4 pb-3 pt-3 backdrop-blur-md">
             <div className="mx-auto flex w-full max-w-[500px] items-center gap-4 rounded-3xl border border-[#35352e] bg-[#1c1c1c] px-5 py-4">
               <span className="flex h-14 w-14 items-center justify-center rounded-full border border-primary/60 bg-primary/10 text-[17px] font-black text-primary">#{currentRank || '—'}</span>
               <div className="flex-1">

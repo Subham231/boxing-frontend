@@ -61,8 +61,40 @@ export interface TechniqueMechanics {
   // technique — e.g. a jab isn't expected to show much hip rotation, so it
   // isn't scored against that target at all (undefined = not applicable).
   targets: Partial<Record<FlawMetric, number>>;
+  // Every metric this technique's live capture path genuinely measures.
+  // The flaw engine (flawEngine.ts) refuses to evaluate any rule whose
+  // metric isn't listed here — this is what stops a rule from firing
+  // against a signal that was never actually tracked for this technique
+  // (e.g. kneeDriveScore used to silently sit at 0 for every defensive
+  // move because only the punch state machine ever updated it, which made
+  // the "no leg bend" roll flaw fire on every single roll regardless of
+  // real form). Keep this in sync with what vision/page.tsx's registerHit
+  // actually computes for this technique's `kind`.
+  measuredMetrics: FlawMetric[];
   flaws: FlawRule[];
 }
+
+// What registerHit() in vision/page.tsx genuinely measures per rep kind.
+// Head lateral/drop are computed unconditionally in the pose loop but are
+// only meaningful for defense reps (a punch shows ~0 head movement by
+// construction, not because it was actually scored on head quality); knee
+// drive is now measured independently for both kinds (see
+// peakDefenseKneeDriveRef in vision/page.tsx), so a roll gets a real
+// knee-drive reading rather than the punch-only tracker's stale 0.
+const PUNCH_MEASURED_METRICS: FlawMetric[] = [
+  'torsoRotationScore',
+  'hipRotationScore',
+  'kneeDriveScore',
+  'weightTransferScore',
+  'footPivotScore',
+  'estimatedPower',
+  'trajectoryMatchRate',
+];
+const DEFENSE_MEASURED_METRICS: FlawMetric[] = [
+  'headLateralScore',
+  'headDropScore',
+  'kneeDriveScore',
+];
 
 export const MECHANICS_DATABASE: Record<TechniqueKey, TechniqueMechanics> = {
   JAB: {
@@ -74,6 +106,7 @@ export const MECHANICS_DATABASE: Record<TechniqueKey, TechniqueMechanics> = {
       footPivotScore: 15,
       estimatedPower: 45,
     },
+    measuredMetrics: PUNCH_MEASURED_METRICS,
     flaws: [
       {
         id: 'jab_low_power',
@@ -113,6 +146,7 @@ export const MECHANICS_DATABASE: Record<TechniqueKey, TechniqueMechanics> = {
       weightTransferScore: 45,
       estimatedPower: 55,
     },
+    measuredMetrics: PUNCH_MEASURED_METRICS,
     flaws: [
       {
         id: 'cross_low_hip_rotation',
@@ -163,6 +197,7 @@ export const MECHANICS_DATABASE: Record<TechniqueKey, TechniqueMechanics> = {
       footPivotScore: 35,
       estimatedPower: 55,
     },
+    measuredMetrics: PUNCH_MEASURED_METRICS,
     flaws: [
       {
         id: 'hook_low_torso_rotation',
@@ -201,6 +236,7 @@ export const MECHANICS_DATABASE: Record<TechniqueKey, TechniqueMechanics> = {
       weightTransferScore: 35,
       estimatedPower: 55,
     },
+    measuredMetrics: PUNCH_MEASURED_METRICS,
     flaws: [
       {
         id: 'uppercut_low_knee_drive',
@@ -235,6 +271,7 @@ export const MECHANICS_DATABASE: Record<TechniqueKey, TechniqueMechanics> = {
     targets: {
       headLateralScore: 55,
     },
+    measuredMetrics: DEFENSE_MEASURED_METRICS,
     flaws: [
       {
         id: 'slip_shallow',
@@ -257,6 +294,7 @@ export const MECHANICS_DATABASE: Record<TechniqueKey, TechniqueMechanics> = {
     targets: {
       headLateralScore: 55,
     },
+    measuredMetrics: DEFENSE_MEASURED_METRICS,
     flaws: [
       {
         id: 'slip_shallow',
@@ -280,6 +318,7 @@ export const MECHANICS_DATABASE: Record<TechniqueKey, TechniqueMechanics> = {
       headDropScore: 50,
       kneeDriveScore: 30,
     },
+    measuredMetrics: DEFENSE_MEASURED_METRICS,
     flaws: [
       {
         id: 'roll_shallow',

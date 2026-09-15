@@ -67,6 +67,8 @@ export interface VisionSessionRecord {
   power_score?: number;
   tracking_score?: number;
   reflex_score?: number;
+  stability_score?: number;
+  swiftness_score?: number;
   rotation_score?: number;
   hip_rotation_score?: number;
   torso_rotation_score?: number;

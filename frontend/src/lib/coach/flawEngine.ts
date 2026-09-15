@@ -43,9 +43,9 @@ export interface DetectedFlaw {
 
 const SEVERITY_WEIGHT: Record<Severity, number> = { major: 3, moderate: 2, minor: 1 };
 
-// Require a minimum sample size before trusting an averaged flaw — one bad
-// rep shouldn't produce a confident session-level diagnosis.
-const MIN_SAMPLE_SIZE = 2;
+// Require a minimum sample size before trusting an averaged flaw — one or
+// two bad reps shouldn't produce a confident session-level diagnosis.
+const MIN_SAMPLE_SIZE = 3;
 
 function metricValue(rep: FlawEngineRep, metric: FlawMetric): number {
   switch (metric) {
@@ -87,26 +87,51 @@ export function evaluateSessionFlaws(reps: FlawEngineRep[]): DetectedFlaw[] {
     if (techReps.length < MIN_SAMPLE_SIZE) return;
     const mechanics = MECHANICS_DATABASE[techniqueKey];
 
+    // Evaluate every rule, but only ever report the single worst one for
+    // this technique. Multiple form flaws are almost always correlated
+    // (e.g. low hip rotation and low weight transfer on the same sloppy
+    // cross) — surfacing all of them at once reads as "everything is
+    // wrong" and drowns out the one correction that actually matters.
+    // Fixing the worst flaw first is also how a real coach would do it.
+    let worst: DetectedFlaw | null = null;
+    let worstScore = -Infinity;
+
     for (const rule of mechanics.flaws) {
+      // Guard: never evaluate a rule against a metric this technique's
+      // `kind` doesn't genuinely measure (see measuredMetrics doc comment
+      // in mechanicsDatabase.ts). This is what stops a flaw from firing
+      // off a signal that was never real to begin with.
+      if (!mechanics.measuredMetrics.includes(rule.metric)) continue;
+
       const values = techReps.map((r) => metricValue(r, rule.metric));
       const avg = values.reduce((a, b) => a + b, 0) / values.length;
       const triggered = rule.comparator === 'below' ? avg < rule.threshold : avg > rule.threshold;
       if (!triggered) continue;
 
-      flaws.push({
-        techniqueLabel: mechanics.label,
-        metric: rule.metric,
-        measuredValue: Math.round(avg),
-        targetValue: mechanics.targets[rule.metric] ?? rule.threshold,
-        severity: rule.severity,
-        cause: rule.cause,
-        coachingTip: rule.coachingTip,
-        correctiveExercise: rule.correctiveExercise,
-        recommendedFrequency: rule.recommendedFrequency,
-        progressionTarget: rule.progressionTarget,
-        sampleSize: techReps.length,
-      });
+      const distance = Math.abs(avg - rule.threshold);
+      // Rank candidate flaws for this technique by severity first, then by
+      // how far off threshold they are — matches the final cross-technique
+      // sort below, so "worst per technique" and "worst overall" agree.
+      const rankScore = SEVERITY_WEIGHT[rule.severity] * 1000 + distance;
+      if (rankScore > worstScore) {
+        worstScore = rankScore;
+        worst = {
+          techniqueLabel: mechanics.label,
+          metric: rule.metric,
+          measuredValue: Math.round(avg),
+          targetValue: mechanics.targets[rule.metric] ?? rule.threshold,
+          severity: rule.severity,
+          cause: rule.cause,
+          coachingTip: rule.coachingTip,
+          correctiveExercise: rule.correctiveExercise,
+          recommendedFrequency: rule.recommendedFrequency,
+          progressionTarget: rule.progressionTarget,
+          sampleSize: techReps.length,
+        };
+      }
     }
+
+    if (worst) flaws.push(worst);
   });
 
   // Rank by severity first, then by how far below/above target (worse first).
