@@ -25,7 +25,7 @@ import { completeSessionSecure } from '@/lib/rank-client';
 import { logVisionSession, getReflexTier } from '@/lib/session-log';
 import { firebaseAuth } from '@/lib/firebase';
 import { topSessionFlaws, summarizeTechniques, DetectedFlaw, FlawEngineRep } from '@/lib/coach/flawEngine';
-import { playVoiceEvent, preloadVoicePack, unlockVoicePack } from '@/lib/voice-pack';
+import { playVoiceEvent, preloadVoicePack, unlockVoicePack, stopVoicePack } from '@/lib/voice-pack';
 
 // ---------------------------------------------------------------------------
 // Landmark indices we care about (MediaPipe Pose / BlazePose 33-point model)
@@ -659,12 +659,21 @@ export default function VisionPage() {
   // it) — callers use this to timestamp reaction windows and drive visuals
   // that are genuinely synced to what the fighter hears, not to network/
   // engine latency, which can be 100-500ms on remote "Online" voices.
+  // Always stop whatever's currently playing first — this is the single
+  // voice output for the whole session; nothing should ever layer on top
+  // of it. Without this, "Calibration complete" (a premade clip) and the
+  // first drill command (which fires only 800ms later) could genuinely
+  // overlap and play as two simultaneous voices, since a premade <audio>
+  // clip and a browser-TTS utterance run on two completely independent
+  // channels and neither one stops the other on its own.
   const speakCommand = (text: string, onStart?: () => void, onEnd?: () => void) => {
     if (isMutedRef.current) {
       onStart?.();
       onEnd?.();
       return;
     }
+    stopVoicePack();
+    try { synthRef.current?.cancel(); } catch { /* ignore */ }
     const fallback = () => {
       if (!synthRef.current) {
         onStart?.();
@@ -921,8 +930,18 @@ export default function VisionPage() {
         locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`,
       });
       pose.setOptions({
-        modelComplexity: 1,
-        smoothLandmarks: true,
+        // modelComplexity 0 ('Lite') infers noticeably faster than 1
+        // ('Full') per frame — during fast combinations the previous
+        // Full-model setting couldn't keep up with the true 30fps camera
+        // feed, so the skeleton overlay visibly lagged behind the arm.
+        // smoothLandmarks disabled for the same reason: MediaPipe's
+        // built-in temporal filter trades responsiveness for stability,
+        // which reads as lag on fast motion — the app already runs its
+        // own targeted smoothing (SMOOTHING_ALPHA, the EMA baselines) only
+        // where it's actually needed, so the generic filter was pure
+        // added latency on top of that.
+        modelComplexity: 0,
+        smoothLandmarks: false,
         enableSegmentation: false,
         minDetectionConfidence: 0.5,
         minTrackingConfidence: 0.5,
@@ -1004,8 +1023,11 @@ export default function VisionPage() {
                 locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`,
               });
               pose.setOptions({
-                modelComplexity: 1,
-                smoothLandmarks: true,
+                // Same fast-motion fix as the primary init above — Lite
+                // model + no built-in smoothing filter, since this is the
+                // fallback camera path and should behave identically.
+                modelComplexity: 0,
+                smoothLandmarks: false,
                 enableSegmentation: false,
                 minDetectionConfidence: 0.5,
                 minTrackingConfidence: 0.5,
@@ -1628,7 +1650,11 @@ export default function VisionPage() {
       drillTimerRef.current = setTimeout(runCommands, gap + REACTION_WINDOW_PAD_MS);
     };
 
-    drillTimerRef.current = setTimeout(runCommands, 800);
+    // A little more breathing room than before, so "Calibration complete"
+    // has a real chance to finish before the first command's own line
+    // starts (stopVoicePack() in speakCommand still guarantees they can
+    // never actually overlap even if this runs long).
+    drillTimerRef.current = setTimeout(runCommands, 1500);
   };
 
   // -------------------------------------------------------------------------
@@ -1650,7 +1676,12 @@ export default function VisionPage() {
     setTimerDisplay(`${mins0}:${secs0}`);
 
     setIsCommandSpeaking(true);
-    speakCommand('Freestyle round. Throw when ready.', undefined, () => setIsCommandSpeaking(false));
+    // Same breathing-room fix as startDrill above — let "Calibration
+    // complete" actually finish before "Freestyle round" starts, instead
+    // of firing in the same tick right after it.
+    window.setTimeout(() => {
+      speakCommand('Freestyle round. Throw when ready.', undefined, () => setIsCommandSpeaking(false));
+    }, 1500);
 
     sessionTimerRef.current = setInterval(() => {
       if (stageRef.current !== 'camera') return;
