@@ -1825,6 +1825,7 @@ export default function VisionPage() {
   // -------------------------------------------------------------------------
   const startFreestyleRound = () => {
     let remaining = freestyleDurationRef.current;
+    const isUnlimited = remaining === 0;
     elapsedSecondsRef.current = 0;
     setExpectedCommand('FREESTYLE');
     setTacticalCue('Keep your guard high — choose clean, committed punch shapes.');
@@ -1850,14 +1851,14 @@ export default function VisionPage() {
       // and scoring but the round clock kept running down, so a paused
       // round could end — and be analysed — while the fighter was away.
       if (isTrackingInadequateRef.current || isPausedRef.current) return;
-      remaining -= 1;
+      if (!isUnlimited) remaining -= 1;
       elapsedSecondsRef.current += 1;
-      const clamped = Math.max(0, remaining);
-      const mins = Math.floor(clamped / 60).toString().padStart(2, '0');
-      const secs = (clamped % 60).toString().padStart(2, '0');
+      const displaySeconds = isUnlimited ? elapsedSecondsRef.current : Math.max(0, remaining);
+      const mins = Math.floor(displaySeconds / 60).toString().padStart(2, '0');
+      const secs = (displaySeconds % 60).toString().padStart(2, '0');
       setTimerDisplay(`${mins}:${secs}`);
-      if (remaining === 10) speakCommand('Ten seconds.');
-      if (remaining <= 0) {
+      if (!isUnlimited && remaining === 10) speakCommand('Ten seconds.');
+      if (!isUnlimited && remaining <= 0) {
         stopAndAnalyse();
       }
     }, 1000);
@@ -2489,13 +2490,15 @@ export default function VisionPage() {
             {mode === 'freestyle' ? (
               <div className="bg-white/[0.02] border border-white/5 p-4 rounded-3xl text-center">
                 <div className="text-3xl font-black italic text-white leading-none">
-                  {Math.floor(freestyleDuration / 60)}:{String(freestyleDuration % 60).padStart(2, '0')}
+                  {freestyleDuration === 0
+                    ? 'Unlimited'
+                    : `${Math.floor(freestyleDuration / 60)}:${String(freestyleDuration % 60).padStart(2, '0')}`}
                 </div>
                 <span className="text-[8px] font-black text-purple-400 tracking-widest uppercase block mt-1.5 mb-4">
                   ROUND DURATION
                 </span>
-                <div className="grid grid-cols-4 gap-2">
-                  {[30, 60, 90, 120].map((secs) => (
+                <div className="grid grid-cols-5 gap-2">
+                  {[0, 30, 60, 90, 120].map((secs) => (
                     <button
                       key={secs}
                       onClick={() => setFreestyleDuration(secs)}
@@ -2504,7 +2507,7 @@ export default function VisionPage() {
                           : 'bg-black/40 border-white/5 text-white/55 hover:text-white'
                         }`}
                     >
-                      {secs}s
+                      {secs === 0 ? 'Unlimited' : `${secs}s`}
                     </button>
                   ))}
                 </div>
