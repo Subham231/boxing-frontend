@@ -4,12 +4,35 @@ import React, { useEffect, useState, Suspense } from 'react';
 import Script from 'next/script';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Check, Crown, Loader2, ShieldCheck, AlertCircle, XCircle, Zap, Swords, Video, Sparkles, X, Gift, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Check, Crown, Loader2, ShieldCheck, AlertCircle, XCircle, Zap, Swords, Video, Sparkles, X, Gift, ChevronRight, Globe } from 'lucide-react';
 import { firebaseAuth } from '@/lib/firebase';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
 
 const DEV_SKIP_ENABLED = process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_ENABLE_DEV_SKIP === 'true';
+
+// Display-only list for the selector (section 11/37 of the payment spec).
+// The backend independently resolves country → provider/currency/price on
+// every request — this list never determines what the user is charged.
+const COUNTRY_OPTIONS = [
+  { code: 'IN', label: '🇮🇳 India' },
+  { code: 'US', label: '🇺🇸 United States' },
+  { code: 'GB', label: '🇬🇧 United Kingdom' },
+  { code: 'DE', label: '🇩🇪 Germany' },
+  { code: 'FR', label: '🇫🇷 France' },
+  { code: 'CA', label: '🇨🇦 Canada' },
+  { code: 'AU', label: '🇦🇺 Australia' },
+];
+
+function detectBrowserCountryGuess(): string {
+  if (typeof navigator === 'undefined') return 'IN';
+  const locale = navigator.language || (navigator.languages && navigator.languages[0]) || '';
+  const region = locale.split('-')[1];
+  if (region && COUNTRY_OPTIONS.some((c) => c.code === region.toUpperCase())) {
+    return region.toUpperCase();
+  }
+  return 'IN';
+}
 
 interface PlanCard {
   id: 'monthly' | 'monthly_pro' | 'three_month' | 'yearly';
@@ -82,6 +105,13 @@ function SubscriptionContent() {
   const [message, setMessage] = useState<string | null>(null);
   const [showSparPopup, setShowSparPopup] = useState(false);
   const [livePrices, setLivePrices] = useState<Record<string, string>>({});
+  const [country, setCountry] = useState<string>('IN');
+  const [provider, setProvider] = useState<'razorpay' | 'polar'>('razorpay');
+  const [footerText, setFooterText] = useState<string>('Secure payment with 256-bit SSL encryption by Razorpay');
+
+  useEffect(() => {
+    setCountry(detectBrowserCountryGuess());
+  }, []);
 
   useEffect(() => {
     // Show free sparring pop-up upon arriving at subscription page
@@ -96,11 +126,15 @@ function SubscriptionContent() {
   }, []);
 
   useEffect(() => {
-    fetch('/api/public-pricing', { cache: 'no-store' })
+    fetch(`/api/public-pricing?country=${encodeURIComponent(country)}`, { cache: 'no-store' })
       .then((response) => response.json())
-      .then((data) => setLivePrices(Object.fromEntries((data.plans || []).map((plan: { id: string; price: string }) => [plan.id, plan.price]))))
+      .then((data) => {
+        setLivePrices(Object.fromEntries((data.plans || []).map((plan: { id: string; price: string }) => [plan.id, plan.price])));
+        if (data.provider === 'polar' || data.provider === 'razorpay') setProvider(data.provider);
+        if (data.footerText) setFooterText(`${data.footerText} — 256-bit SSL encryption`);
+      })
       .catch(() => setLivePrices({}));
-  }, []);
+  }, [country]);
 
   const fetchStatus = async () => {
     const user = firebaseAuth.currentUser;
@@ -138,6 +172,20 @@ function SubscriptionContent() {
     setProcessingPlan(planId);
     try {
       const token = await user.getIdToken();
+
+      if (provider === 'polar') {
+        const checkoutRes = await fetch('/api/polar/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ planId, country }),
+        });
+        const checkoutData = await checkoutRes.json();
+        if (!checkoutRes.ok) throw new Error(checkoutData.error || 'Failed to create checkout');
+        if (!checkoutData.checkoutUrl) throw new Error('Polar did not return a checkout URL.');
+        window.location.href = checkoutData.checkoutUrl;
+        return; // navigating away — processingPlan intentionally left set until redirect happens
+      }
+
       const orderRes = await fetch('/api/subscription/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -237,7 +285,9 @@ function SubscriptionContent() {
 
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-white p-4 sm:p-6 pb-16 font-sans relative">
-      <Script src="https://checkout.razorpay.com/v1/checkout.js" onLoad={() => setScriptLoaded(true)} />
+      {provider === 'razorpay' && (
+        <Script src="https://checkout.razorpay.com/v1/checkout.js" onLoad={() => setScriptLoaded(true)} />
+      )}
 
       {/* Free Sparring Session Waiting Pop-Up Modal */}
       <AnimatePresence>
@@ -327,6 +377,25 @@ function SubscriptionContent() {
         <div>
           <span className="text-[10px] font-black text-primary tracking-widest uppercase block">SPARAI PROTOCOL</span>
           <h1 className="text-2xl font-black italic uppercase leading-none text-white tracking-wide">SUBSCRIPTION</h1>
+        </div>
+
+        <div className="ml-auto relative">
+          <label className="sr-only" htmlFor="country-selector">Country</label>
+          <div className="flex items-center gap-1.5 pl-3 pr-2 py-2 rounded-full border border-white/10 bg-white/5">
+            <Globe className="w-3.5 h-3.5 text-primary shrink-0" />
+            <select
+              id="country-selector"
+              value={country}
+              onChange={(e) => setCountry(e.target.value)}
+              className="bg-transparent text-[10px] font-black uppercase tracking-wide text-white outline-none cursor-pointer pr-1"
+            >
+              {COUNTRY_OPTIONS.map((c) => (
+                <option key={c.code} value={c.code} className="bg-[#0A0A0A] text-white">
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </header>
 
@@ -541,7 +610,7 @@ function SubscriptionContent() {
 
             <NeonButton
               onClick={() => handleSubscribe(plan.id)}
-              disabled={processingPlan !== null || (!scriptLoaded && !DEV_SKIP_ENABLED)}
+              disabled={processingPlan !== null || (provider === 'razorpay' && !scriptLoaded && !DEV_SKIP_ENABLED)}
               className="w-full h-12 text-[11px] flex items-center justify-center gap-2"
             >
               {processingPlan === plan.id ? <Loader2 className="w-4 h-4 animate-spin" /> : status?.plan === plan.id ? 'RENEW' : 'SUBSCRIBE'}
@@ -562,7 +631,7 @@ function SubscriptionContent() {
 
       <footer className="flex items-center justify-center gap-2 text-white/30 text-[9px] uppercase font-bold tracking-wider mt-8">
         <ShieldCheck className="w-4 h-4 text-green-500" />
-        <span>Payments protected with 256-bit SSL encryption by Razorpay</span>
+        <span>{footerText}</span>
       </footer>
     </div>
   );

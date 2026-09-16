@@ -3,6 +3,8 @@ import { verifyFirebaseIdToken } from '@/lib/server/firebase-admin';
 import { supabaseAdmin } from '@/lib/server/supabase-admin';
 import { fetchRazorpaySubscription, razorpayAuthHeader, razorpayConfigured } from '@/lib/server/razorpay';
 import { syncSubscriptionFromRazorpay } from '@/lib/server/sync-subscription';
+import { cancelPolarSubscription, getPolarSubscription, polarConfigured } from '@/lib/server/polar';
+import { syncSubscriptionFromPolar } from '@/lib/server/sync-subscription-polar';
 
 export const runtime = 'nodejs';
 
@@ -26,18 +28,39 @@ export async function POST(req: NextRequest) {
 
   const uid = decoded.uid;
 
-  // Fetch target profile's subscription from DB
   const { data: profile, error: fetchErr } = await supabaseAdmin
     .from('reflex_profiles')
-    .select('razorpay_subscription_id, plan')
+    .select('razorpay_subscription_id, polar_subscription_id, payment_provider, plan')
     .eq('uid', uid)
     .maybeSingle();
 
-  if (fetchErr || !profile || !profile.razorpay_subscription_id) {
-    return NextResponse.json({ error: 'No active Razorpay subscription found for user.' }, { status: 404 });
+  if (fetchErr || !profile || (!profile.razorpay_subscription_id && !profile.polar_subscription_id)) {
+    return NextResponse.json({ error: 'No active subscription found for user.' }, { status: 404 });
   }
 
-  const subscriptionId = profile.razorpay_subscription_id;
+  // Provider-aware dispatch — the Razorpay branch below is byte-for-byte
+  // the previous implementation, untouched. Only the Polar branch is new.
+  const isPolar = profile.payment_provider === 'polar' && !!profile.polar_subscription_id;
+
+  if (isPolar) {
+    if (!polarConfigured()) {
+      await supabaseAdmin.from('reflex_profiles').update({ subscription_status: 'cancelled' }).eq('uid', uid);
+      return NextResponse.json({ success: true, message: 'Subscription cancelled (Mock)' });
+    }
+    try {
+      await cancelPolarSubscription(profile.polar_subscription_id as string);
+      const live = await getPolarSubscription(profile.polar_subscription_id as string);
+      if (live?.id) {
+        await syncSubscriptionFromPolar({ uid, polarSub: live as any, eventType: 'subscription.canceled' });
+      }
+      return NextResponse.json({ success: true });
+    } catch (err) {
+      console.error('Polar cancellation error:', err);
+      return NextResponse.json({ error: 'Failed to cancel subscription with Polar' }, { status: 500 });
+    }
+  }
+
+  const subscriptionId = profile.razorpay_subscription_id as string;
 
   // If mock mode / no keys
   if (!razorpayConfigured() || subscriptionId.startsWith('sub_mock_')) {

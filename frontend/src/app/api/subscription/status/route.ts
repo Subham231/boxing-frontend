@@ -4,6 +4,8 @@ import { supabaseAdmin } from '@/lib/server/supabase-admin';
 import { getEntitlement } from '@/lib/server/entitlements';
 import { fetchRazorpaySubscription } from '@/lib/server/razorpay';
 import { syncSubscriptionFromRazorpay } from '@/lib/server/sync-subscription';
+import { getPolarSubscription } from '@/lib/server/polar';
+import { syncSubscriptionFromPolar } from '@/lib/server/sync-subscription-polar';
 
 export const runtime = 'nodejs';
 
@@ -13,19 +15,28 @@ async function maybeLiveSync(uid: string): Promise<void> {
   if (!supabaseAdmin) return;
   const { data: row } = await supabaseAdmin
     .from('reflex_profiles')
-    .select('razorpay_subscription_id, subscription_status, current_period_end')
+    .select('razorpay_subscription_id, polar_subscription_id, payment_provider, subscription_status, current_period_end')
     .eq('uid', uid)
     .maybeSingle();
-
-  const subId = row?.razorpay_subscription_id as string | undefined;
-  if (!subId || subId.startsWith('sub_mock_')) return;
 
   const status = (row?.subscription_status || '').toLowerCase();
   const endMs = row?.current_period_end ? new Date(row.current_period_end).getTime() : 0;
   const now = Date.now();
   const nearOrPastEnd = !endMs || Math.abs(endMs - now) <= LIVE_CHECK_WINDOW_MS || endMs <= now;
-  const unsettled = ['created', 'authenticated', 'pending', 'halted'].includes(status);
 
+  if (row?.payment_provider === 'polar' && row.polar_subscription_id) {
+    const unsettled = ['incomplete', 'trialing', 'past_due'].includes(status);
+    if (!nearOrPastEnd && !unsettled) return;
+    const live = await getPolarSubscription(row.polar_subscription_id as string);
+    if (!live?.id) return;
+    await syncSubscriptionFromPolar({ uid, polarSub: live as any, eventType: 'status.live_check' });
+    return;
+  }
+
+  const subId = row?.razorpay_subscription_id as string | undefined;
+  if (!subId || subId.startsWith('sub_mock_')) return;
+
+  const unsettled = ['created', 'authenticated', 'pending', 'halted'].includes(status);
   if (!nearOrPastEnd && !unsettled) return;
 
   const live = await fetchRazorpaySubscription(subId);

@@ -18,6 +18,12 @@ export interface PlanConfig {
   isElite: boolean;
   premiumGuru: boolean;
   razorpayPlanId: string;
+  // Polar (international, non-India) production product id + list price.
+  // Internal plan ids (monthly/monthly_pro/three_month/yearly) are never
+  // replaced by these — this is purely a lookup so checkout/webhook code
+  // can map Polar's product id back to the same PlanConfig Razorpay uses.
+  polarProductId: string;
+  priceUsd: number;
 }
 
 export const PLANS: Record<PlanId, PlanConfig> = {
@@ -32,6 +38,8 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     isElite: false,
     premiumGuru: false,
     razorpayPlanId: process.env.RAZORPAY_PLAN_MONTHLY || 'plan_TOsvYdmDfSjY6J',
+    polarProductId: process.env.POLAR_PRODUCT_MONTHLY || '328ece7e-db19-4f53-b735-b1a52a671b40',
+    priceUsd: 6.99,
   },
   monthly_pro: {
     id: 'monthly_pro',
@@ -44,6 +52,8 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     isElite: false,
     premiumGuru: false,
     razorpayPlanId: process.env.RAZORPAY_PLAN_MONTHLY_PRO || 'plan_TOsxtFg2g3y72B',
+    polarProductId: process.env.POLAR_PRODUCT_MONTHLY_PRO || '7310fdcc-5f12-44f3-933d-f94ca81901cb',
+    priceUsd: 7.69,
   },
   three_month: {
     id: 'three_month',
@@ -56,6 +66,8 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     isElite: false,
     premiumGuru: false,
     razorpayPlanId: process.env.RAZORPAY_PLAN_THREE_MONTH || 'plan_TOsyUPX0CJPHaN',
+    polarProductId: process.env.POLAR_PRODUCT_THREE_MONTH || 'be5d8d7b-80a8-41ff-8c53-5ceab93b7860',
+    priceUsd: 17.99,
   },
   yearly: {
     id: 'yearly',
@@ -68,8 +80,18 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     isElite: true,
     premiumGuru: true,
     razorpayPlanId: process.env.RAZORPAY_PLAN_YEARLY || 'plan_TOszduZM7Q3GMC',
+    polarProductId: process.env.POLAR_PRODUCT_YEARLY || '402ff207-0224-4b0d-b8a7-f0d59e01ad88',
+    priceUsd: 64.99,
   },
 };
+
+export function planIdFromPolarProductId(productId: string | undefined | null): PlanId | null {
+  if (!productId) return null;
+  for (const [key, cfg] of Object.entries(PLANS)) {
+    if (cfg.polarProductId === productId) return key as PlanId;
+  }
+  return null;
+}
 
 // The referral reward isn't a purchasable plan, but it needs limits too —
 // treated as equivalent to the base Monthly tier's daily/weekly allowance,
