@@ -349,7 +349,9 @@ export const MECHANICS_DATABASE: Record<TechniqueKey, TechniqueMechanics> = {
 };
 
 export function techniqueKeyForCommand(command: string): TechniqueKey | null {
-  const normalized = command.trim().toUpperCase();
+  // Underscores/extra whitespace are normalized to single spaces so both
+  // 'LEAD_HOOK' and 'LEAD HOOK' resolve to the same technique.
+  const normalized = command.trim().toUpperCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
   switch (normalized) {
     case 'JAB': return 'JAB';
     case 'CROSS': return 'CROSS';
@@ -358,8 +360,27 @@ export function techniqueKeyForCommand(command: string): TechniqueKey | null {
     case 'SLIP LEFT': return 'SLIP_LEFT';
     case 'SLIP RIGHT': return 'SLIP_RIGHT';
     case 'ROLL UNDER': return 'ROLL_UNDER';
-    default: return null;
+    default: break;
   }
+
+  // Variant labels that appear elsewhere in the app (the speech map in
+  // vision/page.tsx already voices LEAD HOOK / REAR UPPERCUT / BODY HOOK
+  // etc.). Without these aliases every such rep resolved to null, was
+  // dropped from BOTH evaluateSessionFlaws() and summarizeTechniques(), and
+  // so contributed nothing to the strongest/weakest readout — which is one
+  // of the ways that panel came back empty. Variants are scored against
+  // their base technique's mechanics, which is the correct standard for
+  // them; a lead/rear distinction doesn't change the required mechanics.
+  if (normalized.endsWith('UPPERCUT') || normalized.startsWith('UPPERCUT')) return 'UPPERCUT';
+  if (normalized.endsWith('HOOK') || normalized.startsWith('HOOK')) return 'HOOK';
+  if (normalized.includes('JAB')) return 'JAB';
+  if (normalized.includes('CROSS') || normalized.includes('OVERHAND')) return 'CROSS';
+  if (normalized.includes('SLIP')) {
+    if (normalized.includes('RIGHT')) return 'SLIP_RIGHT';
+    if (normalized.includes('LEFT')) return 'SLIP_LEFT';
+  }
+  if (normalized.includes('ROLL') || normalized.includes('WEAVE')) return 'ROLL_UNDER';
+  return null;
 }
 
 // Freestyle mode has no called command — classify purely from the measured

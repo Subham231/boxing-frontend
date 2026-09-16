@@ -99,6 +99,12 @@ const GUARD_REARM_MS = 70;
 // below this displacement (relative to shoulder width) there isn't enough
 // signal to say what shape was thrown, so we don't penalize it.
 const MIN_TRAJECTORY_CONFIDENCE = 0.18;
+// A hook is thrown with the elbow staying bent (often ~80-120°) the whole
+// way through — it can legitimately never reach ELBOW_EXTEND_THRESHOLD,
+// which is what a straight punch/uppercut needs. This is just a floor to
+// rule out near-zero arm movement (pose noise, a shoulder twitch) from
+// ever qualifying as a hook's start — real hooks clear it easily.
+const MIN_HOOK_ELBOW_ANGLE = 50;
 // Reference magnitudes (normalized by shoulder width, same units as
 // noseOffset/drop above) for a "fully committed" slip or roll, used to
 // convert raw peak displacement into a 0-100 score the same way peak
@@ -106,15 +112,63 @@ const MIN_TRAJECTORY_CONFIDENCE = 0.18;
 const FULL_HEAD_LATERAL_FOR_FULL_SCORE = 0.55; // matches the existing defenseTriggered lateral threshold with headroom
 const FULL_HEAD_DROP_FOR_FULL_SCORE = 0.35;
 
+// A hook is defined by the elbow STAYING bent through the whole punch; a
+// straight punch passes through this angle on its way out to full
+// extension. This is the signal that actually separates the two shapes.
+const HOOK_MAX_ELBOW_ANGLE = 135;
+// Minimum lateral wrist travel (in shoulder-widths) before a punch can be
+// called a hook at all.
+const MIN_HOOK_LATERAL = 0.3;
+// --- Hook detection (its own cycle, deliberately NOT the straight-punch
+// hysteresis) ----------------------------------------------------------
+// A hook can't be validated the way a jab is, for two independent reasons:
+//  1. It never crosses ELBOW_EXTEND_THRESHOLD, so the extension gate never
+//     fires — this is why hooks previously went completely undetected.
+//  2. Its elbow also never crosses ELBOW_RETRACT_THRESHOLD on the way back
+//     (it was already below it), so if a hook were allowed to enter
+//     'strike', it would drop straight back to 'guard' on the next frame
+//     and re-validate over and over — one hook counted three or four times.
+// So a hook is detected as a *completed sweep* instead: the wrist travels a
+// decisive distance, the elbow stays bent for the whole travel (which is
+// what makes it a hook and not a straight punch mid-flight), and the wrist
+// has started coming back. One validation per motion burst, then it's
+// disarmed until the fighter returns to rest.
+const HOOK_MIN_SWEEP = 0.45;      // shoulder-widths of peak wrist travel
+const HOOK_RETURN_RATIO = 0.7;    // wrist must fall back to this fraction of peak
+
 // Wrist displacement (normalized by shoulder width) shape used to classify
 // what kind of punch was actually thrown, independent of what was called —
 // lets us flag when a "HOOK" call was actually thrown as a straight punch.
-function classifyTrajectory(dx: number, dy: number, shoulderWidth: number): 'straight' | 'hook' | 'uppercut' {
+//
+// `elbowAngleAtPeak` is the measured elbow angle at the moment of peak
+// wrist displacement, and it is what makes hook-vs-straight reliable.
+// Lateral displacement ALONE cannot separate them: at the 45° camera angle
+// the setup guide asks for, a jab or cross travelling straight out at the
+// target projects into the image plane as a large horizontal wrist sweep —
+// nx well above MIN_HOOK_LATERAL with near-zero ny — i.e. geometrically
+// identical to a hook. The old purely-geometric rule therefore labelled
+// ordinary jabs and crosses as 'hook', which both marked them "wrong path"
+// in the log and (once hooks were given their own strike-entry path) risked
+// validating a straight punch's mid-flight as a hook. Gating on a bent
+// elbow removes that ambiguity in both directions.
+function classifyTrajectory(
+  dx: number,
+  dy: number,
+  shoulderWidth: number,
+  elbowAngleAtPeak?: number
+): 'straight' | 'hook' | 'uppercut' {
   if (shoulderWidth <= 0) return 'straight';
   const nx = dx / shoulderWidth;
   const ny = dy / shoulderWidth;
   if (Math.abs(ny) > Math.abs(nx) * 1.3 && ny < -0.12) return 'uppercut';
-  if (Math.abs(nx) > 0.3 && Math.abs(ny) < Math.abs(nx) * 0.8) return 'hook';
+  const lateralEnough = Math.abs(nx) > MIN_HOOK_LATERAL;
+  // No elbow reading available (shouldn't happen in the live loop, but keep
+  // the function total): fall back to the old flatness heuristic.
+  const elbowStayedBent =
+    elbowAngleAtPeak === undefined
+      ? Math.abs(ny) < Math.abs(nx) * 0.8
+      : elbowAngleAtPeak < HOOK_MAX_ELBOW_ANGLE;
+  if (lateralEnough && elbowStayedBent) return 'hook';
   return 'straight';
 }
 function expectedTrajectoryFor(command: string): 'straight' | 'hook' | 'uppercut' {
@@ -165,6 +219,13 @@ interface RepLogEntry {
 // "power" estimate. This is a heuristic scale, not a calibrated force unit —
 // a monocular camera has no way to measure actual impact force.
 const POWER_REFERENCE_VELOCITY = 900;
+
+// Reaction-time band used to convert an average reaction (ms) into a 0-100
+// reflex score. CEILING = as fast as a human realistically reacts to a
+// spoken call and completes a validated strike; FLOOR = the point at which
+// the response is genuinely too slow to score.
+const REFLEX_CEILING_MS = 250;
+const REFLEX_FLOOR_MS = 1600;
 
 function estimatePower(peakVelocity: number): number {
   return Math.round(Math.min(100, Math.max(0, (peakVelocity / POWER_REFERENCE_VELOCITY) * 100)));
@@ -362,6 +423,13 @@ export default function VisionPage() {
   const [missCount, setMissCount] = useState(0);
   const [attemptedCount, setAttemptedCount] = useState(0);
   const [activeCommand, setActiveCommand] = useState('');
+  // Rolling window of the last few commands actually issued (i.e. the same
+  // text handed to speakCommand/activeCommandTextRef — see
+  // setExpectedCommand below). Drives the "TARGET COMBO" HUD strip so it
+  // shows real called commands instead of a fixed decorative sequence that
+  // has nothing to do with the drill in progress.
+  const [commandHistoryDisplay, setCommandHistoryDisplay] = useState<string[]>([]);
+  const commandHistoryRef = useRef<string[]>([]);
   const [tacticalCue, setTacticalCue] = useState('Keep your guard high and stay light on your feet.');
   const [isCommandSpeaking, setIsCommandSpeaking] = useState(false);
   const [subscriptionChecking, setSubscriptionChecking] = useState(false);
@@ -443,6 +511,24 @@ export default function VisionPage() {
   const repLogRef = useRef<RepLogEntry[]>([]);
   const activeCommandTextRef = useRef('');
 
+  // Single source of truth for "what's currently expected". Every place
+  // that starts a new call (runCommands, startFreestyleRound) must go
+  // through this instead of writing activeCommandTextRef and the
+  // activeCommand/commandHistory UI state as separate, independent
+  // assignments — that duplication is exactly what let the HUD's "TARGET
+  // COMBO" strip drift into showing its own hardcoded step sequence
+  // instead of the real called commands. registerHit()/scoring already
+  // reads activeCommandTextRef.current, and this is the only function
+  // that's allowed to write it, so the UI can never show a different
+  // "expected" punch than the one being scored.
+  const setExpectedCommand = (text: string) => {
+    activeCommandTextRef.current = text;
+    setActiveCommand(text);
+    const hist = [...commandHistoryRef.current, text].slice(-5);
+    commandHistoryRef.current = hist;
+    setCommandHistoryDisplay(hist);
+  };
+
   // DO NOT remove the motion gate below or change this state machine to a
   // single-frame angle check. Straight arms at rest also measure near 180°;
   // without the gate, the detector gets stuck in strike and stops counting.
@@ -477,8 +563,17 @@ export default function VisionPage() {
   const footAngleBaselineRef = useRef({ L: 0, R: 0 });
   const peakFootPivotRef = useRef(0);
   const wristBaselineRef = useRef({ L: { x: 0, y: 0 }, R: { x: 0, y: 0 } });
-  const peakWristDisplacementRef = useRef({ dx: 0, dy: 0, mag: 0 });
+  // elbowAtPeak: the elbow angle measured at the frame of peak wrist
+  // displacement — classifyTrajectory() needs it to tell a bent-elbow hook
+  // apart from a straight punch that merely looks lateral on camera.
+  const peakWristDisplacementRef = useRef({ dx: 0, dy: 0, mag: 0, elbowAtPeak: 180 });
   const lastShoulderWidthRef = useRef(0.2);
+  // Per-motion-burst hook bookkeeping (reset at rest, see `atRest` below).
+  // maxElbowSinceMotionRef is the discriminator that keeps a straight punch
+  // out of the hook path: a jab/cross always extends past
+  // HOOK_MAX_ELBOW_ANGLE at some point in its flight, a hook never does.
+  const maxElbowSinceMotionRef = useRef(0);
+  const hookValidatedThisBurstRef = useRef(false);
 
   // --- Defensive head-movement tracking (independent of the elbow state
   // machine — a slip/roll never extends the elbow, so it needs its own peak
@@ -840,6 +935,8 @@ export default function VisionPage() {
     repLogRef.current = [];
     currentRepPeakVelocityRef.current = 0;
     activeCommandTextRef.current = '';
+    commandHistoryRef.current = [];
+    setCommandHistoryDisplay([]);
     peakAngularVelocityRef.current = 0;
     trackingSamplesRef.current = [];
     elbowStateRef.current = 'guard';
@@ -862,7 +959,9 @@ export default function VisionPage() {
     footAngleBaselineRef.current = { L: 0, R: 0 };
     peakFootPivotRef.current = 0;
     wristBaselineRef.current = { L: { x: 0, y: 0 }, R: { x: 0, y: 0 } };
-    peakWristDisplacementRef.current = { dx: 0, dy: 0, mag: 0 };
+    peakWristDisplacementRef.current = { dx: 0, dy: 0, mag: 0, elbowAtPeak: 180 };
+    maxElbowSinceMotionRef.current = 0;
+    hookValidatedThisBurstRef.current = false;
     noseYBaselineRef.current = 0;
     peakHeadLateralRef.current = 0;
     peakHeadDropRef.current = 0;
@@ -1260,6 +1359,16 @@ export default function VisionPage() {
     prevAngleTsRef.current = now;
     prevMaxElbowAngleRef.current = smoothedAngle;
 
+    // Track "was there real punch-speed motion just now" BEFORE the
+    // kinetic-chain tracking block below, not after it. This used to be
+    // computed inside the punch state machine further down, which ran
+    // strictly AFTER the tracking block had already reset every peak
+    // tracker for this exact frame — see the `atRest` comment below for
+    // why that ordering silently zeroed out every rep's biomechanics.
+    if (angularVel >= MIN_PUNCH_ANGULAR_VELOCITY || wristSpeedRef.current >= MIN_WRIST_SPEED) {
+      lastPunchMotionAtRef.current = now;
+    }
+
     // --- Torso rotation tracking (hip/shoulder engagement) ---------------
     let shoulderAngle = shoulderBaselineAngleRef.current;
     if (lS && rS) {
@@ -1293,9 +1402,24 @@ export default function VisionPage() {
     const lFootAngle = lFootVisible ? lineAngle(lHeel!, lFoot!) : footAngleBaselineRef.current.L;
     const rFootAngle = rFootVisible ? lineAngle(rHeel!, rFoot!) : footAngleBaselineRef.current.R;
 
-    if (elbowStateRef.current === 'guard') {
-      // Track the resting orientation continuously while arms are down —
-      // this becomes the baseline a strike's rotation is measured against.
+    // Gate the kinetic-chain baseline/peak tracking on genuine rest, not on
+    // elbowStateRef directly. elbowStateRef only flips to 'strike' once the
+    // elbow crosses near-full extension (ELBOW_EXTEND_THRESHOLD) — fine for
+    // a jab/cross, but a hook stays bent the whole time, and even a
+    // straight punch's ramp-up from guard to full extension spans several
+    // frames that are still technically "guard" by that definition. Under
+    // the old `elbowStateRef.current === 'guard'` check, every one of those
+    // ramp-up frames re-anchored the baseline to the current (already-
+    // moving) position and reset every peak tracker to 0 — including the
+    // exact transition frame itself, since this block runs BEFORE the state
+    // machine below updates elbowStateRef. Net effect: a punch's rotation/
+    // knee-drive/weight-transfer/foot-pivot/wrist-path measured 0 on the
+    // very same frame registerHit() read it, for every punch, every time.
+    const atRest = now - lastPunchMotionAtRef.current > MOTION_MEMORY_MS;
+
+    if (atRest) {
+      // Track the resting orientation continuously while genuinely at rest
+      // — this becomes the baseline a strike's rotation is measured against.
       shoulderBaselineAngleRef.current = shoulderAngle;
       peakRotationRef.current = 0;
 
@@ -1314,8 +1438,11 @@ export default function VisionPage() {
 
       if (lW && (lW.visibility ?? 1) > 0.4) wristBaselineRef.current.L = { x: lW.x, y: lW.y };
       if (rW && (rW.visibility ?? 1) > 0.4) wristBaselineRef.current.R = { x: rW.x, y: rW.y };
-      peakWristDisplacementRef.current = { dx: 0, dy: 0, mag: 0 };
+      peakWristDisplacementRef.current = { dx: 0, dy: 0, mag: 0, elbowAtPeak: smoothedAngle };
+      maxElbowSinceMotionRef.current = smoothedAngle;
+      hookValidatedThisBurstRef.current = false;
     } else {
+      if (smoothedAngle > maxElbowSinceMotionRef.current) maxElbowSinceMotionRef.current = smoothedAngle;
       const rotationDelta = Math.abs(shoulderAngle - shoulderBaselineAngleRef.current);
       if (rotationDelta > peakRotationRef.current) peakRotationRef.current = rotationDelta;
 
@@ -1348,7 +1475,7 @@ export default function VisionPage() {
         const dy = activeWrist.y - baseline.y;
         const mag = Math.hypot(dx, dy);
         if (mag > peakWristDisplacementRef.current.mag) {
-          peakWristDisplacementRef.current = { dx, dy, mag };
+          peakWristDisplacementRef.current = { dx, dy, mag, elbowAtPeak: smoothedAngle };
         }
       }
     }
@@ -1361,13 +1488,12 @@ export default function VisionPage() {
     // than either alone (a shoulder shrug can spike one but rarely both).
     // A short dwell time in guard before re-arming also stops noise
     // flickering right across the hysteresis band from double-counting.
+    // This path is for punches that genuinely extend the arm (jab, cross,
+    // uppercut) and is unchanged; hooks are handled separately below.
     let punchValidated = false;
     const dwelledInGuard = now - guardEnteredAtRef.current >= GUARD_REARM_MS;
-    if (angularVel >= MIN_PUNCH_ANGULAR_VELOCITY || wristSpeedRef.current >= MIN_WRIST_SPEED) {
-      lastPunchMotionAtRef.current = now;
-    }
+    const motionDetected = now - lastPunchMotionAtRef.current <= MOTION_MEMORY_MS;
     if (elbowStateRef.current === 'guard' && dwelledInGuard && smoothedAngle > ELBOW_EXTEND_THRESHOLD) {
-      const motionDetected = now - lastPunchMotionAtRef.current <= MOTION_MEMORY_MS;
       if (motionDetected) {
         elbowStateRef.current = 'strike';
         punchValidated = true;
@@ -1375,6 +1501,42 @@ export default function VisionPage() {
     } else if (elbowStateRef.current === 'strike' && smoothedAngle < ELBOW_RETRACT_THRESHOLD) {
       elbowStateRef.current = 'guard';
       guardEnteredAtRef.current = now;
+    }
+
+    // --- Hook detection: completed lateral sweep, elbow bent throughout ---
+    // Deliberately independent of elbowStateRef (see HOOK_MIN_SWEEP above).
+    // Every condition here is a real measurement from this motion burst:
+    //   * the burst showed punch-speed motion (same gate as above),
+    //   * the elbow NEVER extended past HOOK_MAX_ELBOW_ANGLE during it —
+    //     this is what excludes a straight punch mid-flight,
+    //   * peak wrist travel cleared HOOK_MIN_SWEEP,
+    //   * the wrist path classifies as 'hook' via the same
+    //     classifyTrajectory() used to label the final rep, so entry and
+    //     scoring can never disagree,
+    //   * and the wrist has started returning, i.e. the sweep finished —
+    //     which also means the peak values registerHit() scores are the
+    //     real peaks of the whole hook, not a mid-flight snapshot.
+    // hookValidatedThisBurstRef caps it at one rep per burst.
+    if (!punchValidated && !hookValidatedThisBurstRef.current && motionDetected) {
+      const wristDelta = peakWristDisplacementRef.current;
+      const peakSweep = wristDelta.mag / shoulderWidth;
+      const activeWristNowForHook = lAngleThisFrame >= rAngleThisFrame ? lW : rW;
+      const activeSideForHook: 'L' | 'R' = lAngleThisFrame >= rAngleThisFrame ? 'L' : 'R';
+      const hookBaseline = wristBaselineRef.current[activeSideForHook];
+      const currentTravel = activeWristNowForHook
+        ? Math.hypot(activeWristNowForHook.x - hookBaseline.x, activeWristNowForHook.y - hookBaseline.y) / shoulderWidth
+        : peakSweep;
+      const sweepReturning = currentTravel <= peakSweep * HOOK_RETURN_RATIO;
+      if (
+        maxElbowSinceMotionRef.current < HOOK_MAX_ELBOW_ANGLE &&
+        smoothedAngle > MIN_HOOK_ELBOW_ANGLE &&
+        peakSweep >= HOOK_MIN_SWEEP &&
+        sweepReturning &&
+        classifyTrajectory(wristDelta.dx, wristDelta.dy, shoulderWidth, wristDelta.elbowAtPeak) === 'hook'
+      ) {
+        hookValidatedThisBurstRef.current = true;
+        punchValidated = true;
+      }
     }
 
     let noseOffset = 0;
@@ -1486,9 +1648,9 @@ export default function VisionPage() {
     let trajectory: 'straight' | 'hook' | 'uppercut' = 'straight';
     let trajectoryConfident = false;
     if (kind === 'punch') {
-      const { dx, dy, mag } = peakWristDisplacementRef.current;
+      const { dx, dy, mag, elbowAtPeak } = peakWristDisplacementRef.current;
       const shoulderW = lastShoulderWidthRef.current || 0.2;
-      trajectory = classifyTrajectory(dx, dy, shoulderW);
+      trajectory = classifyTrajectory(dx, dy, shoulderW, elbowAtPeak);
       trajectoryConfident = mag / shoulderW >= MIN_TRAJECTORY_CONFIDENCE;
     }
     const trajectoryMatch =
@@ -1531,8 +1693,8 @@ export default function VisionPage() {
     const kneeDriveScore = Math.round(Math.min(100, (peakKneeDriveRef.current / FULL_KNEE_DRIVE_DEG) * 100));
     const weightTransferScore = Math.round(Math.min(100, (peakWeightTransferRef.current / FULL_WEIGHT_TRANSFER_RATIO) * 100));
     const footPivotScore = Math.round(Math.min(100, (peakFootPivotRef.current / FULL_FOOT_PIVOT_DEG) * 100));
-    const { dx, dy } = peakWristDisplacementRef.current;
-    const trajectory = classifyTrajectory(dx, dy, lastShoulderWidthRef.current || 0.2);
+    const { dx, dy, elbowAtPeak } = peakWristDisplacementRef.current;
+    const trajectory = classifyTrajectory(dx, dy, lastShoulderWidthRef.current || 0.2, elbowAtPeak);
 
     repLogRef.current.push({
       index: repLogRef.current.length + 1,
@@ -1623,9 +1785,8 @@ export default function VisionPage() {
         : PUNCH_COMMANDS;
       const cmd = pool[Math.floor(Math.random() * pool.length)];
 
-      setActiveCommand(cmd.text);
+      setExpectedCommand(cmd.text);
       setTacticalCue(tacticalCueForCommand(cmd.text, cmd.kind));
-      activeCommandTextRef.current = cmd.text;
       awaitingRef.current = true;
       awaitingKindRef.current = cmd.kind;
       currentRepPeakVelocityRef.current = 0;
@@ -1665,9 +1826,8 @@ export default function VisionPage() {
   const startFreestyleRound = () => {
     let remaining = freestyleDurationRef.current;
     elapsedSecondsRef.current = 0;
-    setActiveCommand('FREESTYLE');
+    setExpectedCommand('FREESTYLE');
     setTacticalCue('Keep your guard high — choose clean, committed punch shapes.');
-    activeCommandTextRef.current = 'FREESTYLE';
     awaitingRef.current = true;
     awaitingKindRef.current = 'punch';
 
@@ -1685,7 +1845,11 @@ export default function VisionPage() {
 
     sessionTimerRef.current = setInterval(() => {
       if (stageRef.current !== 'camera') return;
-      if (isTrackingInadequateRef.current) return;
+      // isPausedRef was missing here (the coach-mode timer in startDrill
+      // already checks it): pausing a freestyle round froze the pose loop
+      // and scoring but the round clock kept running down, so a paused
+      // round could end — and be analysed — while the fighter was away.
+      if (isTrackingInadequateRef.current || isPausedRef.current) return;
       remaining -= 1;
       elapsedSecondsRef.current += 1;
       const clamped = Math.max(0, remaining);
@@ -1765,8 +1929,25 @@ export default function VisionPage() {
       : 0;
 
     const stanceScore = Math.round(avgTrackingConfidence * 100);
+    // Reflex normalization. The old curve was 100 - (avgReaction - 250) / 8,
+    // which hits 0 at 1050ms — but a voice-called rep's measured reaction
+    // includes the time the spoken word itself takes plus the travel time of
+    // the strike, so real sessions routinely average above that and every
+    // one of them reported a flat 0% reflex. The band below scores 250ms as
+    // perfect and only bottoms out at 1600ms, so a genuinely slow-but-real
+    // session gets a real number instead of a floored zero. A true 0 is now
+    // reserved for "no reaction data at all" (no landed rep with a reaction
+    // time), which is an honest 0 rather than a clipped score.
     const reflexScore = avgReaction
-      ? Math.round(Math.min(100, Math.max(0, 100 - (avgReaction - 250) / 8)))
+      ? Math.round(
+          Math.min(
+            100,
+            Math.max(
+              0,
+              ((REFLEX_FLOOR_MS - avgReaction) / (REFLEX_FLOOR_MS - REFLEX_CEILING_MS)) * 100
+            )
+          )
+        )
       : 0;
     const powerScore = Math.round(Math.min(100, (peakAngularVelocityRef.current / 900) * 100));
     let overallScore = Math.round((accuracy + stanceScore + reflexScore) / 3);
@@ -2598,47 +2779,55 @@ export default function VisionPage() {
                   </span>
                 </div>
 
-                {/* Target combo row (Reactive to combo progress) */}
+                {/* Called-command strip — renders the real rolling history of
+                    commands issued through setExpectedCommand(), i.e. exactly
+                    what the voice system spoke and exactly what scoring is
+                    comparing against. It used to cycle a hardcoded
+                    ['JAB','CROSS','HOOK','SLIP R','UPPER'] array off comboIndex,
+                    which had nothing to do with the randomly-chosen commands
+                    actually being called. */}
                 <div className="bg-black/85 border border-white/10 rounded-2xl px-3 py-2 shadow-[0_4px_20px_rgba(0,0,0,0.6)]">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-1.5">
                       <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                      <span className="text-[7.5px] font-black text-white/70 tracking-widest uppercase">TARGET COMBO // 1-2-3</span>
+                      <span className="text-[7.5px] font-black text-white/70 tracking-widest uppercase">CALLED COMMANDS</span>
                     </div>
                     <div className="text-right">
                       <span className="text-[7.5px] font-black text-primary uppercase block font-mono">
-                        STEP {(comboIndex % 5) + 1}/5
+                        {mode === 'freestyle' ? 'FREESTYLE' : `CALL ${attemptedCount}/${punchTarget}`}
                       </span>
-                      <span className="text-[7px] font-black text-white/40 uppercase">CADENCE 132 BPM</span>
+                      <span className="text-[7px] font-black text-white/40 uppercase">
+                        {difficulty === 'hard' ? 'FAST CADENCE' : difficulty === 'easy' ? 'RELAXED CADENCE' : 'STEADY CADENCE'}
+                      </span>
                     </div>
                   </div>
-                  {/* Reactive Combo step pills */}
+                  {/* Real called-command pills: last one is the live call */}
                   <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
-                    {(['JAB', 'CROSS', 'HOOK', 'SLIP R', 'UPPER'] as const).map((step, i) => {
-                      const currentStepInCycle = comboIndex % 5;
-                      const isCurrent = currentStepInCycle === i;
-                      const isCompleted = currentStepInCycle > i;
-
-                      return (
-                        <div
-                          key={step}
-                          className={`flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-full border text-[8px] font-black font-mono tracking-wide transition-all duration-200 ${
-                            isCurrent
-                              ? 'bg-primary/25 border-primary text-primary shadow-[0_0_12px_rgba(226,255,59,0.5)] scale-105'
-                              : isCompleted
-                              ? 'bg-[#101e08]/90 border-[#84CC16]/60 text-[#84CC16]'
-                              : i === 3
-                              ? 'bg-amber-500/10 border-amber-500/30 text-amber-400/70'
-                              : 'bg-black/60 border-white/10 text-white/40'
-                          }`}
-                        >
-                          <span className="text-[7px] opacity-70">
-                            {isCompleted ? '✓' : i + 1}
-                          </span>
-                          <span>{step}</span>
-                        </div>
-                      );
-                    })}
+                    {commandHistoryDisplay.length === 0 ? (
+                      <div className="flex-shrink-0 px-2.5 py-1.5 rounded-full border border-white/10 bg-black/60 text-white/40 text-[8px] font-black font-mono tracking-wide">
+                        AWAITING FIRST CALL
+                      </div>
+                    ) : (
+                      commandHistoryDisplay.map((step, i) => {
+                        const isCurrent = i === commandHistoryDisplay.length - 1;
+                        const isDefenseCall = DEFENSE_COMMANDS.some((c) => c.text === step);
+                        return (
+                          <div
+                            key={`${step}-${i}`}
+                            className={`flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-full border text-[8px] font-black font-mono tracking-wide transition-all duration-200 ${
+                              isCurrent
+                                ? 'bg-primary/25 border-primary text-primary shadow-[0_0_12px_rgba(226,255,59,0.5)] scale-105'
+                                : isDefenseCall
+                                ? 'bg-amber-500/10 border-amber-500/30 text-amber-400/70'
+                                : 'bg-[#101e08]/90 border-[#84CC16]/60 text-[#84CC16]'
+                            }`}
+                          >
+                            <span className="text-[7px] opacity-70">{isCurrent ? '▶' : '✓'}</span>
+                            <span>{step}</span>
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
 

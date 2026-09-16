@@ -13,6 +13,9 @@ const PUNCH_RETRACT_DEG = 135;
 const MIN_PUNCH_ANGULAR_VELOCITY = 180;
 const MIN_PUNCH_WRIST_SPEED = 0.35;
 const MOTION_MEMORY_MS = 350;
+// How long a 'disconnected' peer connection is given to recover (on its own
+// or via ICE restart) before the match is declared over.
+const RECONNECT_GRACE_MS = 8000;
 const FULL_WRIST_SPEED_FOR_FULL_POWER = 3.2; // normalized units/sec for a "full power" registered punch
 type MatchInfo = {
   matchId: string;
@@ -45,11 +48,23 @@ export default function SparMatchClient() {
   const localStreamRef = useRef<MediaStream | null>(null);
   const channelRef = useRef<ReturnType<NonNullable<typeof supabase>['channel']> | null>(null);
   const matchStartRef = useRef<number>(0);
-  const currentCmdRef = useRef<{ index: number; at: number; cmd: SparCommand } | null>(null);
+  // `at` is wall-clock (Date.now) and is kept only for logging/debugging.
+  // `atPerf` is performance.now() — the SAME clock the pose loop timestamps
+  // strikes with. Reaction time must be measured on one monotonic clock:
+  // it used to be (Date.now at command) -> (Date.now in registerHit), while
+  // detection ran on performance.now, and the command itself was only
+  // noticed on a 100ms setInterval tick. That quantisation alone skewed
+  // every reaction by up to 100ms and is unrecoverable on fast responses.
+  const currentCmdRef = useRef<{ index: number; at: number; atPerf: number; cmd: SparCommand } | null>(null);
+  // performance.now() of the most recent pose frame, so a strike is scored
+  // against when it was actually OBSERVED rather than when React happened
+  // to run registerHit.
+  const lastPoseFrameAtRef = useRef(0);
   const resultsRef = useRef<CmdResult[]>([]);
   const spokenRef = useRef<Set<number>>(new Set());
   const submittedRef = useRef(false);
   const exitHandledRef = useRef(false);
+  const reconnectTimerRef = useRef<number | null>(null);
   const poseRef = useRef<any>(null);
   const poseRafRef = useRef<number | null>(null);
   const registerHitRef = useRef<(() => void) | null>(null);
@@ -57,6 +72,7 @@ export default function SparMatchClient() {
   const previousElbowRef = useRef(0);
   const previousPoseTimeRef = useRef<number | null>(null);
   const previousWristRef = useRef<{ x: number; y: number } | null>(null);
+  const isInferringRef = useRef(false);
   const wristSpeedRef = useRef(0);
   const elbowStateRef = useRef<'guard' | 'strike'>('guard');
   const guardEnteredAtRef = useRef(0);
@@ -73,6 +89,10 @@ export default function SparMatchClient() {
   const [statusLine, setStatusLine] = useState('Connecting…');
   const [opponentLeft, setOpponentLeft] = useState(false);
   const [opponentLeftReason, setOpponentLeftReason] = useState('Opponent left the match.');
+  const [canRetry, setCanRetry] = useState(false);
+  // Bumping this re-runs the media/connection effect, which is how Retry
+  // re-requests camera + mic after the fighter fixes the permission.
+  const [connectAttempt, setConnectAttempt] = useState(0);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [micEnabled, setMicEnabled] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
@@ -282,11 +302,23 @@ export default function SparMatchClient() {
     // If we can't get a live match going within a reasonable window (media
     // permission stuck, opponent never connects, etc.), stop waiting forever
     // — fail gracefully, let the opponent know, and send this fighter home.
-    const failAndExit = (message: string, status: string) => {
+    const failAndExit = (message: string, status: string, recoverable = false) => {
       if (cancelled) return;
       setError(message);
       setStatusLine(status);
       setPhase('done');
+      // A denied/blocked permission or a busy camera is fixable by the
+      // fighter right now, so keep them on the screen with a Retry button
+      // instead of bouncing them to the lobby after three seconds with no
+      // way to act on the message.
+      setCanRetry(recoverable);
+      if (recoverable) {
+        if (!exitHandledRef.current) {
+          cleanup();
+          exitHandledRef.current = true;
+        }
+        return;
+      }
       if (!exitHandledRef.current) {
         // Broadcast while the ref is still false so cleanup() actually
         // notifies the opponent, then mark it handled to stop duplicate exits.
@@ -343,13 +375,53 @@ export default function SparMatchClient() {
         pcRef.current = pc;
         stream.getTracks().forEach((t) => pc.addTrack(t, stream));
 
+        // 'disconnected' is usually TRANSIENT (a brief network blip, a
+        // handover between wifi and cellular) and WebRTC often recovers on
+        // its own or after an ICE restart. Treating it the same as 'failed'
+        // is what ended live matches on a momentary blip and reported the
+        // opponent as having left. Only a terminal state, or a blip that
+        // doesn't recover inside RECONNECT_GRACE_MS, ends the match.
         pc.onconnectionstatechange = () => {
-          if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
-            handleOpponentExit('Connection lost. Your opponent left the match.');
-          }
-          if (pc.connectionState === 'connected') {
+          const state = pc.connectionState;
+          if (state === 'connected') {
+            if (reconnectTimerRef.current !== null) {
+              window.clearTimeout(reconnectTimerRef.current);
+              reconnectTimerRef.current = null;
+            }
             setStatusLine('Opponent connected');
+            setError(null);
             setOpponentLeft(false);
+            return;
+          }
+          if (state === 'disconnected') {
+            setStatusLine('Connection unstable — reconnecting…');
+            // Only the offerer drives the ICE restart, so both peers don't
+            // renegotiate against each other at the same time.
+            if (match.role === 'offer') {
+              (async () => {
+                try {
+                  const restart = await pc.createOffer({ iceRestart: true });
+                  await pc.setLocalDescription(restart);
+                  channelRef.current?.send({
+                    type: 'broadcast',
+                    event: 'sdp',
+                    payload: { sdp: pc.localDescription, from: match.role },
+                  });
+                } catch { /* grace timer below still covers us */ }
+              })();
+            }
+            if (reconnectTimerRef.current === null) {
+              reconnectTimerRef.current = window.setTimeout(() => {
+                reconnectTimerRef.current = null;
+                if (pc.connectionState !== 'connected') {
+                  handleOpponentExit('Connection lost. Your opponent left the match.');
+                }
+              }, RECONNECT_GRACE_MS);
+            }
+            return;
+          }
+          if (state === 'failed' || state === 'closed') {
+            handleOpponentExit('Connection lost. Your opponent left the match.');
           }
         };
 
@@ -421,13 +493,33 @@ export default function SparMatchClient() {
 
         await new Promise<void>((resolve, reject) => {
           const timeout = window.setTimeout(() => reject(new Error('Spar connection timed out.')), 10000);
+          let settled = false;
           channel.subscribe((status) => {
             if (status === 'SUBSCRIBED') {
               window.clearTimeout(timeout);
+              settled = true;
               resolve();
-            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+              return;
+            }
+            if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
               window.clearTimeout(timeout);
-              reject(new Error('Could not connect to the spar signaling service.'));
+              if (!settled) {
+                settled = true;
+                reject(new Error('Could not connect to the spar signaling service.'));
+                return;
+              }
+              // Dropped AFTER the match was already running. The signaling
+              // channel carries ICE/SDP and the opponent's exit notice, so
+              // losing it silently left a live match unable to renegotiate
+              // or notice the opponent leaving. Resubscribe instead.
+              if (!cancelled) {
+                setStatusLine('Signal dropped — reconnecting…');
+                window.setTimeout(() => {
+                  if (!cancelled) {
+                    try { channel.subscribe(); } catch { /* peer-connection grace still applies */ }
+                  }
+                }, 1000);
+              }
             }
           });
         });
@@ -452,7 +544,15 @@ export default function SparMatchClient() {
         speak('Fight');
       } catch (e: any) {
         window.clearTimeout(overallTimeout);
-        failAndExit(friendlyMediaError(e), 'Connection failed');
+        const name = e?.name || '';
+        const userFixable =
+          name === 'NotAllowedError' ||
+          name === 'PermissionDeniedError' ||
+          name === 'NotReadableError' ||
+          name === 'TrackStartError' ||
+          name === 'NotFoundError' ||
+          name === 'DevicesNotFoundError';
+        failAndExit(friendlyMediaError(e), 'Connection failed', userFixable);
       }
     };
 
@@ -460,8 +560,13 @@ export default function SparMatchClient() {
     return () => {
       cancelled = true;
       window.clearTimeout(overallTimeout);
+      if (reconnectTimerRef.current !== null) {
+        window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
     };
-  }, [match, authHeaders, handleOpponentExit, cleanup, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [match, authHeaders, handleOpponentExit, cleanup, router, connectAttempt]);
 
   useEffect(() => {
     if (phase !== 'live' || !match || typeof window === 'undefined') return;
@@ -485,7 +590,16 @@ export default function SparMatchClient() {
         const pose = new (window as any).Pose({
           locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`,
         });
-        pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, enableSegmentation: false, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+        // Match the solo AI Analysis mode's settings, for the same reason it
+        // uses them: modelComplexity 1 ('Full') cannot keep up with a fast
+        // combination on a phone, and smoothLandmarks is MediaPipe's own
+        // temporal filter, which trades responsiveness for stability and
+        // reads as lag on exactly the punches sparring most needs to catch.
+        // Under-sampling is why fast punches were being missed or scored as
+        // slower/weaker than they were. Detection/tracking confidence is
+        // raised so a low-confidence frame can't snap the landmarks to a
+        // wrong position and fake a strike.
+        pose.setOptions({ modelComplexity: 0, smoothLandmarks: false, enableSegmentation: false, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
         pose.onResults((results: any) => {
           const landmarks = results.poseLandmarks;
           if (!landmarks || landmarks.length < 17 || phase !== 'live') return;
@@ -507,12 +621,16 @@ export default function SparMatchClient() {
           const rawAngle = Math.max(leftAngle, rightAngle);
           const now = performance.now();
           const previousTime = previousPoseTimeRef.current;
-          const seconds = previousTime === null ? 0.033 : Math.max(0.001, (now - previousTime) / 1000);
+          // No assumed fixed frame interval: on the very first frame there is
+          // no real delta, so velocity/speed are simply not computed for it
+          // (both are gated on previousTime !== null below) rather than being
+          // derived from a made-up 33ms.
+          const seconds = previousTime === null ? 0 : Math.max(0.001, (now - previousTime) / 1000);
           const smoothed = smoothElbowRef.current === 0 ? rawAngle : smoothElbowRef.current + 0.45 * (rawAngle - smoothElbowRef.current);
           const angularVelocity = previousTime === null ? 0 : Math.abs(smoothed - previousElbowRef.current) / seconds;
           const wrist = leftAngle >= rightAngle ? leftWrist : rightWrist;
           const shoulderWidth = Math.max(0.001, Math.hypot(leftShoulder.x - rightShoulder.x, leftShoulder.y - rightShoulder.y));
-          if (previousWristRef.current && previousTime !== null) {
+          if (previousWristRef.current && previousTime !== null && seconds > 0) {
             wristSpeedRef.current = Math.hypot(wrist.x - previousWristRef.current.x, wrist.y - previousWristRef.current.y) / shoulderWidth / seconds;
             if (wristSpeedRef.current > peakWristSpeedForCmdRef.current) {
               peakWristSpeedForCmdRef.current = wristSpeedRef.current;
@@ -520,6 +638,7 @@ export default function SparMatchClient() {
           }
           previousWristRef.current = { x: wrist.x, y: wrist.y };
           previousPoseTimeRef.current = now;
+          lastPoseFrameAtRef.current = now;
           previousElbowRef.current = smoothed;
           smoothElbowRef.current = smoothed;
 
@@ -541,10 +660,18 @@ export default function SparMatchClient() {
         });
         poseRef.current = pose;
 
+        // isInferringRef: without it, a slow inference frame lets the next
+        // rAF tick call send() again while the first is still running.
+        // MediaPipe queues those, latency compounds under load, and the
+        // landmarks the state machine sees fall further and further behind
+        // the actual arm — which is precisely when fast punches happen.
         const loop = async () => {
           const video = localVideoRef.current;
-          if (video && video.readyState >= 2 && poseRef.current) {
-            try { await poseRef.current.send({ image: video }); } catch { /* retry next frame */ }
+          if (video && video.readyState >= 2 && poseRef.current && !isInferringRef.current) {
+            isInferringRef.current = true;
+            try { await poseRef.current.send({ image: video }); }
+            catch { /* retry next frame */ }
+            finally { isInferringRef.current = false; }
           }
           if (!cancelled && poseRef.current) poseRafRef.current = requestAnimationFrame(loop);
         };
@@ -621,7 +748,7 @@ export default function SparMatchClient() {
         }
 
         const cmd = seq[dueIndex];
-        currentCmdRef.current = { index: dueIndex, at: Date.now(), cmd };
+        currentCmdRef.current = { index: dueIndex, at: Date.now(), atPerf: performance.now(), cmd };
         peakWristSpeedForCmdRef.current = 0;
         setCurrentCommand(cmd.command);
         speak(cmd.command);
@@ -655,7 +782,11 @@ export default function SparMatchClient() {
     const cur = currentCmdRef.current;
     if (!cur || phase !== 'live') return;
     if (resultsRef.current.some((r) => r.index === cur.index)) return;
-    const reactionMs = Date.now() - cur.at;
+    // Frame-accurate: observed-strike time minus command time, both on
+    // performance.now(). Falls back to the current instant if no pose frame
+    // has landed yet (manual/fallback path).
+    const observedAt = lastPoseFrameAtRef.current || performance.now();
+    const reactionMs = Math.max(0, Math.round(observedAt - cur.atPerf));
     const power = Math.round(Math.min(100, (peakWristSpeedForCmdRef.current / FULL_WRIST_SPEED_FOR_FULL_POWER) * 100));
     const form = Math.round(
       Math.min(100, Math.max(0, ((elbowAtLastStrikeRef.current - PUNCH_EXTEND_DEG) / (180 - PUNCH_EXTEND_DEG)) * 100))
@@ -792,7 +923,38 @@ export default function SparMatchClient() {
             </div>
           </div>
 
-          {error && !opponentLeft && <div className="absolute left-3 right-3 top-14 rounded-xl border border-red-500/40 bg-black/80 p-3 text-[10px] font-semibold text-red-300">{error}<span className="mt-1 block text-[9px] font-bold uppercase tracking-widest text-red-300/60">Returning to sparring…</span></div>}
+          {error && !opponentLeft && (
+            <div className="absolute left-3 right-3 top-14 rounded-xl border border-red-500/40 bg-black/80 p-3 text-[10px] font-semibold text-red-300">
+              {error}
+              {canRetry ? (
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setError(null);
+                      setCanRetry(false);
+                      exitHandledRef.current = false;
+                      setStatusLine('Reconnecting…');
+                      setPhase('setup');
+                      setConnectAttempt((n) => n + 1);
+                    }}
+                    className="rounded-full bg-red-500/20 border border-red-500/50 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-red-200"
+                  >
+                    Retry
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => router.replace('/spar')}
+                    className="rounded-full border border-white/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white/60"
+                  >
+                    Leave
+                  </button>
+                </div>
+              ) : (
+                <span className="mt-1 block text-[9px] font-bold uppercase tracking-widest text-red-300/60">Returning to sparring…</span>
+              )}
+            </div>
+          )}
           {opponentLeft && <div className="absolute inset-x-3 top-1/2 -translate-y-1/2 rounded-2xl border border-orange-400/40 bg-black/90 p-4 text-center text-[11px] font-semibold text-orange-200">{opponentLeftReason}<span className="mt-1 block text-[9px] font-bold uppercase tracking-widest text-orange-200/60">Returning to sparring…</span><button onClick={() => router.push('/spar')} className="mt-3 block w-full rounded-xl bg-primary px-3 py-2 text-[10px] font-black uppercase tracking-widest text-black">Exit now</button></div>}
         </section>
 
