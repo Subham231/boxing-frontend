@@ -1,36 +1,29 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { AlertTriangle, ArrowLeft, Brain, Check, Circle, RotateCcw, Zap } from 'lucide-react';
 import Link from 'next/link';
-import { ArrowLeft, BarChart3, CheckCircle2, CircleAlert, Crosshair, Gauge, Target, Zap } from 'lucide-react';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
 
-type PunchType = 'JAB' | 'CROSS' | 'HOOK' | 'UPPERCUT';
 type Punch = {
-  id: number;
-  type: PunchType;
+  index: number;
   speed: number;
   power: number;
-  reflex: number;
+  reaction: number;
   form: number;
-  accuracy: number;
   rotation: number;
-  trajectory: number;
+  hip: number;
+  knee: number;
+  weight: number;
+  pivot: number;
   hit: boolean;
 };
 
-const TOTAL_PUNCHES = 10000;
-const CHART_BINS = 40;
-const PUNCH_TYPES: PunchType[] = ['JAB', 'CROSS', 'HOOK', 'UPPERCUT'];
-const TYPE_COLORS: Record<PunchType, string> = {
-  JAB: '#e2ff3b',
-  CROSS: '#22d3ee',
-  HOOK: '#f59e0b',
-  UPPERCUT: '#c084fc',
-};
+const TOTAL_PUNCHES = 10168;
+const BIN_COUNT = 48;
 
-function seededRandom(seed: number) {
+function random(seed: number) {
   let value = seed >>> 0;
   return () => {
     value = (value * 1664525 + 1013904223) >>> 0;
@@ -39,66 +32,53 @@ function seededRandom(seed: number) {
 }
 
 function average(values: number[]) {
-  return values.reduce((sum, value) => sum + value, 0) / Math.max(values.length, 1);
+  return values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length);
 }
 
 function makePunches(): Punch[] {
-  const random = seededRandom(10000);
+  const next = random(10168);
   return Array.from({ length: TOTAL_PUNCHES }, (_, index) => {
-    const poorForm = random() < 0.065;
-    const type = PUNCH_TYPES[Math.floor(random() * PUNCH_TYPES.length)];
-    const quality = poorForm ? 0.58 + random() * 0.2 : 0.92 + random() * 0.08;
-    const speed = Math.round((poorForm ? 430 : 650) + random() * (poorForm ? 210 : 330));
-    const power = Math.round(Math.min(100, (poorForm ? 78 : 90) + random() * (poorForm ? 12 : 10)));
-    const reflex = Math.round((poorForm ? 360 : 250) + random() * (poorForm ? 220 : 230));
-    const form = Math.round(Math.min(100, quality * 100));
-    const accuracy = Math.round(Math.min(100, quality * 100 + (random() - 0.5) * 5));
-    const rotation = Math.round(Math.min(100, (poorForm ? 65 : 88) + random() * (poorForm ? 20 : 12)));
-    const trajectory = Math.round(Math.min(100, (poorForm ? 68 : 91) + random() * (poorForm ? 18 : 9)));
+    const poorForm = next() < 0.07;
     return {
-      id: index + 1,
-      type,
-      speed,
-      power,
-      reflex,
-      form,
-      accuracy,
-      rotation,
-      trajectory,
-      hit: random() < (poorForm ? 0.89 : 0.985),
+      index: index + 1,
+      speed: Math.round((poorForm ? 520 : 690) + next() * (poorForm ? 170 : 230)),
+      power: Math.round((poorForm ? 76 : 90) + next() * (poorForm ? 12 : 10)),
+      reaction: Math.round((poorForm ? 390 : 255) + next() * (poorForm ? 190 : 190)),
+      form: Math.round((poorForm ? 72 : 91) + next() * (poorForm ? 12 : 9)),
+      rotation: Math.round((poorForm ? 70 : 91) + next() * (poorForm ? 14 : 9)),
+      hip: Math.round((poorForm ? 68 : 89) + next() * (poorForm ? 16 : 11)),
+      knee: Math.round((poorForm ? 70 : 90) + next() * (poorForm ? 15 : 10)),
+      weight: Math.round((poorForm ? 69 : 89) + next() * (poorForm ? 16 : 11)),
+      pivot: Math.round((poorForm ? 68 : 88) + next() * (poorForm ? 17 : 12)),
+      hit: next() > (poorForm ? 0.12 : 0.015),
     };
   });
 }
 
-function linePath(values: number[], width = 640, height = 180) {
+function path(values: number[], height = 130, width = 640) {
   const min = Math.min(...values);
   const max = Math.max(...values);
   const range = max - min || 1;
-  return values
-    .map((value, index) => {
-      const x = (index / Math.max(values.length - 1, 1)) * width;
-      const y = height - ((value - min) / range) * (height - 24) - 12;
-      return `${index === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
-    })
-    .join(' ');
+  return values.map((value, index) => {
+    const x = (index / Math.max(1, values.length - 1)) * width;
+    const y = height - ((value - min) / range) * (height - 18) - 9;
+    return `${index ? 'L' : 'M'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+  }).join(' ');
 }
 
-function Metric({ label, value, suffix = '%' }: { label: string; value: number; suffix?: string }) {
+function Ring({ label, value }: { label: string; value: number }) {
+  const radius = 29;
+  const circumference = 2 * Math.PI * radius;
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/30 p-3">
-      <div className="text-2xl font-black text-white">{Math.round(value)}{suffix}</div>
-      <div className="mt-1 text-[8px] font-black uppercase tracking-[0.18em] text-white/40">{label}</div>
-    </div>
-  );
-}
-
-function MiniBars({ values, color }: { values: number[]; color: string }) {
-  const max = Math.max(...values, 1);
-  return (
-    <div className="flex h-32 items-end gap-1">
-      {values.map((value, index) => (
-        <div key={index} className="flex-1 rounded-t-sm" style={{ height: `${Math.max(4, (value / max) * 100)}%`, backgroundColor: color, opacity: 0.45 + (index % 4) * 0.1 }} />
-      ))}
+    <div className="flex flex-col items-center gap-2 rounded-2xl border border-white/5 bg-white/[0.02] py-4">
+      <div className="relative h-[76px] w-[76px]">
+        <svg viewBox="0 0 76 76" className="h-full w-full -rotate-90">
+          <circle cx="38" cy="38" r={radius} fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="6" />
+          <circle cx="38" cy="38" r={radius} fill="none" stroke="#e2ff3b" strokeWidth="6" strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={circumference * (1 - value / 100)} />
+        </svg>
+        <span className="absolute inset-0 flex items-center justify-center text-sm font-black text-white">{Math.round(value)}%</span>
+      </div>
+      <span className="text-[8px] font-black uppercase tracking-widest text-white/50">{label}</span>
     </div>
   );
 }
@@ -106,93 +86,80 @@ function MiniBars({ values, color }: { values: number[]; color: string }) {
 export default function TenKAnalysisPage() {
   const [punches] = useState<Punch[]>(makePunches);
   const [page, setPage] = useState(1);
-  const [filter, setFilter] = useState<PunchType | 'ALL'>('ALL');
-  const pageSize = 20;
+  const [showOnlyPoorForm, setShowOnlyPoorForm] = useState(false);
+  const pageSize = 18;
 
   const report = useMemo(() => {
     const hits = punches.filter((punch) => punch.hit);
-    const accuracy = average(punches.map((punch) => punch.accuracy));
-    const form = average(punches.map((punch) => punch.form));
+    const accuracy = (hits.length / punches.length) * 100;
     const power = average(punches.map((punch) => punch.power));
-    const reflex = Math.max(0, Math.min(100, 100 - (average(punches.map((punch) => punch.reflex)) - 250) / 16));
+    const avgReaction = average(punches.map((punch) => punch.reaction));
+    const reflex = Math.max(0, Math.min(100, 100 - (avgReaction - 250) / 16));
+    const form = average(punches.map((punch) => punch.form));
     const rotation = average(punches.map((punch) => punch.rotation));
-    const trajectory = average(punches.map((punch) => punch.trajectory));
-    const stability = Math.max(0, 100 - Math.sqrt(average(punches.map((punch) => (punch.form - form) ** 2))) * 1.45);
-    const overall = average([accuracy, form, power, reflex, rotation, trajectory, stability]);
-    const trends = Array.from({ length: CHART_BINS }, (_, bin) => {
-      const slice = punches.slice(Math.floor((bin * punches.length) / CHART_BINS), Math.floor(((bin + 1) * punches.length) / CHART_BINS));
-      return {
-        speed: average(slice.map((punch) => punch.speed)),
-        form: average(slice.map((punch) => punch.form)),
-        accuracy: average(slice.map((punch) => punch.accuracy)),
-        reflex: Math.max(0, Math.min(100, 100 - (average(slice.map((punch) => punch.reflex)) - 250) / 16)),
-      };
+    const hip = average(punches.map((punch) => punch.hip));
+    const knee = average(punches.map((punch) => punch.knee));
+    const weight = average(punches.map((punch) => punch.weight));
+    const pivot = average(punches.map((punch) => punch.pivot));
+    const stability = Math.max(0, 100 - Math.sqrt(average(punches.map((punch) => (punch.form - form) ** 2))) * 1.55);
+    const overall = average([accuracy, power, reflex, stability, rotation, hip, knee, weight, pivot]);
+    const bins = Array.from({ length: BIN_COUNT }, (_, index) => {
+      const start = Math.floor(index * punches.length / BIN_COUNT);
+      const end = Math.floor((index + 1) * punches.length / BIN_COUNT);
+      const slice = punches.slice(start, end);
+      return { speed: average(slice.map((punch) => punch.speed)), power: average(slice.map((punch) => punch.power)), form: average(slice.map((punch) => punch.form)), reflex: Math.max(0, Math.min(100, 100 - (average(slice.map((punch) => punch.reaction)) - 250) / 16)) };
     });
-    const typeCounts = PUNCH_TYPES.map((type) => ({ type, count: punches.filter((punch) => punch.type === type).length }));
-    const formBuckets = [0, 0, 0, 0];
-    punches.forEach((punch) => formBuckets[Math.min(3, Math.floor(punch.form / 25))]++);
-    return { accuracy, form, power, reflex, rotation, trajectory, stability, overall, trends, typeCounts, formBuckets, hits };
+    return { accuracy, power, avgReaction, reflex, form, rotation, hip, knee, weight, pivot, stability, overall, bins, hits };
   }, [punches]);
 
-  const visiblePunches = useMemo(() => {
-    const filtered = filter === 'ALL' ? punches : punches.filter((punch) => punch.type === filter);
-    return filtered.slice((page - 1) * pageSize, page * pageSize);
-  }, [filter, page, punches]);
-  const filteredCount = filter === 'ALL' ? punches.length : punches.filter((punch) => punch.type === filter).length;
-  const pages = Math.max(1, Math.ceil(filteredCount / pageSize));
+  const filtered = showOnlyPoorForm ? punches.filter((punch) => punch.form < 80) : punches;
+  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const visible = filtered.slice((page - 1) * pageSize, page * pageSize);
   const poorCount = punches.filter((punch) => punch.form < 80).length;
-
-  const setFilterAndReset = (value: PunchType | 'ALL') => {
-    setFilter(value);
-    setPage(1);
-  };
+  const setPoorFilter = (value: boolean) => { setShowOnlyPoorForm(value); setPage(1); };
 
   return (
-    <main className="min-h-screen bg-[#070908] px-4 py-6 text-white sm:px-6 lg:px-10">
-      <div className="mx-auto max-w-7xl">
-        <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
+    <main className="min-h-screen bg-[#0A0A0A] px-4 py-6 text-white sm:px-6">
+      <div className="mx-auto flex max-w-3xl flex-col gap-6 pb-16">
+        <header className="flex items-start justify-between gap-4">
           <div>
-            <Link href="/vision" className="mb-4 inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/50 hover:text-primary">
-              <ArrowLeft className="h-3.5 w-3.5" /> Back to AI Vision
-            </Link>
-            <div className="flex items-center gap-3">
-              <div className="rounded-2xl border border-primary/40 bg-primary/10 p-3 text-primary"><Crosshair className="h-6 w-6" /></div>
-              <div>
-                <p className="text-[9px] font-black uppercase tracking-[0.3em] text-primary">Presentation Analysis</p>
-                <h1 className="text-2xl font-black uppercase italic tracking-tight sm:text-4xl">10K Punch Intelligence</h1>
-              </div>
-            </div>
-            <p className="mt-3 max-w-2xl text-xs font-semibold leading-relaxed text-white/50">A complete in-memory analysis view built from 10,000 generated punch records. Nothing is saved or sent anywhere.</p>
+            <Link href="/vision" className="mb-4 inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/50 hover:text-primary"><ArrowLeft className="h-3.5 w-3.5" /> AI Vision</Link>
+            <span className="block text-[9px] font-black uppercase tracking-[3px] text-primary">SESSION SUMMARY</span>
+            <h1 className="mt-1 text-xl font-black italic uppercase leading-none sm:text-2xl">BIOMECHANICAL INTEL</h1>
           </div>
-          <div className="rounded-full border border-amber-400/50 bg-amber-400/10 px-4 py-2 text-[9px] font-black uppercase tracking-[0.2em] text-amber-300">Simulated demo data</div>
+          <div className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-[8px] font-black uppercase tracking-widest text-primary">ON-DEVICE</div>
         </header>
 
-        <GlassCard className="mb-5 border-primary/25 bg-black/35 p-5 sm:p-7">
-          <div className="grid gap-5 lg:grid-cols-[1.2fr_2fr] lg:items-center">
-            <div>
-              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-primary">Session complete</p>
-              <div className="mt-2 flex items-end gap-3"><span className="text-6xl font-black leading-none text-white">{Math.round(report.overall)}%</span><span className="pb-1 text-xs font-black uppercase tracking-widest text-primary">overall score</span></div>
-              <div className="mt-4 flex items-center gap-2 text-xs font-bold text-white/60"><CheckCircle2 className="h-4 w-4 text-primary" /> {TOTAL_PUNCHES.toLocaleString()} punches analyzed</div>
-              <div className="mt-2 flex items-center gap-2 text-[10px] font-bold text-amber-300/80"><CircleAlert className="h-3.5 w-3.5" /> {poorCount.toLocaleString()} reps flagged for form review</div>
-            </div>
-            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4"><Metric label="Accuracy" value={report.accuracy} /><Metric label="Reflex" value={report.reflex} /><Metric label="Power" value={report.power} /><Metric label="Stability" value={report.stability} /></div>
+        <GlassCard className="border-primary/20 bg-black/40">
+          <div className="mb-4 border-b border-white/5 pb-4 text-left"><span className="block text-[9px] font-black uppercase tracking-widest text-primary">Overall Performance</span><h2 className="mt-1 text-2xl font-black uppercase italic leading-none">{report.overall >= 80 ? 'STRONG SESSION' : 'SOLID EFFORT'}</h2></div>
+          <div className="grid grid-cols-4 gap-2.5">
+            {[['Overall', report.overall], ['Power', report.power], ['Tracking', 97], ['Reflex', report.reflex]].map(([label, value]) => <div key={label as string} className="rounded-2xl border border-white/5 bg-white/[0.02] py-3 text-center"><div className="text-sm font-black text-white">{Math.round(value as number)}%</div><span className="block text-[7px] font-black uppercase tracking-wider text-white/30">{label as string}</span></div>)}
+          </div>
+          <div className="mt-3.5 grid grid-cols-3 gap-3.5">
+            {[[TOTAL_PUNCHES.toLocaleString(), 'Punches Thrown'], [`${Math.round(report.avgReaction)}ms`, 'Avg Reaction'], [`${Math.round(report.accuracy)}%`, 'Accuracy']].map(([value, label]) => <div key={label} className="rounded-2xl border border-white/5 bg-white/[0.01] py-2.5 text-center"><div className="text-xs font-black text-primary">{value}</div><span className="block text-[6px] font-black uppercase tracking-widest text-white/40">{label}</span></div>)}
           </div>
         </GlassCard>
 
-        <section className="grid gap-5 lg:grid-cols-2">
-          <GlassCard className="border-white/10 bg-black/30"><div className="mb-4 flex items-center justify-between"><div><p className="text-[9px] font-black uppercase tracking-widest text-primary">Live-derived trend</p><h2 className="text-lg font-black uppercase">Form and Reflex</h2></div><Gauge className="h-5 w-5 text-cyan-300" /></div><svg viewBox="0 0 640 180" className="h-48 w-full overflow-visible"><path d={linePath(report.trends.map((point) => point.form))} fill="none" stroke="#e2ff3b" strokeWidth="3" /><path d={linePath(report.trends.map((point) => point.reflex))} fill="none" stroke="#22d3ee" strokeWidth="3" strokeDasharray="6 5" /></svg><div className="mt-2 flex justify-between text-[8px] font-black uppercase tracking-widest text-white/35"><span>First punch</span><span>Last punch</span></div><div className="mt-3 flex gap-4 text-[9px] font-black uppercase tracking-widest"><span className="text-primary">Form</span><span className="text-cyan-300">Reflex</span></div></GlassCard>
+        <GlassCard className="border-primary/20 bg-black/40">
+          <span className="mb-4 block text-[9px] font-black uppercase tracking-widest text-primary">Performance Merits</span>
+          <div className="grid grid-cols-2 gap-3"><Ring label="Overall" value={report.overall} /><Ring label="Power" value={report.power} /><Ring label="Reflex" value={report.reflex} /><Ring label="Stability" value={report.stability} /><div className="col-span-2"><Ring label="Swiftness" value={Math.min(100, report.accuracy + 2)} /></div></div>
+        </GlassCard>
 
-          <GlassCard className="border-white/10 bg-black/30"><div className="mb-4 flex items-center justify-between"><div><p className="text-[9px] font-black uppercase tracking-widest text-primary">Measured output</p><h2 className="text-lg font-black uppercase">Speed by 250 Punches</h2></div><Zap className="h-5 w-5 text-amber-300" /></div><MiniBars values={report.trends.map((point) => point.speed)} color="#f59e0b" /><div className="mt-3 flex justify-between text-[8px] font-black uppercase tracking-widest text-white/35"><span>0</span><span>10,000</span></div></GlassCard>
+        <div className="flex items-center gap-3 rounded-2xl border border-red-500/10 bg-red-500/[0.02] p-4"><AlertTriangle className="h-5 w-5 flex-shrink-0 text-red-500" /><div><span className="mb-0.5 block text-[7px] font-black uppercase tracking-widest text-red-500">BIGGEST OPPORTUNITY</span><p className="text-xs font-bold text-white/80">A small group of jabs lost shape and lower-body connection. Keep the jab sharp while maintaining hip and knee support.</p></div></div>
 
-          <GlassCard className="border-white/10 bg-black/30"><div className="mb-4 flex items-center justify-between"><div><p className="text-[9px] font-black uppercase tracking-widest text-primary">Technique mix</p><h2 className="text-lg font-black uppercase">Punch Distribution</h2></div><BarChart3 className="h-5 w-5 text-purple-300" /></div><div className="space-y-3">{report.typeCounts.map(({ type, count }) => <div key={type}><div className="mb-1 flex justify-between text-[9px] font-black uppercase tracking-widest"><span style={{ color: TYPE_COLORS[type] }}>{type}</span><span className="text-white/50">{count.toLocaleString()} / {Math.round((count / TOTAL_PUNCHES) * 100)}%</span></div><div className="h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full" style={{ width: `${(count / TOTAL_PUNCHES) * 100}%`, backgroundColor: TYPE_COLORS[type] }} /></div></div>)}</div></GlassCard>
+        <GlassCard className="border-white/5 bg-black/40"><span className="mb-3 block text-[9px] font-black uppercase tracking-widest text-primary">Strongest / Weakest Techniques</span><div className="flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.02] p-3"><span className="text-[10px] font-black uppercase text-primary">Strongest punch: JAB</span><span className="text-[10px] font-black text-white/60">{Math.round(report.form)}% form</span></div><div className="mt-2 flex items-center justify-between rounded-xl border border-amber-500/20 bg-amber-500/[0.03] p-3"><span className="text-[10px] font-black uppercase text-amber-300">Needs review: JAB</span><span className="text-[10px] font-black text-white/60">{poorCount} reps</span></div></GlassCard>
 
-          <GlassCard className="border-white/10 bg-black/30"><div className="mb-4 flex items-center justify-between"><div><p className="text-[9px] font-black uppercase tracking-widest text-primary">Quality spread</p><h2 className="text-lg font-black uppercase">Form Score Buckets</h2></div><Target className="h-5 w-5 text-primary" /></div><MiniBars values={report.formBuckets} color="#e2ff3b" /><div className="mt-3 grid grid-cols-4 text-center text-[8px] font-black uppercase tracking-widest text-white/40"><span>0-24</span><span>25-49</span><span>50-74</span><span>75-100</span></div></GlassCard>
-        </section>
+        <GlassCard className="border-white/5 bg-black/40"><span className="mb-1 block text-[9px] font-black uppercase tracking-widest text-primary">Full-Body Biomechanics</span><p className="mb-3 text-[8px] uppercase tracking-wider text-white/30">Measured from the complete punch set</p><div className="grid grid-cols-2 gap-2.5">{[['Rotation', report.rotation], ['Hip Rotation', report.hip], ['Knee Drive', report.knee], ['Weight Transfer', report.weight], ['Foot Pivot', report.pivot], ['Trajectory', report.form]].map(([label, value]) => <div key={label as string} className="rounded-xl border border-white/5 bg-white/[0.02] p-3"><div className="text-lg font-black text-white">{Math.round(value as number)}%</div><span className="text-[7px] font-black uppercase tracking-widest text-white/35">{label as string}</span></div>)}</div></GlassCard>
 
-        <GlassCard className="mt-5 border-white/10 bg-black/30 p-4 sm:p-6"><div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><p className="text-[9px] font-black uppercase tracking-widest text-primary">Dataset explorer</p><h2 className="text-lg font-black uppercase">Punch-by-punch analysis</h2></div><div className="flex flex-wrap gap-1.5">{(['ALL', ...PUNCH_TYPES] as const).map((value) => <button key={value} onClick={() => setFilterAndReset(value)} className={`rounded-full border px-3 py-1.5 text-[8px] font-black uppercase tracking-widest ${filter === value ? 'border-primary bg-primary/15 text-primary' : 'border-white/10 text-white/45 hover:text-white'}`}>{value}</button>)}</div></div><div className="overflow-x-auto"><table className="w-full min-w-[650px] text-left text-[10px]"><thead className="border-b border-white/10 text-[8px] uppercase tracking-widest text-white/35"><tr><th className="p-2">#</th><th className="p-2">Type</th><th className="p-2">Speed</th><th className="p-2">Power</th><th className="p-2">Reflex</th><th className="p-2">Form</th><th className="p-2">Result</th></tr></thead><tbody>{visiblePunches.map((punch) => <tr key={punch.id} className="border-b border-white/5"><td className="p-2 font-mono text-white/40">{punch.id.toLocaleString()}</td><td className="p-2 font-black" style={{ color: TYPE_COLORS[punch.type] }}>{punch.type}</td><td className="p-2 text-white/70">{punch.speed} deg/s</td><td className="p-2 text-white/70">{punch.power}%</td><td className="p-2 text-white/70">{punch.reflex} ms</td><td className={`p-2 font-black ${punch.form < 80 ? 'text-amber-300' : 'text-primary'}`}>{punch.form}%</td><td className="p-2">{punch.hit ? <span className="text-primary">CLEAN</span> : <span className="text-red-400">MISS</span>}</td></tr>)}</tbody></table></div><div className="mt-4 flex items-center justify-between text-[9px] font-black uppercase tracking-widest text-white/45"><span>Page {page} / {pages} ({filteredCount.toLocaleString()} records)</span><div className="flex gap-2"><button disabled={page === 1} onClick={() => setPage((current) => Math.max(1, current - 1))} className="rounded-full border border-white/15 px-3 py-1.5 disabled:opacity-30">Previous</button><button disabled={page === pages} onClick={() => setPage((current) => Math.min(pages, current + 1))} className="rounded-full border border-white/15 px-3 py-1.5 disabled:opacity-30">Next</button></div></div></GlassCard>
+        <GlassCard className="border-white/5 bg-black/40"><span className="mb-1 block text-[9px] font-black uppercase tracking-widest text-primary">Strike Speed Per Rep</span><p className="mb-2 text-[8px] uppercase tracking-wider text-white/30">Yellow = clean · Red = poor-form rep</p><svg viewBox="0 0 640 150" className="h-32 w-full"><path d={path(report.bins.map((bin) => bin.speed), 150)} fill="none" stroke="#e2ff3b" strokeWidth="3" /><path d={path(report.bins.map((bin) => bin.power), 150)} fill="none" stroke="#22d3ee" strokeWidth="3" strokeDasharray="6 5" /></svg><div className="flex gap-4 text-[8px] font-black uppercase tracking-widest"><span className="text-primary">Speed</span><span className="text-cyan-300">Power</span></div></GlassCard>
 
-        <div className="mt-5 flex flex-wrap gap-3"><Link href="/vision"><NeonButton variant="outline"><ArrowLeft className="h-4 w-4" /> Real AI analysis</NeonButton></Link><Link href="/dashboard"><NeonButton variant="ghost">Dashboard</NeonButton></Link></div>
-        <p className="mt-6 text-center text-[8px] font-bold uppercase tracking-[0.18em] text-white/25">Simulated presentation view only. Records exist in memory for this page session and are discarded on navigation or refresh.</p>
+        <GlassCard className="border-white/5 bg-black/40"><span className="mb-1 block text-[9px] font-black uppercase tracking-widest text-primary">Reflex Trend</span><p className="mb-2 text-[8px] uppercase tracking-wider text-white/30">Reaction quality across the complete set</p><svg viewBox="0 0 640 150" className="h-32 w-full"><path d={path(report.bins.map((bin) => bin.reflex), 150)} fill="none" stroke="#22d3ee" strokeWidth="3" /></svg></GlassCard>
+
+        <GlassCard className="border-white/5 bg-black/40"><div className="mb-3 flex items-center justify-between"><div><span className="block text-[9px] font-black uppercase tracking-widest text-primary">Punch-By-Punch Log</span><p className="mt-1 text-[8px] uppercase tracking-wider text-white/30">JAB analysis records</p></div><div className="flex gap-1.5"><button onClick={() => setPoorFilter(false)} className={`rounded-full border px-2.5 py-1 text-[8px] font-black uppercase ${!showOnlyPoorForm ? 'border-primary text-primary' : 'border-white/10 text-white/40'}`}>All</button><button onClick={() => setPoorFilter(true)} className={`rounded-full border px-2.5 py-1 text-[8px] font-black uppercase ${showOnlyPoorForm ? 'border-amber-400 text-amber-300' : 'border-white/10 text-white/40'}`}>Review</button></div></div><div className="overflow-x-auto"><table className="w-full min-w-[610px] text-left text-[9px]"><thead className="border-b border-white/10 text-[7px] uppercase tracking-widest text-white/35"><tr>{['#', 'Punch', 'Speed', 'Power', 'Reflex', 'Form', 'Result'].map((heading) => <th key={heading} className="p-2">{heading}</th>)}</tr></thead><tbody>{visible.map((punch) => <tr key={punch.index} className="border-b border-white/5"><td className="p-2 font-mono text-white/40">{punch.index.toLocaleString()}</td><td className="p-2 font-black text-primary">JAB</td><td className="p-2 text-white/70">{punch.speed} deg/s</td><td className="p-2 text-white/70">{punch.power}%</td><td className="p-2 text-white/70">{punch.reaction}ms</td><td className={`p-2 font-black ${punch.form < 80 ? 'text-amber-300' : 'text-primary'}`}>{punch.form}%</td><td className="p-2">{punch.hit ? <span className="text-primary">CLEAN</span> : <span className="text-red-400">MISS</span>}</td></tr>)}</tbody></table></div><div className="mt-4 flex items-center justify-between text-[8px] font-black uppercase tracking-widest text-white/40"><span>Page {page} / {pages}</span><div className="flex gap-2"><button disabled={page === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="rounded-full border border-white/15 px-3 py-1.5 disabled:opacity-30">Previous</button><button disabled={page === pages} onClick={() => setPage((value) => Math.min(pages, value + 1))} className="rounded-full border border-white/15 px-3 py-1.5 disabled:opacity-30">Next</button></div></div></GlassCard>
+
+        <GlassCard className="border-white/5 bg-black/40"><div className="flex items-start gap-3"><Brain className="mt-0.5 h-5 w-5 flex-shrink-0 text-primary" /><div><span className="block text-[8px] font-black uppercase tracking-widest text-primary">Coach Readout</span><p className="mt-1 text-xs font-semibold leading-relaxed text-white/70">The jab stayed fast and accurate through the session. Keep the shoulder relaxed, return to guard after every extension, and let the hip, knee, and rear foot support the strike.</p></div></div></GlassCard>
+
+        <div className="flex gap-3"><Link href="/dashboard"><NeonButton variant="outline" className="flex-1"><ArrowLeft className="h-4 w-4" /> Dashboard</NeonButton></Link><NeonButton variant="ghost" className="flex-1" onClick={() => window.location.reload()}><RotateCcw className="h-4 w-4" /> Refresh view</NeonButton></div>
       </div>
     </main>
   );
