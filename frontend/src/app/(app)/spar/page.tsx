@@ -12,7 +12,6 @@ import {
   Mic,
   Wifi,
   Video,
-  Zap,
 } from 'lucide-react';
 import {
   SwordsNeonIcon,
@@ -204,7 +203,7 @@ export default function SparIntroPage() {
             <span className="text-[12px] font-black uppercase text-[#939383]">CALIBRATION</span>
           </div>
           <div className="flex flex-col gap-3.5">
-            {STANCE.map((s, i) => {
+            {STANCE.map((s) => {
               const Icon = s.icon;
               return (
                 <GlassCard

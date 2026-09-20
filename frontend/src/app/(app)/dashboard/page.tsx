@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import { 
   Flame, 
   Target, 
@@ -113,7 +113,7 @@ export default function DashboardPage() {
           const dayWorkout = getDailyWorkout(date);
           isFullyCompleted = completed.length > 0 && completed.length >= dayWorkout.drills.length;
         }
-      } catch (e) {
+      } catch {
         // ignore
       }
 

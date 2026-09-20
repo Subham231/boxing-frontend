@@ -15,10 +15,8 @@ import {
   BellOff,
   Dumbbell,
   Swords,
-  Target,
   ChevronDown,
   ChevronUp,
-  Zap,
 } from 'lucide-react';
 import { fetchPlan } from '@/lib/planner';
 import { completeKey, progressKey } from '@/lib/protocol-session';
@@ -27,10 +25,8 @@ import PlannerOnboardingWizard from '@/components/planner/PlannerOnboardingWizar
 import type { PlannerProfile, PlannerUserData, WeeklyPlan } from '@/types';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
-// @ts-ignore — JS utility modules
 import { generateLocalPlanner } from '@/utils/localPlannerEngine';
 import { firebaseAuth } from '@/lib/firebase';
-// @ts-ignore
 import { requestLocalNotificationPermission, scheduleLocalWorkoutReminder } from '@/utils/localNotificationService';
 
 // Types for local planner engine output
@@ -57,7 +53,7 @@ export default function PlannerPage() {
   const [activeDayIdx, setActiveDayIdx] = useState(0);
 
   // Calibration Form State
-  const [peakWindow, setPeakWindow] = useState('MORNING');
+  const [, setPeakWindow] = useState('MORNING');
   const [preferredTime, setPreferredTime] = useState('07:30');
 
   // Local Planner Engine State
@@ -66,7 +62,7 @@ export default function PlannerPage() {
 
   // Notification State
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
-  const [notificationStatus, setNotificationStatus] = useState<'idle' | 'granted' | 'denied'>('idle');
+  const [, setNotificationStatus] = useState<'idle' | 'granted' | 'denied'>('idle');
 
   // Real onboarding data reference for local engine
   const [fighterName, setFighterName] = useState('Fighter');

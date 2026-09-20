@@ -34,7 +34,7 @@ export default function ContactPage() {
           <GlassCard className="border-white/5 bg-black/40 p-6 flex flex-col gap-4">
             <h2 className="text-sm font-black uppercase text-white tracking-wider">SparAI Customer Support</h2>
             <p>
-              We're here to help. If you have questions about your subscription, technical issues, or billing errors, please reach out to our team.
+              We&apos;re here to help. If you have questions about your subscription, technical issues, or billing errors, please reach out to our team.
             </p>
           </GlassCard>
 
@@ -69,7 +69,7 @@ export default function ContactPage() {
 
           <h2 className="text-lg font-black uppercase text-primary tracking-wider mt-4">Response Time</h2>
           <p>
-            We strive to respond to all support requests within <strong>24 to 48 hours</strong> on business days. For urgent billing issues regarding duplicate payments, please include the word "URGENT" and your transaction references in the email subject.
+            We strive to respond to all support requests within <strong>24 to 48 hours</strong> on business days. For urgent billing issues regarding duplicate payments, please include the word &quot;URGENT&quot; and your transaction references in the email subject.
           </p>
 
           <NeonButton onClick={() => router.back()} className="w-full h-14 mt-6 font-black uppercase text-xs tracking-widest">

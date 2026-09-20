@@ -21,7 +21,7 @@ export default function ProtectedLayout({
   const isExempt = isExemptFromSubscriptionGate(pathname);
 
   // If on an exempt route (/settings, /spar, /subscription, /checkout), never block or show loader
-  const [mounted, setMounted] = useState(false);
+  const [, setMounted] = useState(false);
   const [allowed, setAllowed] = useState(true);
   const [onboardingChecked, setOnboardingChecked] = useState(false);
 

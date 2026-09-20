@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Check, ChevronRight, Settings, Target } from 'lucide-react';
+import { Check, ChevronRight, Settings } from 'lucide-react';
 import { getDailyWorkout } from '@/lib/workout-data';
 import { StreakManager } from '@/lib/streak-manager';
 import { GlassCard } from '@/components/ui/GlassCard';

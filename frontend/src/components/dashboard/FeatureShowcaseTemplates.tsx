@@ -8,25 +8,10 @@ import {
   Swords, 
   Brain, 
   Calendar, 
-  Zap, 
-  Trophy, 
-  Activity, 
-  Flame, 
   ArrowRight, 
   Sparkles,
-  ChevronRight,
-  ShieldCheck,
-  Play
 } from 'lucide-react';
-import { GlassCard } from '@/components/ui/GlassCard';
 import { 
-  AnalysisCamIcon, 
-  BoxingGlovesIcon, 
-  BrainNeonIcon, 
-  ZapNeonIcon, 
-  TargetNeonIcon,
-  HomeNeonIcon,
-  BarChart3Icon
 } from '@/components/ui/NeonIcons';
 
 type TemplateKey = 'vision' | 'spar' | 'guru' | 'planner';

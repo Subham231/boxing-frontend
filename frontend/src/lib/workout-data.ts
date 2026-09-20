@@ -145,7 +145,7 @@ function getWorkoutFromActivePlan(targetDate: Date): Workout | null {
     if (!day || !Array.isArray(day.protocol) || !day.protocol.length) return null;
 
     const drills: Drill[] = [];
-    day.protocol.forEach((block, pIdx) => {
+    day.protocol.forEach((block) => {
         const exercises = block.exercises && block.exercises.length ? block.exercises : ['Bodyweight Flow'];
         const blockMinutes = parseInt(block.duration, 10) || 8;
         const perExerciseSeconds = Math.max(20, Math.round((blockMinutes * 60) / exercises.length));
@@ -184,7 +184,7 @@ export function getDailyWorkout(dateInput?: Date): Workout {
                     const tact = JSON.parse(tactical);
                     plannerWorkout.drills = [...plannerWorkout.drills, ...(tact.drills || [])];
                     plannerWorkout.title = tact.title || plannerWorkout.title;
-                } catch (e) {
+                } catch {
                     console.error("DATA_LINK_FAILURE: Could not parse tactical session.");
                 }
             }
@@ -200,7 +200,7 @@ export function getDailyWorkout(dateInput?: Date): Workout {
 
     // No active planner program yet — fall back to the old independently
     // generated workout so brand-new users still have something to train.
-    let baseWorkout = generateDailyWorkout(targetDate);
+    const baseWorkout = generateDailyWorkout(targetDate);
 
     if (typeof window === 'undefined') {
         return baseWorkout;
@@ -235,7 +235,7 @@ export function getDailyWorkout(dateInput?: Date): Workout {
             const tact = JSON.parse(tactical);
             baseWorkout.drills = [...baseWorkout.drills, ...(tact.drills || [])];
             baseWorkout.title = tact.title || baseWorkout.title;
-        } catch (e) {
+        } catch {
             console.error("DATA_LINK_FAILURE: Could not parse tactical session.");
         }
     }

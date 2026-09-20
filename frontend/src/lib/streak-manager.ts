@@ -53,7 +53,7 @@ export const StreakManager = {
         this.checkAndGetStreak();
 
         // Re-fetch the data after checkAndGetStreak might have updated it
-        let data = this.getStreakData();
+        const data = this.getStreakData();
         let { currentStreak, lastCompletedDate } = data;
 
         const today = new Date().toDateString(); // e.g., "Sun Jul 23 2026"

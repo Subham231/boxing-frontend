@@ -17,7 +17,7 @@ const FutureProgressPreview: React.FC = () => {
           This could be you <br /> in <span className="text-primary">90 days</span>.
         </h1>
         <p className="text-white/50 mt-2.5 sm:mt-4 text-xs sm:text-sm leading-relaxed font-semibold">
-          Here's an example of what consistent training progress may look like.
+          Here&apos;s an example of what consistent training progress may look like.
         </p>
       </header>
 
@@ -50,7 +50,7 @@ const FutureProgressPreview: React.FC = () => {
 
       <footer className="mt-6 sm:mt-8 flex flex-col gap-2">
         <p className="text-center text-[11px] font-bold italic text-white/50 mb-1">
-          Progress isn't built in a day. It's built every day.
+          Progress isn&apos;t built in a day. It&apos;s built every day.
         </p>
         <button onClick={nextStep} className="btn-primary w-full h-14 sm:h-16 flex items-center justify-center gap-2">
           CONTINUE <ChevronRight size={20} />

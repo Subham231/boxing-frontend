@@ -16,7 +16,7 @@ import {
   CalendarNeonIcon,
   UserNeonIcon,
 } from '@/components/ui/NeonIcons';
-import { useFreeSparringTutorial, TUTORIAL_STORAGE_KEY } from './FreeSparringTutorial';
+import { useFreeSparringTutorial } from './FreeSparringTutorial';
 
 export function BottomNav() {
   const pathname = usePathname();

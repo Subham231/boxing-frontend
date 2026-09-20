@@ -78,7 +78,7 @@ export default function FingerprintCeremony({ onConfirmed }: FingerprintCeremony
       <div className="relative z-10 text-center">
         <h1 className="text-2xl font-black italic uppercase text-white leading-tight">Everything is Ready</h1>
         <p className="text-white/50 text-xs font-semibold mt-2 max-w-xs mx-auto leading-relaxed">
-          We've analyzed your goals, experience, training schedule, equipment, and preferences. Now it's
+          We&apos;ve analyzed your goals, experience, training schedule, equipment, and preferences. Now it&apos;s
           time to create your personalized Tactical Protocol.
         </p>
       </div>

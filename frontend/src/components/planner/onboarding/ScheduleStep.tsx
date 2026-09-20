@@ -172,7 +172,7 @@ export default function ScheduleStep({ profile, update, toggleWeekday }: Schedul
           })}
         </div>
         <p className="text-[10px] text-white/40 font-semibold mt-2">
-          You'll train <span className="text-primary font-black">{selectedDays.length}</span> {selectedDays.length === 1 ? 'day' : 'days'} each week.
+          You&apos;ll train <span className="text-primary font-black">{selectedDays.length}</span> {selectedDays.length === 1 ? 'day' : 'days'} each week.
         </p>
       </div>
 

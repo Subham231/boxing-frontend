@@ -38,7 +38,7 @@ const JourneyStart: React.FC = () => {
           Every champion started <br /> with <span className="text-primary">Day One</span>.
         </h1>
         <p className="text-white/50 mt-4 sm:mt-5 text-xs sm:text-sm leading-relaxed font-semibold pr-4">
-          The only workout you'll regret is the one you never started.
+          The only workout you&apos;ll regret is the one you never started.
         </p>
       </motion.header>
 

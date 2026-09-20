@@ -42,7 +42,7 @@ const DailyConsistency: React.FC = () => {
               <Flame className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <span className="text-xs font-black text-white uppercase block">Today's Workout</span>
+              <span className="text-xs font-black text-white uppercase block">Today&apos;s Workout</span>
               <span className="text-[9px] text-white/40 font-semibold">Tactical Protocol — Day 4</span>
             </div>
           </div>

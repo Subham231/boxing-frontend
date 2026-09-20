@@ -4,8 +4,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  User, 
-  Settings, 
   Crown, 
   Sparkles, 
   Bell, 
@@ -17,7 +15,6 @@ import {
   Edit2, 
   Check, 
   X,
-  Volume2,
   Brain,
   ChevronRight,
   LogOut,
@@ -86,7 +83,7 @@ export default function SettingsPage() {
     try {
       const data = JSON.parse(localStorage.getItem('boxing_onboarding_data') || '{}');
       setProfileData(data);
-    } catch (e) {}
+    } catch {}
 
     // Load app settings
     try {
@@ -100,7 +97,7 @@ export default function SettingsPage() {
       } else {
         document.body.classList.remove('stealth-active');
       }
-    } catch (e) {}
+    } catch {}
   }, []);
 
   useEffect(() => {
@@ -222,7 +219,7 @@ export default function SettingsPage() {
           totalDrills += completed.length;
           weeklySummary.push(`${d.toDateString()}: ${completed.length} drills`);
         }
-      } catch (e) {}
+      } catch {}
     }
 
     setDebriefDays(daysActive);

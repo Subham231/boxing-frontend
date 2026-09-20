@@ -6,7 +6,6 @@ import { Trophy, ArrowLeft, Swords } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useFirebaseUser } from '@/lib/useFirebaseUser';
 import { getRankInfoByLevel } from '@/components/ui/RankBadge';
-import { GlassCard } from '@/components/ui/GlassCard';
 
 interface LeaderboardItem {
   uid?: string;

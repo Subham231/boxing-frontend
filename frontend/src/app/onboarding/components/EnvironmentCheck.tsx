@@ -1,6 +1,6 @@
 import React from 'react';
 import { useOnboarding } from '@/context/OnboardingContext';
-import { ChevronRight, Bolt } from 'lucide-react';
+import { Bolt } from 'lucide-react';
 
 const Intensity: React.FC = () => {
     const { data, updateData, nextStep, prevStep } = useOnboarding();

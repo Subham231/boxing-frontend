@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronRight, Brain, Swords, Zap, Shield, Flame, Target } from 'lucide-react';
+import { ChevronRight, Brain, Swords, Zap, Target } from 'lucide-react';
 import { useOnboarding } from '@/context/OnboardingContext';
 import StepBadge from './StepBadge';
 
@@ -52,7 +52,7 @@ const BoxingMindset: React.FC = () => {
                 <Icon className={`w-5 h-5 shrink-0 ${active ? 'text-primary' : 'text-primary/40'}`} strokeWidth={2.25} />
                 <div>
                   <span className={`text-xs sm:text-sm font-black uppercase block ${active ? 'text-primary' : 'text-white'}`}>{m.label}</span>
-                  <span className="text-[9px] text-white/40 font-semibold italic leading-tight">"{m.quote}"</span>
+                  <span className="text-[9px] text-white/40 font-semibold italic leading-tight">&quot;{m.quote}&quot;</span>
                 </div>
               </div>
               {m.tag && (

@@ -44,7 +44,7 @@ export default function PrivacyPage() {
               <strong>Phone & OTP Authentication:</strong> We collect your mobile phone number to authenticate your identity via Firebase Phone Auth. We do not use traditional passwords.
             </p>
             <p>
-              <strong>Training and Biometrics Data:</strong> Your training roadmaps, experience levels, goals, available equipment, height, and weight are processed to personalize your experience. Much of this data is stored in your device's local vault (LocalStorage).
+              <strong>Training and Biometrics Data:</strong> Your training roadmaps, experience levels, goals, available equipment, height, and weight are processed to personalize your experience. Much of this data is stored in your device&apos;s local vault (LocalStorage).
             </p>
             <p>
               <strong>Payment Information:</strong> All payments are processed securely through our authorized payment gateway, <strong>Razorpay</strong>. We do not store or collect your payment card details or netbanking credentials on our servers.
@@ -63,12 +63,12 @@ export default function PrivacyPage() {
 
           <h2 className="text-lg font-black uppercase text-primary tracking-wider mt-4">4. Data Security & Storage</h2>
           <p>
-            Your training history is stored locally in your device's browser vault. Profile metrics are synced to our secure database environment. However, no electronic transmission or storage method is 100% secure, and we cannot guarantee absolute security.
+            Your training history is stored locally in your device&apos;s browser vault. Profile metrics are synced to our secure database environment. However, no electronic transmission or storage method is 100% secure, and we cannot guarantee absolute security.
           </p>
 
           <h2 className="text-lg font-black uppercase text-primary tracking-wider mt-4">5. Your Rights</h2>
           <p>
-            You have the right to access, update, or request the deletion of your account and related phone data. You can completely purge all locally stored metrics directly inside the Settings menu by selecting "Reset Engine".
+            You have the right to access, update, or request the deletion of your account and related phone data. You can completely purge all locally stored metrics directly inside the Settings menu by selecting &quot;Reset Engine&quot;.
           </p>
 
           <h2 className="text-lg font-black uppercase text-primary tracking-wider mt-4">6. Contact Us</h2>

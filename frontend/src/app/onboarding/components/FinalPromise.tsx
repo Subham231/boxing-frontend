@@ -51,7 +51,7 @@ const FinalPromise: React.FC = () => {
           <Flame className="w-6 h-6 text-primary" />
         </div>
         <h1 className="text-3xl sm:text-4xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
-          {data.ringName ? <>Welcome, <span className="text-primary">{data.ringName}</span>.</> : <>You're <span className="text-primary">verified</span>.</>}
+          {data.ringName ? <>Welcome, <span className="text-primary">{data.ringName}</span>.</> : <>You&apos;re <span className="text-primary">verified</span>.</>}
         </h1>
         <p className="text-white/50 mt-4 sm:mt-5 text-xs sm:text-sm leading-relaxed font-semibold pr-4">
           Identity confirmed. Your Tactical Protocol is waiting — the only thing left is to walk

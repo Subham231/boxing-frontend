@@ -61,10 +61,10 @@ export const NotificationManager = {
         try {
             const now = new Date();
             const [time, modifier] = timeStr.split(' ');
-            let [hoursStr, minutesStr] = time.split(':');
+            const [hoursStr, minutesStr] = time.split(':');
 
             let hours = parseInt(hoursStr, 10);
-            let minutes = parseInt(minutesStr, 10);
+            const minutes = parseInt(minutesStr, 10);
 
             if (modifier === 'PM' && hours < 12) hours += 12;
             if (modifier === 'AM' && hours === 12) hours = 0;

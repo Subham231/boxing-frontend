@@ -3,7 +3,7 @@
 import React, { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useOnboarding } from '@/context/OnboardingContext';
-import { Camera, Upload, ChevronRight, UserCircle2, Sparkles, Flame, Check } from 'lucide-react';
+import { Camera, Upload, ChevronRight, UserCircle2, Sparkles, Flame } from 'lucide-react';
 import { emailAccountExists } from '@/lib/firebase-auth';
 
 const RING_NAME_SUGGESTIONS = ['TITAN', 'SHADOW', 'VIPER', 'THUNDER', 'IRONCLAD', 'STRIKER'];

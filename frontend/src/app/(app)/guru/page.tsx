@@ -2,8 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
-import { Sparkles, Brain, ChevronRight, Search, Star, Flame, Trophy, BookOpen, Swords, X } from 'lucide-react';
+import { Brain, ChevronRight, Search, Star, Flame, Trophy, BookOpen, Swords, X } from 'lucide-react';
 import { techniquesData, allTechniques, overallRating, TechniqueDetail } from '@/lib/techniques-data';
 import { loadAllProgress, loadRecentlyViewed, computeLearningStreak, computeAchievements, LearningStage } from '@/lib/guru-progress';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -137,7 +136,7 @@ export default function GuruPage() {
             <Brain className="w-4 h-4" />
           </div>
         </div>
-        <p className="text-xs italic text-white/40 font-semibold leading-relaxed pr-4">"{quote}"</p>
+        <p className="text-xs italic text-white/40 font-semibold leading-relaxed pr-4">&quot;{quote}&quot;</p>
       </header>
 
       {/* Search */}

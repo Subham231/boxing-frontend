@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Download, Share, PlusSquare, X, Smartphone, Monitor, CheckCircle, ChevronRight, Sparkles } from 'lucide-react';
+import { Download, Share, PlusSquare, X, Smartphone, Monitor, ChevronRight } from 'lucide-react';
 
 const PWA_DISMISSED_KEY = 'sparai_pwa_install_dismissed_v1';
 const FREE_PROMO_KEY = 'sparai_free_spar_modal_v1';
@@ -253,7 +253,7 @@ export function PwaInstallModal() {
                     <div>
                       <h4 className="text-xs font-black uppercase text-primary">1-Click Install Button</h4>
                       <p className="text-[11px] font-medium text-white/70 mt-0.5">
-                        Tap the <b>"1-CLICK INSTALL"</b> button on the app banner. Chrome or Edge will launch the native installation dialog automatically.
+                        Tap the <b>&quot;1-CLICK INSTALL&quot;</b> button on the app banner. Chrome or Edge will launch the native installation dialog automatically.
                       </p>
                     </div>
                   </div>
@@ -265,7 +265,7 @@ export function PwaInstallModal() {
                     <div>
                       <h4 className="text-xs font-black uppercase text-white">Manual Chrome Method</h4>
                       <p className="text-[11px] font-medium text-white/70 mt-0.5">
-                        If using Android Chrome directly: tap the <b>3 dots menu</b> (top right) $\rightarrow$ select <b>"Install App"</b> or <b>"Add to Home screen"</b>.
+                        If using Android Chrome directly: tap the <b>3 dots menu</b> (top right) $\rightarrow$ select <b>&quot;Install App&quot;</b> or <b>&quot;Add to Home screen&quot;</b>.
                       </p>
                     </div>
                   </div>
@@ -282,7 +282,7 @@ export function PwaInstallModal() {
                     <div>
                       <h4 className="text-xs font-black uppercase text-primary">Tap Safari Share Button</h4>
                       <p className="text-[11px] font-medium text-white/70 mt-0.5">
-                        In Safari, tap the <b>Share button</b> <Share className="w-3.5 h-3.5 inline text-primary mx-0.5" /> (the square icon with upward arrow in Safari's bottom toolbar).
+                        In Safari, tap the <b>Share button</b> <Share className="w-3.5 h-3.5 inline text-primary mx-0.5" /> (the square icon with upward arrow in Safari&apos;s bottom toolbar).
                       </p>
                     </div>
                   </div>
@@ -292,9 +292,9 @@ export function PwaInstallModal() {
                       2
                     </div>
                     <div>
-                      <h4 className="text-xs font-black uppercase text-white">Select "Add to Home Screen"</h4>
+                      <h4 className="text-xs font-black uppercase text-white">Select &quot;Add to Home Screen&quot;</h4>
                       <p className="text-[11px] font-medium text-white/70 mt-0.5">
-                        Scroll down the share menu list and tap <PlusSquare className="w-3.5 h-3.5 inline text-primary mx-0.5" /> <b>"Add to Home Screen"</b>.
+                        Scroll down the share menu list and tap <PlusSquare className="w-3.5 h-3.5 inline text-primary mx-0.5" /> <b>&quot;Add to Home Screen&quot;</b>.
                       </p>
                     </div>
                   </div>
@@ -304,7 +304,7 @@ export function PwaInstallModal() {
                       3
                     </div>
                     <div>
-                      <h4 className="text-xs font-black uppercase text-white">Tap "Add"</h4>
+                      <h4 className="text-xs font-black uppercase text-white">Tap &quot;Add&quot;</h4>
                       <p className="text-[11px] font-medium text-white/70 mt-0.5">
                         Tap <b>Add</b> in the top right corner. SPARAI will instantly appear as an app icon on your iPhone home screen!
                       </p>

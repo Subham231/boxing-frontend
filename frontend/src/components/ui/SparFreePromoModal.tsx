@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Swords, Crown, Zap, Sparkles, Trophy, Gift, Play } from 'lucide-react';
+import { X, Swords, Crown, Zap, Sparkles, Trophy, Play } from 'lucide-react';
 import { NeonButton } from '@/components/ui/NeonButton';
 import { useFirebaseUser } from '@/lib/useFirebaseUser';
 

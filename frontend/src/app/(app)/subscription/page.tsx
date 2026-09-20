@@ -4,7 +4,7 @@ import React, { useEffect, useState, Suspense } from 'react';
 import Script from 'next/script';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Check, Crown, Loader2, ShieldCheck, AlertCircle, XCircle, Zap, Swords, Video, Sparkles, X, Gift, ChevronRight, Globe } from 'lucide-react';
+import { ArrowLeft, Check, Crown, Loader2, ShieldCheck, AlertCircle, XCircle, Swords, Sparkles, X, Gift, ChevronRight, Globe } from 'lucide-react';
 import { firebaseAuth } from '@/lib/firebase';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
@@ -359,7 +359,7 @@ function SubscriptionContent() {
                   onClick={() => setShowSparPopup(false)}
                   className="text-[10px] font-black text-white/40 hover:text-white uppercase tracking-widest text-center py-1 mt-1"
                 >
-                  I'll Explore Plans First
+                  I&apos;ll Explore Plans First
                 </button>
               </div>
             </motion.div>

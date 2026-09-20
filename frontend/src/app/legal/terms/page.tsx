@@ -46,7 +46,7 @@ export default function TermsPage() {
           <h2 className="text-lg font-black uppercase text-primary tracking-wider mt-4">2. Subscriptions and Payments</h2>
           <div className="flex flex-col gap-3">
             <p>
-              <strong>Pricing & Billing:</strong> Certain features are paid subscription services ("Pro Plans"). You agree to pay the fees associated with the subscription plan you select. Recurring charges are collected by Razorpay according to the plan you choose until you cancel.
+              <strong>Pricing & Billing:</strong> Certain features are paid subscription services (&quot;Pro Plans&quot;). You agree to pay the fees associated with the subscription plan you select. Recurring charges are collected by Razorpay according to the plan you choose until you cancel.
             </p>
             <p>
               <strong>Razorpay Integration:</strong> Payment transactions are executed using the Razorpay gateway. Subscription access is activated only after Razorpay confirms a successful payment (webhook and/or verified checkout). Failed or incomplete payments do not extend your billed period.
@@ -79,7 +79,7 @@ export default function TermsPage() {
 
           <h2 className="text-lg font-black uppercase text-primary tracking-wider mt-4">6. Changes to Terms</h2>
           <p>
-            We reserve the right to modify these terms at any time. Changes will be posted on this page with an updated "Last Updated" date. Continued use of the platform constitutes agreement to the updated terms.
+            We reserve the right to modify these terms at any time. Changes will be posted on this page with an updated &quot;Last Updated&quot; date. Continued use of the platform constitutes agreement to the updated terms.
           </p>
 
           <h2 className="text-lg font-black uppercase text-primary tracking-wider mt-4">7. Contact</h2>

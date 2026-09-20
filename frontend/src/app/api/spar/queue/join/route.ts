@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireFirebaseUid } from '@/lib/server/require-firebase';
 import { getEntitlement } from '@/lib/server/entitlements';
 import { supabaseAdmin } from '@/lib/server/supabase-admin';
-import { getClientIP, rateLimitMiddleware, FREE_SPARRING_LIMITER } from '@/lib/server/ip-rate-limit';
+import { rateLimitMiddleware, FREE_SPARRING_LIMITER } from '@/lib/server/ip-rate-limit';
 
 export const runtime = 'nodejs';
 

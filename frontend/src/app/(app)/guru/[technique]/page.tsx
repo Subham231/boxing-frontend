@@ -4,14 +4,14 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
 import {
-  ArrowLeft, Target, Lightbulb, AlertTriangle, ChevronRight, ChevronDown,
+  ArrowLeft, Target, Lightbulb, AlertTriangle, ChevronDown,
   Shield, Zap, PersonStanding, Star, Check, PlayCircle, Film, Image as ImageIcon,
   ThumbsUp, ThumbsDown, Sparkles, HelpCircle, Plus, Maximize2, X, Pause, Play,
 } from 'lucide-react';
 import { getTechniqueById, getCategoryOf, techniquesData, overallRating, TechniqueDetail } from '@/lib/techniques-data';
 import {
   loadTechniqueProgress, saveTechniqueProgress, markRecentlyViewed, logPractice,
-  practiceTotals, STAGES, LearningStage, TechniqueProgress,
+  practiceTotals, STAGES, TechniqueProgress,
 } from '@/lib/guru-progress';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { MetricsGrid } from '@/components/guru/GuruCharts';
@@ -89,6 +89,29 @@ export default function TechniqueDetailPage() {
     markRecentlyViewed(technique.id);
   }, [technique]);
 
+  // --- Fullscreen "gif-style" video viewer state ------------------------
+  // These MUST stay above every early return below. They used to be
+  // declared further down, after the `!technique` / `checkingAccess` /
+  // `!hasEliteAccess` guards, which meant this component called a
+  // different NUMBER of hooks depending on which guard fired. React
+  // identifies hooks by call order, so when `checkingAccess` flipped from
+  // true to false after the auth check resolved, the next render ran more
+  // hooks than the previous one and React threw
+  // "Rendered more hooks than during the previous render" — crashing the
+  // page at exactly the moment access was granted.
+  const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
+  const [isFullscreenPlaying, setIsFullscreenPlaying] = useState(true);
+  const fullscreenVideoRef = React.useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => {
+    if (!isFullscreenOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsFullscreenOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isFullscreenOpen]);
+
   if (!technique) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center py-10 text-white/40 font-bold uppercase text-xs">
@@ -159,12 +182,6 @@ export default function TechniqueDetailPage() {
   const rating = overallRating(technique.metrics);
   const totals = progress ? practiceTotals(progress) : { todayReps: 0, todayMinutes: 0, weekReps: 0, weekMinutes: 0, totalReps: 0, totalMinutes: 0 };
 
-  // Fullscreen "gif-style" video viewer — loops silently, user can only
-  // pause/resume it. No seek bar, no rewind, no native controls at all.
-  const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
-  const [isFullscreenPlaying, setIsFullscreenPlaying] = useState(true);
-  const fullscreenVideoRef = React.useRef<HTMLVideoElement | null>(null);
-
   const openFullscreenVideo = () => {
     setIsFullscreenPlaying(true);
     setIsFullscreenOpen(true);
@@ -185,15 +202,6 @@ export default function TechniqueDetailPage() {
       setIsFullscreenPlaying(false);
     }
   };
-
-  useEffect(() => {
-    if (!isFullscreenOpen) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeFullscreenVideo();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isFullscreenOpen]);
 
   return (
     <div className="flex flex-col gap-6 anim-fade-in pb-16">
@@ -480,7 +488,7 @@ export default function TechniqueDetailPage() {
         <GlassCard className="p-5 border-white/5 bg-black/40">
           <span className="text-[9px] font-black text-white/40 uppercase tracking-widest block mb-4">Practice Tracker</span>
           <div className="grid grid-cols-2 gap-3 mb-4">
-            <div><span className="text-lg font-black text-primary block">{totals.todayReps}</span><span className="text-[8px] text-white/40 font-bold uppercase">Today's Reps</span></div>
+            <div><span className="text-lg font-black text-primary block">{totals.todayReps}</span><span className="text-[8px] text-white/40 font-bold uppercase">Today&apos;s Reps</span></div>
             <div><span className="text-lg font-black text-white block">{totals.weekReps}</span><span className="text-[8px] text-white/40 font-bold uppercase">Weekly Reps</span></div>
             <div><span className="text-lg font-black text-white block">{totals.totalReps}</span><span className="text-[8px] text-white/40 font-bold uppercase">Total Repetitions</span></div>
             <div><span className="text-lg font-black text-white block">{totals.totalMinutes}m</span><span className="text-[8px] text-white/40 font-bold uppercase">Time Practiced</span></div>

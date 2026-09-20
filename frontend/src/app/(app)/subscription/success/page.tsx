@@ -77,7 +77,7 @@ function SuccessContent() {
             <Loader2 className="w-10 h-10 text-primary animate-spin" />
             <h1 className="text-lg font-black uppercase tracking-wide">Confirming your subscription...</h1>
             <p className="text-xs text-white/60 font-semibold">
-              We're finalizing your payment with Polar. This usually takes a few seconds — please don't close this page.
+              We&apos;re finalizing your payment with Polar. This usually takes a few seconds — please don&apos;t close this page.
             </p>
           </>
         )}
@@ -98,7 +98,7 @@ function SuccessContent() {
             <AlertCircle className="w-10 h-10 text-amber-400" />
             <h1 className="text-lg font-black uppercase tracking-wide">Still processing</h1>
             <p className="text-xs text-white/60 font-semibold">
-              Your payment may still be confirming on Polar's side. If your plan doesn't show as active within a couple of
+              Your payment may still be confirming on Polar&apos;s side. If your plan doesn&apos;t show as active within a couple of
               minutes, please contact support with your plan name{planId ? ` (${planId})` : ''}.
             </p>
             <NeonButton onClick={() => router.push('/subscription')} className="w-full h-12 text-[11px] mt-2">

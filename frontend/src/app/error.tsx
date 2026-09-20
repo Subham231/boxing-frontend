@@ -20,7 +20,7 @@ export default function ErrorPage({
         <div className="text-5xl mb-3 text-primary">⚠</div>
         <h2 className="text-xl font-black uppercase tracking-wider mb-2 text-white">Something went wrong</h2>
         <p className="text-white/60 text-xs sm:text-sm leading-relaxed mb-6">
-          An unexpected error occurred. Let's get you back on track to the training protocol.
+          An unexpected error occurred. Let&apos;s get you back on track to the training protocol.
         </p>
         <div className="flex flex-col sm:flex-row gap-3 w-full justify-center">
           <button

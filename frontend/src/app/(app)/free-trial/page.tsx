@@ -1,28 +1,19 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { 
   ArrowLeft, 
   Copy, 
   Check, 
   Gift, 
   Crown, 
-  Sparkles, 
   Bell, 
   Zap, 
-  ShieldCheck, 
   Lock, 
-  Calendar, 
-  Swords, 
-  Users, 
-  Video, 
-  Flame, 
   ChevronRight,
-  TrendingUp
 } from 'lucide-react';
 import { useFirebaseUser } from '@/lib/useFirebaseUser';
 import { getUserProfile } from '@/lib/firebase-reflex';
@@ -167,7 +158,7 @@ export default function FreeTrialReferralPage() {
             <div>
               <div className="text-xs font-black uppercase text-white tracking-wide">Day 25: Friendly Reminder</div>
               <p className="text-[11px] font-semibold text-white/60 mt-0.5 leading-snug">
-                We'll send you an in-app reminder that your 30-day trial is ending soon so you're always in control.
+                We&apos;ll send you an in-app reminder that your 30-day trial is ending soon so you&apos;re always in control.
               </p>
             </div>
           </div>

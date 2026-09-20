@@ -4,7 +4,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  BarChart3,
   Settings,
   Dumbbell,
   Bolt,
@@ -12,11 +11,8 @@ import {
   Download,
   ChevronRight,
   Check,
-  Plus,
   RefreshCw,
-  TrendingUp,
   Flame,
-  Award,
   VideoOff
 } from 'lucide-react';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -208,7 +204,7 @@ export default function AnalyticsPage() {
       if (data.ring_name || data.ringName) {
         setPlayerName((data.ring_name || data.ringName).toUpperCase());
       }
-    } catch (e) { }
+    } catch { }
 
     const today = new Date();
     const tempDaily: DailySession[] = [];
@@ -226,7 +222,7 @@ export default function AnalyticsPage() {
         if (completed.length > 0) {
           tempDaily.push({ date: d.toISOString(), count: completed.length });
         }
-      } catch (e) { }
+      } catch { }
 
       // Planner Roadmap
       try {
@@ -240,7 +236,7 @@ export default function AnalyticsPage() {
             });
           });
         }
-      } catch (e) { }
+      } catch { }
     }
 
     setDailyHistory(tempDaily);
@@ -257,7 +253,7 @@ export default function AnalyticsPage() {
       } else {
         setSelectedVisionIdx(null);
       }
-    } catch (e) { }
+    } catch { }
   };
 
   // Re-reads all local session stores and recomputes stats/charts. There is
@@ -373,7 +369,7 @@ export default function AnalyticsPage() {
     });
 
     // Reference projected curve
-    let projD = `M 0 120 Q 200 80 400 40`;
+    const projD = `M 0 120 Q 200 80 400 40`;
 
     return { pathD, projD, finalDot };
   }, [dailyHistory, visionHistory]);

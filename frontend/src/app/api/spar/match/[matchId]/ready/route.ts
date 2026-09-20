@@ -15,6 +15,11 @@ export async function POST(
     return NextResponse.json({ error: 'Database not configured.' }, { status: 500 });
   }
 
+  // `match` is genuinely reassigned in the migration-fallback branch below,
+  // so this destructuring must stay `let`. (eslint's prefer-const flagged
+  // only the sibling `matchErr`, which is never reassigned — but the two
+  // share one declaration, so it cannot be narrowed without splitting them.)
+  // eslint-disable-next-line prefer-const
   let { data: match, error: matchErr } = await supabaseAdmin
     .from('spar_matches')
     .select('id, player_a_uid, player_b_uid, status, match_started_at')

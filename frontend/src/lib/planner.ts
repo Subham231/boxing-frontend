@@ -295,7 +295,7 @@ export function parsePreferredTime(timeStr: string) {
     const raw = String(timeStr || '07:30').trim();
     const match = raw.match(/(\d{1,2}):(\d{2})/);
     let h = match ? parseInt(match[1], 10) : 7;
-    let m = match ? parseInt(match[2], 10) : 30;
+    const m = match ? parseInt(match[2], 10) : 30;
     if (/pm/i.test(raw) && h < 12) h += 12;
     if (/am/i.test(raw) && h === 12) h = 0;
     return { h: h % 24, m: m % 60 };

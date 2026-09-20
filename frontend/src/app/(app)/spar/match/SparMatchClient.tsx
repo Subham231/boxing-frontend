@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Loader2, Swords, Flag, Mic, MicOff, Settings, Volume2, VolumeX } from 'lucide-react';
+import { ArrowLeft, Swords, Flag, Mic, MicOff, Settings, Volume2, VolumeX } from 'lucide-react';
 import { firebaseAuth } from '@/lib/firebase';
 import { supabase } from '@/lib/supabase';
 import { playVoiceEvent, preloadVoicePack, unlockVoicePack, stopVoicePack } from '@/lib/voice-pack';

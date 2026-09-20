@@ -17,7 +17,7 @@ const TrainingProblem: React.FC = () => {
       <header className="text-left mb-4 sm:mb-6">
         <StepBadge />
         <h1 className="text-2xl sm:text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
-          Most fighters don't fail <br /> because they lack <span className="text-primary">talent</span>.
+          Most fighters don&apos;t fail <br /> because they lack <span className="text-primary">talent</span>.
         </h1>
         <p className="text-white/50 mt-2.5 sm:mt-4 text-xs sm:text-sm leading-relaxed font-semibold">
           Many athletes struggle because they train without structure, repeat the same routines, or
@@ -33,7 +33,7 @@ const TrainingProblem: React.FC = () => {
           viewport={{ once: true }}
           className="glass-card p-4 sm:p-5 border-red-500/20 bg-red-500/[0.04] rounded-3xl flex flex-col gap-2.5 sm:gap-3"
         >
-          {RANDOM.map((item, i) => (
+          {RANDOM.map((item) => (
             <div key={item} className="flex items-center gap-3">
               <div className="w-6 h-6 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center shrink-0">
                 <X className="w-3 h-3 text-red-400" />

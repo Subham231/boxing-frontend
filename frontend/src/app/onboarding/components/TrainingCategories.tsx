@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { ChevronRight, Target, Zap, Dumbbell, Wind, Footprints, ShieldHalf, Activity } from 'lucide-react';
+import { ChevronRight, Target, Zap, Dumbbell, Footprints } from 'lucide-react';
 import { useOnboarding } from '@/context/OnboardingContext';
 import StepBadge from './StepBadge';
 

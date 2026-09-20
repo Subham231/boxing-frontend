@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronRight, Trophy, Swords, Zap, Flame, Dumbbell, Brain, Sparkles, Heart } from 'lucide-react';
+import { ChevronRight, Swords, Zap, Flame, Brain, Heart } from 'lucide-react';
 import { useOnboarding } from '@/context/OnboardingContext';
 import StepBadge from './StepBadge';
 

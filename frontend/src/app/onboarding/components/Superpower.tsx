@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronRight, Shield, Zap, Footprints, Flame, Snowflake, Sparkles } from 'lucide-react';
+import { ChevronRight, Zap, Footprints, Flame, Sparkles } from 'lucide-react';
 import { useOnboarding } from '@/context/OnboardingContext';
 import StepBadge from './StepBadge';
 
@@ -58,7 +58,7 @@ const Superpower: React.FC = () => {
               )}
               <Icon className={`w-5 h-5 sm:w-6 sm:h-6 my-1 ${active ? 'text-primary' : 'text-primary/40'}`} strokeWidth={2.25} />
               <span className={`text-[10px] font-black uppercase leading-tight ${active ? 'text-primary' : 'text-white/70'}`}>{s.label}</span>
-              <span className="text-[8px] text-white/35 font-semibold italic leading-tight mt-0.5">"{s.desc}"</span>
+              <span className="text-[8px] text-white/35 font-semibold italic leading-tight mt-0.5">&quot;{s.desc}&quot;</span>
             </motion.button>
           );
         })}

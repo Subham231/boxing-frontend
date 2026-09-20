@@ -43,7 +43,7 @@ export function loadLocalCustom(): any[] {
     if (typeof window === 'undefined') return [];
     try {
         return JSON.parse(localStorage.getItem('custom_techniques') || '[]');
-    } catch (e) {
+    } catch {
         return [];
     }
 }

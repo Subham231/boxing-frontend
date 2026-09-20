@@ -34,9 +34,80 @@ export type FlawMetric =
   | 'headLateralScore'
   | 'headDropScore'
   | 'estimatedPower'
-  | 'trajectoryMatchRate';
+  | 'trajectoryMatchRate'
+  // --- Metrics added with the guard/hand/sequencing tracking layer -------
+  // Each of these is only listed in a technique's `measuredMetrics` when
+  // the capture path genuinely produces it, so a device that fell back to
+  // pose-only tracking (no hand model) never gets graded on wrist
+  // alignment it couldn't see. See flawEngine's availability filter.
+  | 'guardRecoveryScore'   // did the punching hand snap back to guard
+  | 'guardIntegrityScore'  // did the OFF hand stay up while punching
+  | 'wristAlignmentScore'  // fist in line with forearm at impact (needs hands)
+  | 'sequenceScore'        // proximal-to-distal kinetic chain ordering
+  | 'recoverySpeedScore';  // how fast the retraction was
 
 export type Severity = 'minor' | 'moderate' | 'major';
+
+// ---------------------------------------------------------------------------
+// Root causes
+//
+// Boxing faults are heavily correlated: low hip rotation, low weight
+// transfer and a flat rear foot on the same sloppy cross are not three
+// independent problems, they are three symptoms of one — the lower body
+// isn't driving the punch. Reporting them separately reads as "everything
+// is wrong" and buries the one correction that would fix all three.
+// ---------------------------------------------------------------------------
+export type RootCauseKey =
+  | 'lower_body_disengaged'
+  | 'arm_dominant_chain'
+  | 'no_rotation'
+  | 'poor_recovery'
+  | 'shallow_defense'
+  | 'wrong_shape';
+
+export interface RootCauseInfo {
+  label: string;
+  /** The one correction that addresses the whole cluster. */
+  primaryFix: string;
+  drill: string;
+}
+
+export const ROOT_CAUSES: Record<RootCauseKey, RootCauseInfo> = {
+  lower_body_disengaged: {
+    label: 'Lower body is not driving the punch',
+    primaryFix:
+      'Start every power punch from the ground: turn the rear foot, let the hip follow, and only then extend the arm.',
+    drill: 'Hip-Lead Sequencing Drill (slow cross, foot and hip first, arm last)',
+  },
+  arm_dominant_chain: {
+    label: 'Punches are firing arm-first',
+    primaryFix:
+      'Your arm is reaching peak speed before your hips do. Slow the punch down until you can feel the hip lead, then rebuild speed.',
+    drill: 'Proximal-to-Distal Tempo Drill (3-count: foot, hip, hand)',
+  },
+  no_rotation: {
+    label: 'Torso is staying square',
+    primaryFix: 'Turn your torso through the shot instead of pushing the arm around a static body.',
+    drill: 'Arms-Locked Pivot Reps',
+  },
+  poor_recovery: {
+    label: 'Hands are not returning to guard',
+    primaryFix:
+      'Treat the retraction as part of the punch — snap the hand back along the same line it went out.',
+    drill: 'Out-and-Back Snap Drill (count the return, not the throw)',
+  },
+  shallow_defense: {
+    label: 'Defensive movement is too shallow',
+    primaryFix: 'Move your head with your legs, not your neck — sink and shift, don’t lean.',
+    drill: 'Slip-Rope / Bob-and-Weave Under-the-Line Drill',
+  },
+  wrong_shape: {
+    label: 'Punch shape does not match the call',
+    primaryFix:
+      'Exaggerate the difference between shapes at slow speed until each one has its own distinct path.',
+    drill: 'Shape Isolation Shadowboxing (10 of each, slow, mirror)',
+  },
+};
 
 export interface FlawRule {
   id: string;
@@ -46,6 +117,18 @@ export interface FlawRule {
   comparator: 'below' | 'above';
   threshold: number;
   severity: Severity;
+  // Spread (in metric units) treated as "one full severity step" away from
+  // target, used to normalize deviation across metrics that don't share a
+  // scale. Without it, ranking compared raw distances-from-threshold: a
+  // trajectory-match rule sitting 18 points below its threshold always
+  // outranked a rotation rule sitting 7 points below its own, even when the
+  // rotation deficit was by far the bigger technical problem. Defaults to
+  // 25 when omitted.
+  acceptableRange?: number;
+  // Optional grouping key. Flaws sharing a rootCause are collapsed into one
+  // diagnosis with contributing indicators, instead of being reported as
+  // several independent problems — see groupByRootCause in flawEngine.
+  rootCause?: RootCauseKey;
   cause: string;
   coachingTip: string;
   correctiveExercise: string;
@@ -61,6 +144,19 @@ export interface TechniqueMechanics {
   // technique — e.g. a jab isn't expected to show much hip rotation, so it
   // isn't scored against that target at all (undefined = not applicable).
   targets: Partial<Record<FlawMetric, number>>;
+  // The metric that most defines this technique. Previously the engine
+  // inferred this as `Object.keys(targets)[0]`, which silently depended on
+  // object key ordering — reordering two lines in this file would change
+  // which metric a technique was judged on, with no error anywhere.
+  // Declaring it explicitly removes that trap.
+  primaryMetric: FlawMetric;
+  // Weights for the composite technique score. A technique's quality is not
+  // one metric: a cross with perfect hip rotation and no weight transfer is
+  // not a good cross. Weights need not sum to 1 — they're normalized over
+  // whichever metrics were actually measured this session, so a device with
+  // no hand tracking simply redistributes those weights across the rest
+  // instead of scoring a zero it never measured.
+  scoreWeights: Partial<Record<FlawMetric, number>>;
   // Every metric this technique's live capture path genuinely measures.
   // The flaw engine (flawEngine.ts) refuses to evaluate any rule whose
   // metric isn't listed here — this is what stops a rule from firing
@@ -89,11 +185,123 @@ const PUNCH_MEASURED_METRICS: FlawMetric[] = [
   'footPivotScore',
   'estimatedPower',
   'trajectoryMatchRate',
+  // Always measured from pose alone (wrist travel back toward the guard
+  // baseline), so these are safe to list unconditionally.
+  'guardRecoveryScore',
+  'guardIntegrityScore',
+  'recoverySpeedScore',
+  'sequenceScore',
 ];
+
+// Requires the hand-landmark model. The flaw engine filters these out
+// automatically when a rep reports no hand data (see repHasMetric), so a
+// low-tier device that dropped hand tracking is never graded on them.
+const HAND_DEPENDENT_METRICS: FlawMetric[] = ['wristAlignmentScore'];
 const DEFENSE_MEASURED_METRICS: FlawMetric[] = [
   'headLateralScore',
   'headDropScore',
   'kneeDriveScore',
+  'guardIntegrityScore', // hands must stay up while slipping/rolling
+];
+
+
+// ---------------------------------------------------------------------------
+// Rules that apply to every punch regardless of which one was thrown.
+//
+// These grade the half of a punch the pipeline previously never looked at:
+// the return. A fighter who throws fast and leaves the hand out is a worse
+// fighter than one who throws slightly slower and recovers — but the old
+// scoring literally could not tell them apart.
+// ---------------------------------------------------------------------------
+const PUNCH_COMMON_FLAWS: FlawRule[] = [
+  {
+    id: 'punch_no_guard_return',
+    metric: 'guardRecoveryScore',
+    rootCause: 'poor_recovery',
+    acceptableRange: 25,
+    comparator: 'below',
+    threshold: 40,
+    severity: 'major',
+    cause: 'The punching hand is not coming back to guard after the shot — it is being left out in front of you.',
+    coachingTip: 'Pull the hand back along the same line it went out, as fast as you threw it.',
+    correctiveExercise: 'Out-and-Back Snap Drill (count only the return)',
+    recommendedFrequency: '4 sets x 15 reps, 4x/week',
+    progressionTarget: 'Guard recovery 65%+ on 8/10 punches',
+  },
+  {
+    id: 'punch_slow_recovery',
+    metric: 'recoverySpeedScore',
+    rootCause: 'poor_recovery',
+    acceptableRange: 25,
+    comparator: 'below',
+    threshold: 35,
+    severity: 'moderate',
+    cause: 'The hand does return, but slowly — the retraction is being lowered rather than snapped back.',
+    coachingTip: 'Think of the punch as a whip: the return should be as sharp as the throw.',
+    correctiveExercise: 'Elastic-Band Retraction Drill',
+    recommendedFrequency: '3 sets x 20 reps, 3x/week',
+    progressionTarget: 'Retraction under 300ms on 8/10 punches',
+  },
+  {
+    id: 'punch_guard_drops',
+    metric: 'guardIntegrityScore',
+    rootCause: 'poor_recovery',
+    acceptableRange: 25,
+    comparator: 'below',
+    threshold: 45,
+    severity: 'major',
+    cause: 'The non-punching hand drops away from the face while you throw, leaving you open to the counter.',
+    coachingTip: 'Glue the off hand to your cheek — it should not move at all while the other arm works.',
+    correctiveExercise: 'Anchored Off-Hand Shadowboxing (off glove touching temple)',
+    recommendedFrequency: '3 rounds x 2 min, 4x/week',
+    progressionTarget: 'Guard integrity 70%+ across a full round',
+  },
+  {
+    id: 'punch_arm_dominant',
+    metric: 'sequenceScore',
+    rootCause: 'arm_dominant_chain',
+    acceptableRange: 30,
+    comparator: 'below',
+    threshold: 45,
+    severity: 'major',
+    cause: 'The arm is reaching peak speed before the hips do — the punch is being thrown from the shoulder with no kinetic chain behind it.',
+    coachingTip: 'Foot, hip, then hand. If the hand moves first, the punch has no power source.',
+    correctiveExercise: 'Proximal-to-Distal Tempo Drill (3-count)',
+    recommendedFrequency: '4 sets x 10 slow reps, 4x/week',
+    progressionTarget: 'Sequence score 70%+ on 8/10 power punches',
+  },
+  {
+    id: 'punch_wrist_collapse',
+    metric: 'wristAlignmentScore',
+    rootCause: 'arm_dominant_chain',
+    acceptableRange: 25,
+    comparator: 'below',
+    threshold: 40,
+    severity: 'moderate',
+    cause: 'The wrist is bending at impact instead of staying in line with the forearm — this leaks power and is how wrists get injured.',
+    coachingTip: 'Keep a straight line from elbow through wrist to knuckles at the moment of contact.',
+    correctiveExercise: 'Wrist-Lock Isometric Holds + slow bag contact reps',
+    recommendedFrequency: '3 sets x 30s holds, 4x/week',
+    progressionTarget: 'Wrist alignment 70%+ on 8/10 punches',
+  },
+];
+
+// Defensive movement should never cost you your guard.
+const DEFENSE_COMMON_FLAWS: FlawRule[] = [
+  {
+    id: 'defense_guard_drops',
+    metric: 'guardIntegrityScore',
+    rootCause: 'shallow_defense',
+    acceptableRange: 25,
+    comparator: 'below',
+    threshold: 45,
+    severity: 'moderate',
+    cause: 'Your hands drop as you move your head — slipping into a position with no guard up is not a defence.',
+    coachingTip: 'Move your head behind your gloves, not out from behind them.',
+    correctiveExercise: 'Guard-Locked Slip Drill (hands fixed to temples)',
+    recommendedFrequency: '3 rounds x 2 min, 3x/week',
+    progressionTarget: 'Guard integrity 70%+ on every defensive rep',
+  },
 ];
 
 export const MECHANICS_DATABASE: Record<TechniqueKey, TechniqueMechanics> = {
@@ -106,11 +314,22 @@ export const MECHANICS_DATABASE: Record<TechniqueKey, TechniqueMechanics> = {
       footPivotScore: 15,
       estimatedPower: 45,
     },
-    measuredMetrics: PUNCH_MEASURED_METRICS,
+    primaryMetric: 'estimatedPower',
+    scoreWeights: {
+      estimatedPower: 0.3,
+      trajectoryMatchRate: 0.2,
+      torsoRotationScore: 0.15,
+      guardRecoveryScore: 0.25,
+      wristAlignmentScore: 0.1,
+    },
+    measuredMetrics: [...PUNCH_MEASURED_METRICS, ...HAND_DEPENDENT_METRICS],
     flaws: [
+      ...PUNCH_COMMON_FLAWS,
       {
         id: 'jab_low_power',
         metric: 'estimatedPower',
+        rootCause: 'arm_dominant_chain',
+        acceptableRange: 25,
         comparator: 'below',
         threshold: 30,
         severity: 'moderate',
@@ -123,6 +342,8 @@ export const MECHANICS_DATABASE: Record<TechniqueKey, TechniqueMechanics> = {
       {
         id: 'jab_wrong_shape',
         metric: 'trajectoryMatchRate',
+        rootCause: 'wrong_shape',
+        acceptableRange: 30,
         comparator: 'below',
         threshold: 60,
         severity: 'minor',
@@ -146,11 +367,23 @@ export const MECHANICS_DATABASE: Record<TechniqueKey, TechniqueMechanics> = {
       weightTransferScore: 45,
       estimatedPower: 55,
     },
-    measuredMetrics: PUNCH_MEASURED_METRICS,
+    primaryMetric: 'hipRotationScore',
+    scoreWeights: {
+      hipRotationScore: 0.25,
+      weightTransferScore: 0.2,
+      footPivotScore: 0.15,
+      estimatedPower: 0.15,
+      sequenceScore: 0.15,
+      guardRecoveryScore: 0.1,
+    },
+    measuredMetrics: [...PUNCH_MEASURED_METRICS, ...HAND_DEPENDENT_METRICS],
     flaws: [
+      ...PUNCH_COMMON_FLAWS,
       {
         id: 'cross_low_hip_rotation',
         metric: 'hipRotationScore',
+        rootCause: 'lower_body_disengaged',
+        acceptableRange: 25,
         comparator: 'below',
         threshold: 35,
         severity: 'major',
@@ -163,6 +396,8 @@ export const MECHANICS_DATABASE: Record<TechniqueKey, TechniqueMechanics> = {
       {
         id: 'cross_low_pivot',
         metric: 'footPivotScore',
+        rootCause: 'lower_body_disengaged',
+        acceptableRange: 20,
         comparator: 'below',
         threshold: 25,
         severity: 'moderate',
@@ -175,6 +410,8 @@ export const MECHANICS_DATABASE: Record<TechniqueKey, TechniqueMechanics> = {
       {
         id: 'cross_low_weight_transfer',
         metric: 'weightTransferScore',
+        rootCause: 'lower_body_disengaged',
+        acceptableRange: 20,
         comparator: 'below',
         threshold: 25,
         severity: 'moderate',
@@ -197,11 +434,22 @@ export const MECHANICS_DATABASE: Record<TechniqueKey, TechniqueMechanics> = {
       footPivotScore: 35,
       estimatedPower: 55,
     },
-    measuredMetrics: PUNCH_MEASURED_METRICS,
+    primaryMetric: 'torsoRotationScore',
+    scoreWeights: {
+      torsoRotationScore: 0.3,
+      hipRotationScore: 0.2,
+      trajectoryMatchRate: 0.2,
+      footPivotScore: 0.15,
+      guardRecoveryScore: 0.15,
+    },
+    measuredMetrics: [...PUNCH_MEASURED_METRICS, ...HAND_DEPENDENT_METRICS],
     flaws: [
+      ...PUNCH_COMMON_FLAWS,
       {
         id: 'hook_low_torso_rotation',
         metric: 'torsoRotationScore',
+        rootCause: 'no_rotation',
+        acceptableRange: 25,
         comparator: 'below',
         threshold: 40,
         severity: 'major',
@@ -214,6 +462,8 @@ export const MECHANICS_DATABASE: Record<TechniqueKey, TechniqueMechanics> = {
       {
         id: 'hook_wrong_shape',
         metric: 'trajectoryMatchRate',
+        rootCause: 'wrong_shape',
+        acceptableRange: 30,
         comparator: 'below',
         threshold: 55,
         severity: 'moderate',
@@ -236,11 +486,22 @@ export const MECHANICS_DATABASE: Record<TechniqueKey, TechniqueMechanics> = {
       weightTransferScore: 35,
       estimatedPower: 55,
     },
-    measuredMetrics: PUNCH_MEASURED_METRICS,
+    primaryMetric: 'kneeDriveScore',
+    scoreWeights: {
+      kneeDriveScore: 0.3,
+      hipRotationScore: 0.2,
+      weightTransferScore: 0.2,
+      estimatedPower: 0.15,
+      guardRecoveryScore: 0.15,
+    },
+    measuredMetrics: [...PUNCH_MEASURED_METRICS, ...HAND_DEPENDENT_METRICS],
     flaws: [
+      ...PUNCH_COMMON_FLAWS,
       {
         id: 'uppercut_low_knee_drive',
         metric: 'kneeDriveScore',
+        rootCause: 'lower_body_disengaged',
+        acceptableRange: 25,
         comparator: 'below',
         threshold: 35,
         severity: 'major',
@@ -253,6 +514,8 @@ export const MECHANICS_DATABASE: Record<TechniqueKey, TechniqueMechanics> = {
       {
         id: 'uppercut_low_hip_extension',
         metric: 'hipRotationScore',
+        rootCause: 'lower_body_disengaged',
+        acceptableRange: 20,
         comparator: 'below',
         threshold: 25,
         severity: 'moderate',
@@ -271,11 +534,20 @@ export const MECHANICS_DATABASE: Record<TechniqueKey, TechniqueMechanics> = {
     targets: {
       headLateralScore: 55,
     },
+    primaryMetric: 'headLateralScore',
+    scoreWeights: {
+      headLateralScore: 0.6,
+      kneeDriveScore: 0.2,
+      guardIntegrityScore: 0.2,
+    },
     measuredMetrics: DEFENSE_MEASURED_METRICS,
     flaws: [
+      ...DEFENSE_COMMON_FLAWS,
       {
         id: 'slip_shallow',
         metric: 'headLateralScore',
+        rootCause: 'shallow_defense',
+        acceptableRange: 25,
         comparator: 'below',
         threshold: 30,
         severity: 'moderate',
@@ -294,11 +566,20 @@ export const MECHANICS_DATABASE: Record<TechniqueKey, TechniqueMechanics> = {
     targets: {
       headLateralScore: 55,
     },
+    primaryMetric: 'headLateralScore',
+    scoreWeights: {
+      headLateralScore: 0.6,
+      kneeDriveScore: 0.2,
+      guardIntegrityScore: 0.2,
+    },
     measuredMetrics: DEFENSE_MEASURED_METRICS,
     flaws: [
+      ...DEFENSE_COMMON_FLAWS,
       {
         id: 'slip_shallow',
         metric: 'headLateralScore',
+        rootCause: 'shallow_defense',
+        acceptableRange: 25,
         comparator: 'below',
         threshold: 30,
         severity: 'moderate',
@@ -318,11 +599,20 @@ export const MECHANICS_DATABASE: Record<TechniqueKey, TechniqueMechanics> = {
       headDropScore: 50,
       kneeDriveScore: 30,
     },
+    primaryMetric: 'headDropScore',
+    scoreWeights: {
+      headDropScore: 0.5,
+      kneeDriveScore: 0.3,
+      guardIntegrityScore: 0.2,
+    },
     measuredMetrics: DEFENSE_MEASURED_METRICS,
     flaws: [
+      ...DEFENSE_COMMON_FLAWS,
       {
         id: 'roll_shallow',
         metric: 'headDropScore',
+        rootCause: 'shallow_defense',
+        acceptableRange: 25,
         comparator: 'below',
         threshold: 25,
         severity: 'major',
@@ -335,6 +625,8 @@ export const MECHANICS_DATABASE: Record<TechniqueKey, TechniqueMechanics> = {
       {
         id: 'roll_no_leg_bend',
         metric: 'kneeDriveScore',
+        rootCause: 'shallow_defense',
+        acceptableRange: 15,
         comparator: 'below',
         threshold: 15,
         severity: 'minor',

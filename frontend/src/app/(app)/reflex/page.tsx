@@ -8,16 +8,11 @@ import {
   Trophy, 
   Settings, 
   Check, 
-  RotateCcw, 
-  Play, 
-  ArrowLeft, 
   AlertTriangle, 
   Activity, 
-  Flame,
   Target,
   CircleDot
 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
 import { StreakManager } from '@/lib/streak-manager';
 import { isPlausibleReactionTime, looksAutomated, createTabLock } from '@/lib/reflex-anticheat';
 import { useFirebaseUser } from '@/lib/useFirebaseUser';
@@ -32,7 +27,7 @@ export default function ReflexPage() {
   const { user: fbUser, loading: fbLoading } = useFirebaseUser();
   const [showLoginGate, setShowLoginGate] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [playerName, setPlayerName] = useState('FIGHTER');
+  const [, setPlayerName] = useState('FIGHTER');
   const [promiseText, setPromiseText] = useState('FOCUS');
 
   // Assessment Overlay State
@@ -50,7 +45,7 @@ export default function ReflexPage() {
 
   // Weekly Tracker State
   const [weeklySessions, setWeeklySessions] = useState(0);
-  const [weeklyCompleted, setWeeklyCompleted] = useState(false);
+  const [, setWeeklyCompleted] = useState(false);
 
   // Game 1: Reaction Tap State
   const [rtActive, setRtActive] = useState(false);
@@ -62,7 +57,7 @@ export default function ReflexPage() {
   const [rtRound, setRtRound] = useState(0);
   const [rtTimes, setRtTimes] = useState<number[]>([]);
   const [rtRoundStatus, setRtRoundStatus] = useState<('correct' | 'wrong' | null)[]>([null, null, null, null, null]);
-  const [rtFlagged, setRtFlagged] = useState(false);
+  const [, setRtFlagged] = useState(false);
   const [rtFoulMessage, setRtFoulMessage] = useState<string | null>(null);
   const rtEarlyTapsRef = useRef(0);
   const rtTapIntervalsRef = useRef<number[]>([]);
@@ -84,7 +79,7 @@ export default function ReflexPage() {
   const [cfTimerDanger, setCfTimerDanger] = useState(false);
   const [cfLevelScores, setCfLevelScores] = useState<number[]>([]);
   const [cfLightSequence, setCfLightSequence] = useState<string[]>([]);
-  const [cfFlagged, setCfFlagged] = useState(false);
+  const [, setCfFlagged] = useState(false);
   const cfFlaggedRef = useRef(false);
   const cfTapIntervalsRef = useRef<number[]>([]);
   const cfLastTapRef = useRef<number>(0);
@@ -124,7 +119,7 @@ export default function ReflexPage() {
       if (data.promise_trigger) {
         setPromiseText(data.promise_trigger.toUpperCase());
       }
-    } catch (e) {}
+    } catch {}
 
     // Parse Best Scores
     const bestRT = localStorage.getItem('reflex_rt_best');
@@ -140,7 +135,7 @@ export default function ReflexPage() {
       const count = data[weekKey] || 0;
       setWeeklySessions(count);
       setWeeklyCompleted(count >= 2);
-    } catch (e) {}
+    } catch {}
 
     // Check if Assessment Done
     if (!localStorage.getItem('reflex_assessment_done')) {
@@ -169,7 +164,7 @@ export default function ReflexPage() {
         setWeeklySessions(nextVal);
         setWeeklyCompleted(nextVal >= 2);
       }
-    } catch (e) {}
+    } catch {}
 
     // Mark daily workout as progressed
     StreakManager.completeSession();

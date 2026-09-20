@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Sparkles, Crown, Zap, Swords, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Sparkles, Crown, Swords, ArrowRight } from 'lucide-react';
 import { GlassCard } from '@/components/ui/GlassCard';
 
 export function HomePromoDealsBanner() {

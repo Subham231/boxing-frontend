@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronRight, Dumbbell, Swords, Heart, Target, Sparkles, Trophy, Shield, Flame } from 'lucide-react';
+import { ChevronRight, Dumbbell, Swords, Target, Sparkles, Trophy, Shield } from 'lucide-react';
 import { useOnboarding } from '@/context/OnboardingContext';
 import StepBadge from './StepBadge';
 
@@ -86,7 +86,7 @@ const Motivation: React.FC = () => {
             exit={{ opacity: 0 }}
             className="text-center text-[11px] font-bold text-primary/80 italic mt-3"
           >
-            We'll keep these goals in mind throughout your journey.
+            We&apos;ll keep these goals in mind throughout your journey.
           </motion.p>
         )}
       </AnimatePresence>
