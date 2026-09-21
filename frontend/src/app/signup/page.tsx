@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, ShieldCheck, Eye, EyeOff } from 'lucide-react';
+import { ArrowRight, ShieldCheck, Eye, EyeOff, Phone } from 'lucide-react';
 import { signUpWithEmail, formatEmailAuthError } from '@/lib/firebase-auth';
 
 export default function SignupPage() {
@@ -102,6 +102,14 @@ export default function SignupPage() {
 
           <button onClick={() => router.push('/login')} className="text-[10px] font-black uppercase tracking-widest text-primary hover:text-white">
             Already a fighter? Log in
+          </button>
+
+          <button
+            onClick={() => router.push('/login/phone')}
+            className="flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white"
+          >
+            <Phone className="h-3.5 w-3.5" />
+            Joined before with your phone? Log in with phone
           </button>
         </section>
       </div>

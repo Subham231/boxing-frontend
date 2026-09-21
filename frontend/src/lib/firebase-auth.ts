@@ -11,6 +11,7 @@ import {
   linkWithCredential,
   EmailAuthProvider,
   reload,
+  type ActionCodeSettings,
   type ConfirmationResult,
   type User,
 } from 'firebase/auth';
@@ -194,10 +195,12 @@ export async function confirmOtp(
  * check `error.code` instead of parsing the message string. */
 export class ProfileRequestError extends Error {
   code?: string;
-  constructor(message: string, code?: string) {
+  status?: number;
+  constructor(message: string, code?: string, status?: number) {
     super(message);
     this.name = 'ProfileRequestError';
     this.code = code;
+    this.status = status;
   }
 }
 
@@ -205,18 +208,39 @@ export async function ensureUserProfile(
   user: User,
   referralCodeEntered?: string,
 ): Promise<{ profile: UserProfile; isNew: boolean; sessionToken?: string }> {
-  const idToken = await user.getIdToken();
-  const res = await fetch('/api/reflex/ensure-profile', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-    body: JSON.stringify({ referredBy: referralCodeEntered || null }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new ProfileRequestError(err?.error || 'Could not create profile.', err?.code);
+  // One retry on a transient (network / 5xx) failure. Business errors such as
+  // 403 EMAIL_NOT_VERIFIED or 409 conflicts are returned immediately.
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const idToken = await user.getIdToken();
+      const res = await fetch('/api/reflex/ensure-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ referredBy: referralCodeEntered || null }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        const failure = new ProfileRequestError(err?.error || 'Could not create profile.', err?.code, res.status);
+        if (res.status >= 500 && attempt === 0) {
+          lastError = failure;
+          await new Promise((r) => setTimeout(r, 600));
+          continue;
+        }
+        throw failure;
+      }
+      const { profile, isNew, sessionToken } = await res.json();
+      return { profile: profile as UserProfile, isNew: !!isNew, sessionToken };
+    } catch (e) {
+      if (e instanceof ProfileRequestError) throw e;
+      lastError = e;
+      if (attempt === 0) {
+        await new Promise((r) => setTimeout(r, 600));
+        continue;
+      }
+    }
   }
-  const { profile, isNew, sessionToken } = await res.json();
-  return { profile: profile as UserProfile, isNew: !!isNew, sessionToken };
+  throw lastError instanceof Error ? lastError : new ProfileRequestError('Could not create profile.');
 }
 
 export async function claimReferralIfNeeded(user: User): Promise<void> {
@@ -307,6 +331,10 @@ export function formatEmailAuthError(error: unknown): string {
       return 'For security, please log in again before doing this.';
     case 'auth/credential-already-in-use':
       return 'This email is already linked to a different account.';
+    case 'auth/network-request-failed':
+      return 'Network problem. Check your connection and try again.';
+    case 'auth/provider-already-linked':
+      return 'This account already has an email login. Log in with that email instead.';
     case 'auth/user-disabled':
       return 'This account has been disabled. Contact support.';
     default: {
@@ -322,16 +350,64 @@ export async function emailAccountExists(email: string): Promise<boolean> {
   return methods.length > 0;
 }
 
+/** True when this Firebase user signed up with a phone number and has no email yet. */
+export function isPhoneOnlyUser(user: User | null | undefined): user is User {
+  if (!user) return false;
+  const providers = user.providerData.map((p) => p.providerId);
+  const hasPhone = providers.includes('phone') || !!user.phoneNumber;
+  const hasPassword = providers.includes('password');
+  return hasPhone && !hasPassword;
+}
+
+/** Where the verification link should send the fighter back to. */
+function verificationActionSettings(): ActionCodeSettings | undefined {
+  if (typeof window === 'undefined') return undefined;
+  return { url: `${window.location.origin}/verify-email?verified=1` };
+}
+
+/**
+ * Sends the Firebase verification email. The link returns the fighter to
+ * /verify-email (which auto-detects the verified state). If Firebase rejects
+ * the continue URL because the domain is not in Authentication -> Settings ->
+ * Authorized domains, we fall back to Firebase's default template so the email
+ * is ALWAYS sent instead of the whole signup failing.
+ */
+export async function sendVerificationEmailSafe(user: User): Promise<void> {
+  const settings = verificationActionSettings();
+  if (settings) {
+    try {
+      await sendEmailVerification(user, settings);
+      return;
+    } catch (e) {
+      const code = e && typeof e === 'object' && 'code' in e ? String((e as { code?: string }).code) : '';
+      if (code !== 'auth/unauthorized-continue-uri' && code !== 'auth/invalid-continue-uri' && code !== 'auth/missing-continue-uri') {
+        throw e;
+      }
+    }
+  }
+  await sendEmailVerification(user);
+}
+
 /**
  * New-user signup with email + password. Creates the Firebase account,
  * fires off the verification email, and returns the (unverified) user.
  * Does NOT create the Supabase profile row yet — that only happens once
  * the email is verified (see ensureUserProfile / the /verify-email page),
  * so an unverified signup can never occupy a phone-style profile slot.
+ *
+ * SAFETY: if a phone-only fighter is still signed in on this device, we LINK
+ * the email onto their existing account instead of creating a brand-new one.
+ * Creating a new account here would swap the session to a fresh, empty uid and
+ * orphan all of their existing streaks / subscription / scores in Supabase.
  */
 export async function signUpWithEmail(email: string, password: string): Promise<User> {
+  const current = firebaseAuth.currentUser;
+  if (isPhoneOnlyUser(current)) {
+    await linkEmailPasswordToUser(current, email, password);
+    return current;
+  }
   const cred = await createUserWithEmailAndPassword(firebaseAuth, email.trim(), password);
-  await sendEmailVerification(cred.user);
+  await sendVerificationEmailSafe(cred.user);
   return cred.user;
 }
 
@@ -349,7 +425,7 @@ export async function loginWithEmail(email: string, password: string): Promise<U
 
 /** Re-sends the verification email to the currently signed-in user. */
 export async function resendVerificationEmail(user: User): Promise<void> {
-  await sendEmailVerification(user);
+  await sendVerificationEmailSafe(user);
 }
 
 /**
@@ -359,11 +435,14 @@ export async function resendVerificationEmail(user: User): Promise<void> {
  * link in their inbox, so this reload is required before checking.
  */
 export async function refreshEmailVerified(user: User): Promise<boolean> {
-  await reload(user);
+  const live = firebaseAuth.currentUser && firebaseAuth.currentUser.uid === user.uid ? firebaseAuth.currentUser : user;
+  await reload(live);
   // The ID token can still contain the pre-verification claim after reload.
   // Force a fresh token before protected profile APIs inspect email_verified.
-  await user.getIdToken(true);
-  return user.emailVerified;
+  if (live.emailVerified) {
+    await live.getIdToken(true);
+  }
+  return live.emailVerified;
 }
 
 export async function sendResetPasswordEmail(email: string): Promise<void> {
@@ -382,5 +461,5 @@ export async function sendResetPasswordEmail(email: string): Promise<void> {
 export async function linkEmailPasswordToUser(user: User, email: string, password: string): Promise<void> {
   const credential = EmailAuthProvider.credential(email.trim(), password);
   await linkWithCredential(user, credential);
-  await sendEmailVerification(user);
+  await sendVerificationEmailSafe(user);
 }

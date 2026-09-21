@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, ShieldCheck, Eye, EyeOff } from 'lucide-react';
+import { ArrowRight, ShieldCheck, Eye, EyeOff, Phone } from 'lucide-react';
 import { ensureUserProfile, loginWithEmail, formatEmailAuthError } from '@/lib/firebase-auth';
 import { cacheProfileLocally } from '@/lib/profile-client';
 
@@ -116,6 +116,14 @@ export default function LoginPage() {
 
           <button onClick={() => router.push('/onboarding')} className="text-[10px] font-black uppercase tracking-widest text-primary hover:text-white">
             New fighter? Sign up
+          </button>
+
+          <button
+            onClick={() => router.push('/login/phone')}
+            className="flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white"
+          >
+            <Phone className="h-3.5 w-3.5" />
+            Joined before with your phone? Log in with phone
           </button>
         </section>
       </div>

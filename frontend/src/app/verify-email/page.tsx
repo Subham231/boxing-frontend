@@ -1,20 +1,22 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { MailCheck, RefreshCw, LogOut, ShieldCheck } from 'lucide-react';
+import { MailCheck, RefreshCw, LogOut, ShieldCheck, Phone } from 'lucide-react';
 import { useFirebaseUser } from '@/lib/useFirebaseUser';
+import { firebaseAuth } from '@/lib/firebase';
 import {
   resendVerificationEmail,
   refreshEmailVerified,
   ensureUserProfile,
-  saveProfileDetails,
   signOutFirebase,
   ProfileRequestError,
+  formatEmailAuthError,
 } from '@/lib/firebase-auth';
 import { cacheProfileLocally } from '@/lib/profile-client';
 
 const RESEND_COOLDOWN_SECONDS = 30;
+const AUTO_CHECK_INTERVAL_MS = 4000;
 
 export default function VerifyEmailPage() {
   const router = useRouter();
@@ -25,11 +27,14 @@ export default function VerifyEmailPage() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
+  // Guards so the auto-check and the button can never both run the "finish"
+  // step (profile creation + redirect) at the same time.
+  const finishing = useRef(false);
+  const inFlight = useRef(false);
+
   useEffect(() => {
     if (authLoading) return;
-    if (!user) {
-      router.replace('/login');
-    }
+    if (!user) router.replace('/login');
   }, [user, authLoading, router]);
 
   useEffect(() => {
@@ -38,66 +43,112 @@ export default function VerifyEmailPage() {
     return () => clearInterval(t);
   }, [cooldown]);
 
-  const finishAfterVerified = async () => {
-    if (!user) return;
+  const finishAfterVerified = useCallback(async (): Promise<void> => {
+    const current = firebaseAuth.currentUser;
+    if (!current || finishing.current) return;
+    finishing.current = true;
     try {
-      const { profile } = await ensureUserProfile(user);
+      const { profile } = await ensureUserProfile(current);
       cacheProfileLocally(profile);
       const onboardingData = (profile.onboarding_data ?? {}) as Record<string, unknown>;
-      if (typeof window !== 'undefined' && onboardingData.onboarding_completed) {
+      const onboarded = !!onboardingData.onboarding_completed || !!onboardingData.ring_name;
+      if (typeof window !== 'undefined' && onboarded) {
         localStorage.setItem('boxing_onboarding_done', 'true');
       }
-      if (!onboardingData.onboarding_completed) {
-        saveProfileDetails(user, { onboardingData: { ...onboardingData } }).catch(() => {});
-        router.replace('/onboarding');
-        return;
-      }
-      router.replace('/dashboard');
+      router.replace(onboarded ? '/dashboard' : '/onboarding');
     } catch (e) {
-      if (e instanceof ProfileRequestError && e.code === 'EMAIL_NOT_VERIFIED') {
-        // Shouldn't normally happen right after a successful verified
-        // reload, but guards against a stale/edge-case ID token.
-        setError('Still showing as unverified — try refreshing again in a moment.');
-        return;
+      finishing.current = false;
+      if (e instanceof ProfileRequestError) {
+        if (e.code === 'EMAIL_NOT_VERIFIED') {
+          // Stale ID token edge case — the auto-check will retry shortly.
+          setError('Email confirmed — finishing up. If this stays, tap the button again.');
+          return;
+        }
+        if (e.code === 'ACCOUNT_EMAIL_CONFLICT' || e.code === 'ACCOUNT_PHONE_CONFLICT') {
+          setError(e.message);
+          return;
+        }
       }
-      // Profile creation is best-effort here; the app-level layout also
-      // calls ensureUserProfile on every protected route, so a transient
-      // failure here isn't fatal — let the fighter into the app and let
-      // that retry happen.
+      // Anything else (network blip, server hiccup): the email IS verified, so
+      // let the fighter in — the app layout retries profile creation on every
+      // protected route.
       router.replace('/dashboard');
     }
-  };
+  }, [router]);
 
-  const handleCheckVerified = async () => {
-    if (!user) return;
-    setError(null);
-    setInfo(null);
-    setChecking(true);
-    try {
-      const verified = await refreshEmailVerified(user);
-      if (!verified) {
-        setError("Not verified yet. Open the link in the email we sent, then try again.");
-        return;
+  const runCheck = useCallback(
+    async (manual: boolean): Promise<void> => {
+      const current = firebaseAuth.currentUser;
+      if (!current || inFlight.current || finishing.current) return;
+      inFlight.current = true;
+      if (manual) {
+        setError(null);
+        setInfo(null);
+        setChecking(true);
       }
-      await finishAfterVerified();
-    } catch {
-      setError('Could not check verification status. Try again.');
-    } finally {
-      setChecking(false);
-    }
-  };
+      try {
+        const verified = await refreshEmailVerified(current);
+        if (verified) {
+          setError(null);
+          await finishAfterVerified();
+        } else if (manual) {
+          setError(
+            `Not verified yet for ${current.email || 'this email'}. Open the newest link in that inbox (check Spam / Promotions), then tap again — or resend the email.`,
+          );
+        }
+      } catch (e) {
+        if (manual) setError(formatEmailAuthError(e) || 'Could not check verification status. Try again.');
+      } finally {
+        inFlight.current = false;
+        if (manual) setChecking(false);
+      }
+    },
+    [finishAfterVerified],
+  );
+
+  // Auto-detect verification: when the fighter comes back to this tab/app, and
+  // every few seconds while it is visible — they should not have to guess when
+  // to tap the button. The ?verified=1 return link from the email also lands
+  // here, so the first check fires immediately.
+  useEffect(() => {
+    if (authLoading || !user) return;
+    void runCheck(false);
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void runCheck(false);
+    };
+    const onFocus = () => void runCheck(false);
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onFocus);
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') void runCheck(false);
+    }, AUTO_CHECK_INTERVAL_MS);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onFocus);
+      clearInterval(timer);
+    };
+  }, [authLoading, user, runCheck]);
 
   const handleResend = async () => {
-    if (!user || cooldown > 0) return;
+    const current = firebaseAuth.currentUser;
+    if (!current || cooldown > 0) return;
     setError(null);
     setInfo(null);
     setResending(true);
     try {
-      await resendVerificationEmail(user);
-      setInfo('Verification email sent again — check your inbox and spam folder.');
+      await resendVerificationEmail(current);
+      setInfo('Verification email sent again — check your inbox and spam folder. Use only the newest email.');
       setCooldown(RESEND_COOLDOWN_SECONDS);
-    } catch {
-      setError('Could not resend right now. Wait a bit and try again.');
+    } catch (e) {
+      const code = e && typeof e === 'object' && 'code' in e ? String((e as { code?: string }).code) : '';
+      setError(
+        code === 'auth/too-many-requests'
+          ? 'Too many emails requested. Wait a few minutes, then try again.'
+          : 'Could not resend right now. Wait a bit and try again.',
+      );
+      setCooldown(RESEND_COOLDOWN_SECONDS);
     } finally {
       setResending(false);
     }
@@ -106,6 +157,11 @@ export default function VerifyEmailPage() {
   const handleUseDifferentEmail = async () => {
     await signOutFirebase();
     router.replace('/signup');
+  };
+
+  const handleUsePhone = async () => {
+    await signOutFirebase();
+    router.replace('/login/phone');
   };
 
   return (
@@ -122,8 +178,8 @@ export default function VerifyEmailPage() {
           </h1>
           <p className="mt-4 text-sm font-semibold leading-relaxed text-white/55">
             We sent a verification link to{' '}
-            <span className="text-white">{user?.email || 'your email'}</span>. Open it, then come back and tap
-            &ldquo;I&apos;ve verified&rdquo; below.
+            <span className="text-white">{user?.email || 'your email'}</span>. Open it — this page
+            continues on its own once it&apos;s verified. You can also tap &ldquo;I&apos;ve verified&rdquo; below.
           </p>
         </div>
 
@@ -137,7 +193,7 @@ export default function VerifyEmailPage() {
 
           <div className="flex w-full flex-col gap-4">
             <button
-              onClick={handleCheckVerified}
+              onClick={() => runCheck(true)}
               disabled={checking}
               className="btn-primary flex h-14 w-full items-center justify-center gap-2 disabled:opacity-50"
             >
@@ -159,6 +215,14 @@ export default function VerifyEmailPage() {
             >
               <LogOut className="h-3.5 w-3.5" />
               Use a different email
+            </button>
+
+            <button
+              onClick={handleUsePhone}
+              className="flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white"
+            >
+              <Phone className="h-3.5 w-3.5" />
+              Joined before with your phone? Log in with phone
             </button>
           </div>
         </section>
