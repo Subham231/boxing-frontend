@@ -29,6 +29,7 @@ import WelcomeIntro, { WELCOME_INTRO_KEY } from '@/components/tutorial/WelcomeIn
 import SpotlightTour, { TourStep } from '@/components/tutorial/SpotlightTour';
 import { SparFreePromoModal } from '@/components/ui/SparFreePromoModal';
 import { AnalysisCamIcon, SwordsNeonIcon, ZapNeonIcon, BrainNeonIcon } from '@/components/ui/NeonIcons';
+import { PhoneUserMigrationBanner } from '@/components/ui/PhoneUserMigrationBanner';
 
 const TUTORIAL_DONE_KEY = 'boxing_tutorial_done';
 
@@ -261,6 +262,9 @@ export default function DashboardPage() {
             <span className="absolute right-2 top-2 w-1.5 h-1.5 rounded-full bg-primary" />
           </Link>
         </header>
+
+        {/* Phone-only user migration banner — prompts them to add email+password */}
+        <PhoneUserMigrationBanner />
 
         <div className="rounded-2xl border border-primary/25 bg-primary/[0.04] px-4 py-3">
           <div className="flex items-center justify-between">

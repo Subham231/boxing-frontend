@@ -11,6 +11,7 @@ export interface OnboardingConstraints {
 export interface OnboardingData {
     ringName: string;
     email?: string;
+    phoneNumber?: string;
     age: number;
     profession: string;
     height: number;
@@ -53,6 +54,7 @@ interface OnboardingContextType {
 
 const defaultData: OnboardingData = {
     ringName: '',
+    phoneNumber: '',
     age: 25,
     profession: '',
     height: 175,
@@ -81,6 +83,7 @@ function serializeOnboarding(data: OnboardingData): Record<string, unknown> {
     return {
         ring_name: data.ringName.trim().toUpperCase(),
         ...(data.email ? { email: data.email.trim().toLowerCase() } : {}),
+        ...(data.phoneNumber ? { phone_number: data.phoneNumber.trim(), phone: data.phoneNumber.trim() } : {}),
         ...(avatar ? { avatar_url: avatar } : {}),
         user_metrics: {
             age: Number(data.age),
@@ -134,6 +137,7 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 setData({
                     ...defaultData,
                     ringName: stored.ring_name || '',
+                    phoneNumber: stored.phone_number || stored.phone || defaultData.phoneNumber,
                     age: stored.user_metrics?.age ?? defaultData.age,
                     height: stored.user_metrics?.height ?? defaultData.height,
                     weight: stored.user_metrics?.weight ?? defaultData.weight,
@@ -231,6 +235,7 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             profession: data.profession,
             promise: data.promiseWord,
             promise_trigger: data.promiseWord,
+            ...(data.phoneNumber ? { phone_number: data.phoneNumber.trim(), phone: data.phoneNumber.trim() } : {}),
             onboarding_completed: true,
             init_timestamp: Date.now(),
         };
@@ -247,6 +252,7 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 profession: data.profession,
                 promiseWord: data.promiseWord,
                 avatarUrl: avatar,
+                phone: data.phoneNumber ? data.phoneNumber.trim() : undefined,
                 onboardingData: payload,
             }),
         });

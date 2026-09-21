@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
@@ -9,6 +9,15 @@ import { emailAccountExists } from '@/lib/firebase-auth';
 const RING_NAME_SUGGESTIONS = ['TITAN', 'SHADOW', 'VIPER', 'THUNDER', 'IRONCLAD', 'STRIKER'];
 const PROFESSION_SUGGESTIONS = ['Student', 'Engineer', 'Athlete', 'Entrepreneur', 'Doctor', 'Coach', 'Artist', 'Other'];
 const PROMISE_SUGGESTIONS = ['DISCIPLINE', 'RELENTLESS', 'CHAMPION', 'UNSTOPPABLE', 'WARRIOR', 'FOCUS'];
+
+/** Normalise a phone number into E.164-ish format for display / storage. */
+function normalisePhone(raw: string): string {
+    const digits = raw.replace(/\D/g, '');
+    if (!digits) return raw;
+    // If user typed 10 digits and no country code, assume India (+91)
+    if (digits.length === 10) return `+91${digits}`;
+    return raw.startsWith('+') ? raw : `+${digits}`;
+}
 
 const Identity: React.FC = () => {
     const router = useRouter();
@@ -23,6 +32,7 @@ const Identity: React.FC = () => {
     const [signupError, setSignupError] = useState<string | null>(null);
     const [checkingAccount, setCheckingAccount] = useState(false);
     const [existingAccount, setExistingAccount] = useState(false);
+    const [phoneOnlyAccount, setPhoneOnlyAccount] = useState(false);
 
     const goToLogin = () => {
         persistProgress();
@@ -100,47 +110,47 @@ const Identity: React.FC = () => {
 
     const handleSignUp = async () => {
         setSignupError(null);
+        setPhoneOnlyAccount(false);
         const name = (data.ringName || '').trim();
         const age = Number(data.age) || 0;
         const profession = (data.profession || '').trim();
         const promiseWord = (data.promiseWord || '').trim();
         const email = (data.email || '').trim();
+        const phone = (data.phoneNumber || '').trim();
 
-        // 1. Name Validation: Mandatory, > 3 and < 20 limit
-        if (!name) {
-            setSignupError('Ring Name is mandatory. Please enter your name.');
-            return;
-        }
-        if (name.length < 3 || name.length > 20) {
-            setSignupError('Ring Name must be between 3 and 20 characters long.');
-            return;
-        }
+        // 1. Name Validation
+        if (!name) { setSignupError('Ring Name is mandatory. Please enter your name.'); return; }
+        if (name.length < 3 || name.length > 20) { setSignupError('Ring Name must be between 3 and 20 characters long.'); return; }
 
-        // 2. Age Validation: Mandatory
-        if (!age || age < 10 || age > 100) {
-            setSignupError('Age is mandatory. Please select a valid age.');
-            return;
-        }
+        // 2. Age Validation
+        if (!age || age < 10 || age > 100) { setSignupError('Age is mandatory. Please select a valid age.'); return; }
 
-        // 3. Promise Word Validation: Mandatory
-        if (!promiseWord || promiseWord.length < 2) {
-            setSignupError('Promise Word is mandatory. Choose or enter your commitment word.');
-            return;
-        }
+        // 3. Promise Word Validation
+        if (!promiseWord || promiseWord.length < 2) { setSignupError('Promise Word is mandatory. Choose or enter your commitment word.'); return; }
 
-        // 4. Email Validation: Mandatory first signup identity
-        if (!email) {
-            setSignupError('Email address is mandatory.');
-            return;
-        }
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-            setSignupError('Enter a valid email address.');
-            return;
-        }
+        // 4. Email Validation
+        if (!email) { setSignupError('Email address is mandatory.'); return; }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setSignupError('Enter a valid email address.'); return; }
 
         setCheckingAccount(true);
         try {
             if (await emailAccountExists(email)) {
+                // Check if this is a phone-only account that needs email linking
+                try {
+                    const res = await fetch('/api/reflex/check-phone-for-email', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email }),
+                    });
+                    if (res.ok) {
+                        const { isPhoneOnly } = await res.json();
+                        if (isPhoneOnly) {
+                            setPhoneOnlyAccount(true);
+                            setSignupError('This email is linked to a phone-only account. Log in to link it now.');
+                            return;
+                        }
+                    }
+                } catch { /* ignore — fall through to generic message */ }
                 setExistingAccount(true);
                 setSignupError('This email already has an account. Log in to continue.');
                 return;
@@ -152,17 +162,17 @@ const Identity: React.FC = () => {
                 profession: profession || 'Fighter',
                 promiseWord: promiseWord.toUpperCase(),
                 email,
+                ...(phone ? { phoneNumber: normalisePhone(phone) } : {}),
             });
             nextStep();
         } catch {
-            // Firebase may hide account existence for enumeration protection;
-            // the create-account step still handles email-already-in-use.
             updateData({
                 ringName: name,
                 age,
                 profession: profession || 'Fighter',
                 promiseWord: promiseWord.toUpperCase(),
                 email,
+                ...(phone ? { phoneNumber: normalisePhone(phone) } : {}),
             });
             nextStep();
         } finally {
@@ -337,6 +347,27 @@ const Identity: React.FC = () => {
                         </div>
                     </div>
 
+                    {/* Phone Number (OPTIONAL) */}
+                    <div className="flex flex-col gap-1">
+                        <label className="text-[9px] font-black tracking-widest text-white/60 uppercase">
+                            Phone Number <span className="text-[8px] text-white/30">(Optional)</span>
+                        </label>
+                        <input
+                            type="tel"
+                            autoComplete="tel"
+                            placeholder="+91 98765 43210"
+                            value={data.phoneNumber || ''}
+                            onChange={(e) => {
+                                setSignupError(null);
+                                updateData({ phoneNumber: e.target.value });
+                            }}
+                            className="w-full bg-black/50 border border-white/15 rounded-xl px-3 py-2.5 text-sm font-bold text-white outline-none focus:border-primary transition-all tracking-wider"
+                        />
+                        <span className="text-[8px] text-white/30 font-medium">
+                            Helps recover your account if you signed up with a phone number before.
+                        </span>
+                    </div>
+
                     {/* 3. Promise Word (MANDATORY) */}
                     <div className="flex flex-col gap-1">
                         <div className="flex justify-between items-center">
@@ -383,7 +414,17 @@ const Identity: React.FC = () => {
                         {signupError}
                     </div>
                 )}
-                {existingAccount && (
+                {/* Phone-only account: redirect to link-email flow */}
+                {phoneOnlyAccount && (
+                    <a
+                        href={`/account/link-email?from=onboarding`}
+                        className="btn-primary w-full h-11 flex items-center justify-center gap-2 text-xs"
+                    >
+                        LINK EMAIL TO YOUR PHONE ACCOUNT <ChevronRight size={16} />
+                    </a>
+                )}
+                {/* Standard existing account: go to login */}
+                {existingAccount && !phoneOnlyAccount && (
                     <button
                         type="button"
                         onClick={goToLogin}

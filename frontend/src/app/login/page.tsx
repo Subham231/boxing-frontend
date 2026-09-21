@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, ShieldCheck, Eye, EyeOff, Phone } from 'lucide-react';
+import { ArrowRight, ShieldCheck, Eye, EyeOff, Phone, KeyRound } from 'lucide-react';
 import { ensureUserProfile, loginWithEmail, formatEmailAuthError } from '@/lib/firebase-auth';
 import { cacheProfileLocally } from '@/lib/profile-client';
 
@@ -13,9 +13,11 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isPhoneOnlyHint, setIsPhoneOnlyHint] = useState(false);
 
   const handleLogin = async () => {
     setError(null);
+    setIsPhoneOnlyHint(false);
     const trimmedEmail = email.trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
       setError('Enter a valid email address.');
@@ -42,7 +44,35 @@ export default function LoginPage() {
       if (sessionToken) localStorage.setItem('sparai_session_token', sessionToken);
       const onboardingData = (profile.onboarding_data ?? {}) as Record<string, unknown>;
       router.replace(onboardingData.onboarding_completed ? '/dashboard' : '/onboarding');
-    } catch (loginError) {
+    } catch (loginError: any) {
+      const code: string = loginError?.code || '';
+      // If the credentials are wrong, check if this email belongs to a
+      // phone-only account — if so, guide the user to link their email
+      // instead of showing a confusing 'wrong password' message.
+      if (
+        code === 'auth/wrong-password' ||
+        code === 'auth/user-not-found' ||
+        code === 'auth/invalid-credential'
+      ) {
+        try {
+          const res = await fetch('/api/reflex/check-phone-for-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: trimmedEmail }),
+          });
+          if (res.ok) {
+            const { isPhoneOnly } = await res.json();
+            if (isPhoneOnly) {
+              setIsPhoneOnlyHint(true);
+              setError(
+                'This account was created with a phone number. Add an email & password to log in here.'
+              );
+              setLoading(false);
+              return;
+            }
+          }
+        } catch { /* ignore — show normal error below */ }
+      }
       setError(formatEmailAuthError(loginError));
     } finally {
       setLoading(false);
@@ -104,6 +134,17 @@ export default function LoginPage() {
           </button>
 
           {error && <p className="text-center text-[11px] font-bold leading-relaxed text-red-400">{error}</p>}
+
+          {/* Phone-only account hint — show a link-email CTA instead of a dead end */}
+          {isPhoneOnlyHint && (
+            <a
+              href={`/account/link-email?email=${encodeURIComponent(email.trim())}`}
+              className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-primary/50 bg-primary/10 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/20 transition-all"
+            >
+              <KeyRound className="h-3.5 w-3.5" />
+              Add Email & Password to Your Account
+            </a>
+          )}
 
           <button
             onClick={handleLogin}

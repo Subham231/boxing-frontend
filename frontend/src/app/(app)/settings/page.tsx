@@ -28,6 +28,7 @@ import { useMyProfile } from '@/lib/profile-client';
 import { signOutFirebase } from '@/lib/firebase-auth';
 import { firebaseAuth } from '@/lib/firebase';
 import { getVisionSessionHistory } from '@/lib/session-log';
+import { PhoneUserMigrationBanner } from '@/components/ui/PhoneUserMigrationBanner';
 
 interface OnboardingData {
   ringName?: string;
@@ -319,6 +320,9 @@ export default function SettingsPage() {
         <span className="opacity-80 uppercase">MODULE: IDENTITY & SECURITY</span>
         <span className="opacity-40 uppercase">VAULT_LOCKED</span>
       </div>
+
+      {/* Phone-only migration banner — high priority security prompt */}
+      <PhoneUserMigrationBanner className="mt-2" />
 
       {/* Page Header */}
       <header className="flex justify-between items-start">
