@@ -1155,6 +1155,11 @@ export default function VisionPage() {
     peakWristDisplacementRef.current = { dx: 0, dy: 0, mag: 0, elbowAtPeak: 180 };
     maxElbowSinceMotionRef.current = 0;
     hookValidatedThisBurstRef.current = false;
+    uppercutValidatedThisBurstRef.current = false;
+    armStatesRef.current = {
+      L: { state: 'guard', smoothedAngle: 0, history: [], guardEnteredAt: 0, prevAngle: 0, prevAngleTs: null, angularVel: 0 },
+      R: { state: 'guard', smoothedAngle: 0, history: [], guardEnteredAt: 0, prevAngle: 0, prevAngleTs: null, angularVel: 0 },
+    };
     noseYBaselineRef.current = 0;
     peakHeadLateralRef.current = 0;
     peakHeadDropRef.current = 0;
@@ -1547,6 +1552,7 @@ export default function VisionPage() {
     // wrist actually travelling anywhere near punch speed.
     const activeWristNow = lAngleThisFrame >= rAngleThisFrame ? lW : rW;
     const shoulderWidthNow = lS && rS ? Math.hypot(lS.x - rS.x, lS.y - rS.y) || 0.001 : 0.001;
+    const prevTs = prevAngleTsRef.current;
     if (activeWristNow && activeWristNow.confidence > 0.25 && prevTs !== null) {
       const dtSec = (now - prevTs) / 1000;
       if (prevWristPosRef.current && dtSec > 0) {
