@@ -53,12 +53,28 @@ import { GuardTracker, measureWristAlignment, matchHandToWrist, HAND_LM } from '
 // ---------------------------------------------------------------------------
 const LM = {
   NOSE: 0,
+  L_EYE_INNER: 1,
+  L_EYE: 2,
+  L_EYE_OUTER: 3,
+  R_EYE_INNER: 4,
+  R_EYE: 5,
+  R_EYE_OUTER: 6,
+  L_EAR: 7,
+  R_EAR: 8,
+  MOUTH_L: 9,
+  MOUTH_R: 10,
   L_SHOULDER: 11,
   R_SHOULDER: 12,
   L_ELBOW: 13,
   R_ELBOW: 14,
   L_WRIST: 15,
   R_WRIST: 16,
+  L_PINKY: 17,
+  R_PINKY: 18,
+  L_INDEX: 19,
+  R_INDEX: 20,
+  L_THUMB: 21,
+  R_THUMB: 22,
   L_HIP: 23,
   R_HIP: 24,
   L_KNEE: 25,
@@ -72,18 +88,54 @@ const LM = {
 };
 
 const SKELETON_CONNECTIONS: [number, number][] = [
+  // Head & Facial Triangulation (0..10)
+  [LM.NOSE, LM.L_EYE],
+  [LM.L_EYE, LM.L_EAR],
+  [LM.NOSE, LM.R_EYE],
+  [LM.R_EYE, LM.R_EAR],
+  [LM.MOUTH_L, LM.MOUTH_R],
+  [LM.NOSE, LM.L_SHOULDER],
+  [LM.NOSE, LM.R_SHOULDER],
+
+  // Upper Torso & Shoulders
   [LM.L_SHOULDER, LM.R_SHOULDER],
+
+  // Left Arm & Hand Knuckles (11, 13, 15, 17, 19, 21)
   [LM.L_SHOULDER, LM.L_ELBOW],
   [LM.L_ELBOW, LM.L_WRIST],
+  [LM.L_WRIST, LM.L_PINKY],
+  [LM.L_WRIST, LM.L_INDEX],
+  [LM.L_WRIST, LM.L_THUMB],
+  [LM.L_PINKY, LM.L_INDEX],
+
+  // Right Arm & Hand Knuckles (12, 14, 16, 18, 20, 22)
   [LM.R_SHOULDER, LM.R_ELBOW],
   [LM.R_ELBOW, LM.R_WRIST],
+  [LM.R_WRIST, LM.R_PINKY],
+  [LM.R_WRIST, LM.R_INDEX],
+  [LM.R_WRIST, LM.R_THUMB],
+  [LM.R_PINKY, LM.R_INDEX],
+
+  // Torso Frame & Kinetic Spine Cross-Bracing
   [LM.L_SHOULDER, LM.L_HIP],
   [LM.R_SHOULDER, LM.R_HIP],
   [LM.L_HIP, LM.R_HIP],
+  [LM.L_SHOULDER, LM.R_HIP],
+  [LM.R_SHOULDER, LM.L_HIP],
+
+  // Left Leg & Foot (23, 25, 27, 29, 31)
   [LM.L_HIP, LM.L_KNEE],
   [LM.L_KNEE, LM.L_ANKLE],
+  [LM.L_ANKLE, LM.L_HEEL],
+  [LM.L_ANKLE, LM.L_FOOT_INDEX],
+  [LM.L_HEEL, LM.L_FOOT_INDEX],
+
+  // Right Leg & Foot (24, 26, 28, 30, 32)
   [LM.R_HIP, LM.R_KNEE],
   [LM.R_KNEE, LM.R_ANKLE],
+  [LM.R_ANKLE, LM.R_HEEL],
+  [LM.R_ANKLE, LM.R_FOOT_INDEX],
+  [LM.R_HEEL, LM.R_FOOT_INDEX],
 ];
 
 const CORE_ANCHORS = [LM.L_SHOULDER, LM.R_SHOULDER, LM.L_HIP, LM.R_HIP];
@@ -910,118 +962,169 @@ export default function VisionPage() {
   };
 
   // -------------------------------------------------------------------------
-  // Skeleton drawing (GPU-accelerated dual-stroke; zero shadowBlur lag)
+  // Skeleton drawing (GPU-accelerated batched paths; zero lag; full 33-point tracking)
   // -------------------------------------------------------------------------
   const drawSkeleton = (landmarks: PoseLandmark[], ctx: CanvasRenderingContext2D, w: number, h: number) => {
     ctx.clearRect(0, 0, w, h);
+    if (!landmarks || landmarks.length === 0) return;
 
-    // --- Body-anchored tactical grid (tracks the torso quadrilateral) ------
-    // Replaces the old static SVG grid that was pinned to the viewport.
-    // Uses shoulder+hip landmarks to create a perspective-correct grid that
-    // moves, rotates, and scales with the fighter's body.
+    // Visibility floor for drawing lines and landmarks
+    const visFloor = 0.22;
+
+    // 1. Dynamic Bounding Envelope encompassing all 33 body landmarks
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    let visibleCount = 0;
+    for (let i = 0; i < landmarks.length; i++) {
+      const p = landmarks[i];
+      if (!p || (p.visibility ?? 1) < visFloor) continue;
+      visibleCount++;
+      const px = p.x * w;
+      const py = p.y * h;
+      if (px < minX) minX = px;
+      if (px > maxX) maxX = px;
+      if (py < minY) minY = py;
+      if (py > maxY) maxY = py;
+    }
+
     const _lS = landmarks[LM.L_SHOULDER], _rS = landmarks[LM.R_SHOULDER];
-    const _lH = landmarks[LM.L_HIP], _rH = landmarks[LM.R_HIP];
-    const _gridVis = 0.25;
-    if (_lS && _rS && (_lS.visibility ?? 1) >= _gridVis && (_rS.visibility ?? 1) >= _gridVis) {
-      const sw = Math.hypot((_rS.x - _lS.x) * w, (_rS.y - _lS.y) * h) || 120;
-      const tl = { x: _lS.x * w, y: _lS.y * h };
-      const tr = { x: _rS.x * w, y: _rS.y * h };
-      // Use observed hips if visible; otherwise extrapolate downward torso vector for waist-up webcam framing
-      const bl = _lH && (_lH.visibility ?? 1) >= _gridVis
-        ? { x: _lH.x * w, y: _lH.y * h }
-        : { x: tl.x, y: tl.y + sw * 1.35 };
-      const br = _rH && (_rH.visibility ?? 1) >= _gridVis
-        ? { x: _rH.x * w, y: _rH.y * h }
-        : { x: tr.x, y: tr.y + sw * 1.35 };
-      const gcx = (tl.x + tr.x + bl.x + br.x) / 4;
-      const gcy = (tl.y + tr.y + bl.y + br.y) / 4;
-      const gridExpand = 1.6;
-      const ep = (p: { x: number; y: number }) => ({
-        x: gcx + (p.x - gcx) * gridExpand,
-        y: gcy + (p.y - gcy) * gridExpand,
-      });
-      const etl = ep(tl), etr = ep(tr), ebl = ep(bl), ebr = ep(br);
-      const gridN = 6;
-      // Grid lines
-      ctx.strokeStyle = 'rgba(226, 255, 59, 0.07)';
-      ctx.lineWidth = 0.8;
-      for (let gi = 0; gi <= gridN; gi++) {
-        const gt = gi / gridN;
-        // Horizontal
-        ctx.beginPath();
-        ctx.moveTo(etl.x + (ebl.x - etl.x) * gt, etl.y + (ebl.y - etl.y) * gt);
-        ctx.lineTo(etr.x + (ebr.x - etr.x) * gt, etr.y + (ebr.y - etr.y) * gt);
-        ctx.stroke();
-        // Vertical
-        ctx.beginPath();
-        ctx.moveTo(etl.x + (etr.x - etl.x) * gt, etl.y + (etr.y - etl.y) * gt);
-        ctx.lineTo(ebl.x + (ebr.x - ebl.x) * gt, ebl.y + (ebr.y - ebl.y) * gt);
-        ctx.stroke();
+    const shouldersOk = _lS && _rS && (_lS.visibility ?? 1) >= visFloor && (_rS.visibility ?? 1) >= visFloor;
+
+    if (visibleCount >= 4 && shouldersOk) {
+      const shoulderDist = Math.hypot((_rS.x - _lS.x) * w, (_rS.y - _lS.y) * h) || 120;
+      // If waist-up framing (lower body out of view), extend envelope downwards past hips
+      if (maxY - minY < shoulderDist * 1.7) {
+        maxY = Math.min(h - 6, minY + shoulderDist * 2.2);
       }
-      // Center crosshair (brighter)
-      ctx.strokeStyle = 'rgba(226, 255, 59, 0.15)';
+
+      // Add comfortable padding around the fighter's silhouette
+      const padX = Math.max(22, (maxX - minX) * 0.08);
+      const padY = Math.max(22, (maxY - minY) * 0.06);
+      const gx1 = Math.max(6, minX - padX);
+      const gx2 = Math.min(w - 6, maxX + padX);
+      const gy1 = Math.max(6, minY - padY);
+      const gy2 = Math.min(h - 6, maxY + padY);
+      const gw = gx2 - gx1;
+      const gh = gy2 - gy1;
+
+      // ── BATCHED GRID PASS (1 single draw call for zero lag) ──
+      ctx.beginPath();
+      // Internal coordinate scan lines (4 horizontal, 3 vertical)
+      const rows = 4;
+      for (let r = 1; r < rows; r++) {
+        const y = gy1 + (gh * r) / rows;
+        ctx.moveTo(gx1, y);
+        ctx.lineTo(gx2, y);
+      }
+      const cols = 3;
+      for (let c = 1; c < cols; c++) {
+        const x = gx1 + (gw * c) / cols;
+        ctx.moveTo(x, gy1);
+        ctx.lineTo(x, gy2);
+      }
+      // Tactical outer frame
+      ctx.rect(gx1, gy1, gw, gh);
+      ctx.strokeStyle = 'rgba(34, 211, 238, 0.07)';
       ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo((etl.x + etr.x) / 2, (etl.y + etr.y) / 2);
-      ctx.lineTo((ebl.x + ebr.x) / 2, (ebl.y + ebr.y) / 2);
       ctx.stroke();
+
+      // Tactical Corner Brackets (high-tech cyber HUD)
       ctx.beginPath();
-      ctx.moveTo((etl.x + ebl.x) / 2, (etl.y + ebl.y) / 2);
-      ctx.lineTo((etr.x + ebr.x) / 2, (etr.y + ebr.y) / 2);
+      const bLen = Math.min(22, gw * 0.15, gh * 0.15);
+      // Top-Left [
+      ctx.moveTo(gx1, gy1 + bLen); ctx.lineTo(gx1, gy1); ctx.lineTo(gx1 + bLen, gy1);
+      // Top-Right ]
+      ctx.moveTo(gx2 - bLen, gy1); ctx.lineTo(gx2, gy1); ctx.lineTo(gx2, gy1 + bLen);
+      // Bottom-Left [
+      ctx.moveTo(gx1, gy2 - bLen); ctx.lineTo(gx1, gy2); ctx.lineTo(gx1 + bLen, gy2);
+      // Bottom-Right ]
+      ctx.moveTo(gx2 - bLen, gy2); ctx.lineTo(gx2, gy2); ctx.lineTo(gx2 - bLen, gy2);
+
+      // Center crosshair (center of kinetic mass)
+      const cx = (gx1 + gx2) / 2;
+      const cy = gy1 + gh * 0.42;
+      const chSize = 9;
+      ctx.moveTo(cx - chSize, cy); ctx.lineTo(cx + chSize, cy);
+      ctx.moveTo(cx, cy - chSize); ctx.lineTo(cx, cy + chSize);
+
+      ctx.strokeStyle = 'rgba(226, 255, 59, 0.45)';
+      ctx.lineWidth = 1.5;
       ctx.stroke();
-      // Outer grid border
-      ctx.strokeStyle = 'rgba(226, 255, 59, 0.12)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(etl.x, etl.y);
-      ctx.lineTo(etr.x, etr.y);
-      ctx.lineTo(ebr.x, ebr.y);
-      ctx.lineTo(ebl.x, ebl.y);
-      ctx.closePath();
-      ctx.stroke();
+
+      // Top HUD tag
+      ctx.fillStyle = 'rgba(34, 211, 238, 0.85)';
+      ctx.font = 'bold 8px monospace';
+      ctx.fillText('AI TRACKER // 33-NODE LOCK', gx1 + 6, Math.max(14, gy1 - 6));
     }
 
-    // Outer glow stroke
-    ctx.lineWidth = 5;
+    // ── BATCHED 33-LANDMARK SKELETON GLOW PASS (1 draw call) ──
+    ctx.beginPath();
+    for (let k = 0; k < SKELETON_CONNECTIONS.length; k++) {
+      const [i, j] = SKELETON_CONNECTIONS[k];
+      const a = landmarks[i];
+      const b = landmarks[j];
+      if (!a || !b) continue;
+      if ((a.visibility ?? 1) < visFloor || (b.visibility ?? 1) < visFloor) continue;
+      ctx.moveTo(a.x * w, a.y * h);
+      ctx.lineTo(b.x * w, b.y * h);
+    }
+    ctx.lineWidth = 4.5;
     ctx.strokeStyle = 'rgba(6, 182, 212, 0.28)';
-    for (const [i, j] of SKELETON_CONNECTIONS) {
+    ctx.stroke();
+
+    // ── BATCHED 33-LANDMARK CRISP NEON PASS (1 draw call) ──
+    ctx.beginPath();
+    for (let k = 0; k < SKELETON_CONNECTIONS.length; k++) {
+      const [i, j] = SKELETON_CONNECTIONS[k];
       const a = landmarks[i];
       const b = landmarks[j];
       if (!a || !b) continue;
-      if ((a.visibility ?? 1) < 0.35 || (b.visibility ?? 1) < 0.35) continue;
-      ctx.beginPath();
+      if ((a.visibility ?? 1) < visFloor || (b.visibility ?? 1) < visFloor) continue;
       ctx.moveTo(a.x * w, a.y * h);
       ctx.lineTo(b.x * w, b.y * h);
-      ctx.stroke();
     }
-
-    // Inner crisp neon stroke
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1.8;
     ctx.strokeStyle = '#22d3ee';
-    for (const [i, j] of SKELETON_CONNECTIONS) {
-      const a = landmarks[i];
-      const b = landmarks[j];
-      if (!a || !b) continue;
-      if ((a.visibility ?? 1) < 0.35 || (b.visibility ?? 1) < 0.35) continue;
-      ctx.beginPath();
-      ctx.moveTo(a.x * w, a.y * h);
-      ctx.lineTo(b.x * w, b.y * h);
-      ctx.stroke();
-    }
+    ctx.stroke();
 
-    // Joint dots
-    ctx.fillStyle = '#67e8f9';
-    const jointIndices = [LM.NOSE, ...SKELETON_CONNECTIONS.flat()];
-    const seen = new Set<number>();
-    for (const idx of jointIndices) {
-      if (seen.has(idx)) continue;
-      seen.add(idx);
-      const p = landmarks[idx];
-      if (!p || (p.visibility ?? 1) < 0.35) continue;
-      ctx.beginPath();
-      ctx.arc(p.x * w, p.y * h, 3.5, 0, Math.PI * 2);
-      ctx.fill();
+    // ── BATCHED 33 JOINT NODES PASS (1 draw call) ──
+    ctx.beginPath();
+    for (let i = 0; i < landmarks.length; i++) {
+      const p = landmarks[i];
+      if (!p || (p.visibility ?? 1) < visFloor) continue;
+      const px = p.x * w;
+      const py = p.y * h;
+      const r = (i === LM.L_WRIST || i === LM.R_WRIST || i === LM.NOSE) ? 3.8 : 2.5;
+      ctx.moveTo(px + r, py);
+      ctx.arc(px, py, r, 0, Math.PI * 2);
     }
+    ctx.fillStyle = '#67e8f9';
+    ctx.fill();
+
+    // ── TACTICAL WRIST ACTION RETICLES (Strikes vs Guard) ──
+    const drawWristReticle = (wristIdx: number, armKey: 'L' | 'R') => {
+      const p = landmarks[wristIdx];
+      if (!p || (p.visibility ?? 1) < visFloor) return;
+      const px = p.x * w;
+      const py = p.y * h;
+      const isStriking = armStatesRef.current?.[armKey]?.state === 'strike';
+      const rad = isStriking ? 13 : 9;
+
+      ctx.beginPath();
+      ctx.arc(px, py, rad, 0, Math.PI * 2);
+      ctx.moveTo(px - rad - 3, py); ctx.lineTo(px + rad + 3, py);
+      ctx.moveTo(px, py - rad - 3); ctx.lineTo(px, py + rad + 3);
+
+      ctx.strokeStyle = isStriking ? '#e2ff3b' : 'rgba(34, 211, 238, 0.7)';
+      ctx.lineWidth = isStriking ? 2 : 1.2;
+      ctx.stroke();
+
+      ctx.fillStyle = isStriking ? '#e2ff3b' : 'rgba(34, 211, 238, 0.75)';
+      ctx.font = 'bold 7px monospace';
+      ctx.fillText(isStriking ? `${armKey}-STRIKE` : `${armKey}-GUARD`, px + rad + 4, py + 3);
+    };
+
+    drawWristReticle(LM.L_WRIST, 'L');
+    drawWristReticle(LM.R_WRIST, 'R');
   };
 
   // -------------------------------------------------------------------------

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
+import { ProgressRing } from '@/components/ui/ProgressRing';
 import { useMyProfile } from '@/lib/profile-client';
 import { useRankState } from '@/lib/rank-client';
 
@@ -34,6 +35,8 @@ interface VisionSession {
   power_score?: number;
   tracking_score?: number;
   reflex_score?: number;
+  stability_score?: number;
+  swiftness_score?: number;
   rotation_score?: number;
   hip_rotation_score?: number;
   torso_rotation_score?: number;
@@ -841,12 +844,17 @@ export default function AnalyticsPage() {
                   <span className="text-[10px] font-black text-white uppercase tracking-[2px]">
                     LATEST BIOMETRIC SCAN
                   </span>
-                  <span className="px-2.5 py-1 bg-primary/10 border border-primary/20 text-primary text-[8px] font-black rounded uppercase tracking-wider">
-                    {(() => {
-                      const d = new Date(activeVision.date);
-                      return `${d.toLocaleString('default', { month: 'short' }).toUpperCase()} ${d.getDate()}`;
-                    })()}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-1 bg-white/5 border border-white/10 text-white/70 text-[8px] font-black rounded uppercase tracking-wider">
+                      {(activeVision.mode || 'punches').toUpperCase()}
+                    </span>
+                    <span className="px-2.5 py-1 bg-primary/10 border border-primary/20 text-primary text-[8px] font-black rounded uppercase tracking-wider">
+                      {(() => {
+                        const d = new Date(activeVision.date);
+                        return `${d.toLocaleString('default', { month: 'short' }).toUpperCase()} ${d.getDate()}`;
+                      })()}
+                    </span>
+                  </div>
                 </div>
 
                 {/* AI scoring card */}
@@ -855,10 +863,10 @@ export default function AnalyticsPage() {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="text-center">
                         <div className="w-20 h-20 rounded-full border-4 border-primary flex items-center justify-center text-2xl font-black text-white mx-auto mb-2 relative">
-                          {activeVision.score}
+                          {activeVision.score}%
                         </div>
                         <span className="text-[7px] font-black text-white/40 uppercase tracking-widest block">
-                          POSTURE SCORE
+                          OVERALL SCORE
                         </span>
                       </div>
                       <div className="text-center">
@@ -871,7 +879,35 @@ export default function AnalyticsPage() {
                       </div>
                     </div>
 
-                    <div className="mt-5 p-3.5 bg-black/60 border border-red-500/10 rounded-2xl text-center flex flex-col gap-1">
+                    {/* Quick stats row */}
+                    <div className="grid grid-cols-4 gap-2 mt-4 pt-3 border-t border-white/5">
+                      <div className="text-center">
+                        <div className="text-xs font-black text-white font-mono">
+                          {activeVision.hits ?? activeVision.punches}/{activeVision.attempted ?? ((activeVision.hits ?? activeVision.punches) + (activeVision.misses ?? 0))}
+                        </div>
+                        <span className="text-[6px] font-black text-white/35 uppercase tracking-wider">HITS</span>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-xs font-black text-primary font-mono">
+                          {activeVision.avg_reflex_ms ? `${activeVision.avg_reflex_ms}ms` : 'N/A'}
+                        </div>
+                        <span className="text-[6px] font-black text-white/35 uppercase tracking-wider">AVG REACTION</span>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-xs font-black text-white font-mono">
+                          {activeVision.accuracy}%
+                        </div>
+                        <span className="text-[6px] font-black text-white/35 uppercase tracking-wider">ACCURACY</span>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-xs font-black text-primary font-mono">
+                          {activeVision.tracking_score ?? 100}%
+                        </div>
+                        <span className="text-[6px] font-black text-white/35 uppercase tracking-wider">TRACKING</span>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 p-3.5 bg-black/60 border border-red-500/10 rounded-2xl text-center flex flex-col gap-1">
                       <span className="text-[7px] font-black text-red-500 tracking-widest uppercase">
                         PRIMARY TECHNICAL FLAW
                       </span>
@@ -892,13 +928,48 @@ export default function AnalyticsPage() {
                   </GlassCard>
                 </div>
 
+                {/* Performance Merits — circular progress gauges matching Results page */}
+                <GlassCard className="p-5 border-primary/20 bg-black/40">
+                  <span className="text-[9px] font-black text-primary tracking-widest uppercase block mb-4">
+                    Performance Merits
+                  </span>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { label: 'Overall', value: activeVision.score },
+                      { label: 'Power', value: activeVision.power_score ?? 0 },
+                      activeVision.mode === 'freestyle'
+                        ? { label: 'Rotation', value: activeVision.rotation_score ?? 0 }
+                        : { label: 'Reflex', value: activeVision.reflex_score ?? 0 },
+                      { label: 'Stability', value: activeVision.stability_score ?? activeVision.tracking_score ?? 0 },
+                    ].map((merit) => (
+                      <div
+                        key={merit.label}
+                        className="flex flex-col items-center gap-2 bg-white/[0.02] border border-white/5 rounded-2xl py-4"
+                      >
+                        <ProgressRing progress={merit.value ?? 0} size={76} strokeWidth={6} label={merit.label} />
+                        <span className="text-[8px] font-black text-white/50 uppercase tracking-widest">
+                          {merit.label}
+                        </span>
+                      </div>
+                    ))}
+                    <div className="col-span-2 flex flex-col items-center gap-2 bg-white/[0.02] border border-white/5 rounded-2xl py-4">
+                      <ProgressRing progress={activeVision.swiftness_score ?? 0} size={76} strokeWidth={6} label="Tempo" />
+                      <span className="text-[8px] font-black text-white/50 uppercase tracking-widest">
+                        Swiftness
+                      </span>
+                    </div>
+                  </div>
+                </GlassCard>
+
                 <GlassCard className="p-4 border-primary/20 bg-black/45 overflow-hidden">
                   <div className="flex items-center justify-between mb-1">
                     <div>
                       <span className="text-[9px] font-black text-primary tracking-widest uppercase block">Performance Profile</span>
                       <span className="text-[8px] text-white/35 uppercase tracking-wider">Six-axis movement signature</span>
                     </div>
-                    <span className="text-[8px] font-black text-white/35 uppercase tracking-wider">{activeVision.mode === 'defense' ? 'DEFENSE MAP' : 'STRIKE MAP'}</span>
+                    <span className="text-[8px] font-black text-white/35 uppercase tracking-wider">
+                      {activeVision.mode === 'defense' ? 'DEFENSE MAP' : activeVision.mode === 'freestyle' ? 'FREESTYLE MAP' : 'STRIKE MAP'}
+                    </span>
                   </div>
                   <HexagonGraph
                     accent={activeVision.mode === 'defense' ? '#fb7185' : '#e2ff3b'}
@@ -911,10 +982,19 @@ export default function AnalyticsPage() {
                           { label: 'Reflex', value: activeVision.reflex_score ?? 0 },
                           { label: 'Volume', value: Math.min(100, (activeVision.hits ?? activeVision.punches) * 5) },
                         ]
+                      : activeVision.mode === 'freestyle'
+                      ? [
+                          { label: 'Power', value: activeVision.power_score ?? 0 },
+                          { label: 'Rotation', value: activeVision.rotation_score ?? 0 },
+                          { label: 'Stability', value: activeVision.stability_score ?? 0 },
+                          { label: 'Swiftness', value: activeVision.swiftness_score ?? 0 },
+                          { label: 'Knee', value: activeVision.knee_drive_score ?? 0 },
+                          { label: 'Trajectory', value: activeVision.trajectory_accuracy ?? 0 },
+                        ]
                       : [
                           { label: 'Power', value: activeVision.power_score ?? 0 },
-                          { label: 'Hip', value: activeVision.hip_rotation_score ?? 0 },
-                          { label: 'Torso', value: activeVision.torso_rotation_score ?? 0 },
+                          { label: 'Hip', value: activeVision.hip_rotation_score ?? activeVision.rotation_score ?? 0 },
+                          { label: 'Torso', value: activeVision.torso_rotation_score ?? activeVision.rotation_score ?? 0 },
                           { label: 'Knee', value: activeVision.knee_drive_score ?? 0 },
                           { label: 'Transfer', value: activeVision.weight_transfer_score ?? 0 },
                           { label: 'Pivot', value: activeVision.foot_pivot_score ?? 0 },
@@ -923,55 +1003,68 @@ export default function AnalyticsPage() {
                 </GlassCard>
 
                 <GlassCard className="p-5 border-white/5 bg-black/40">
-                  <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center justify-between mb-1">
                     <span className="text-[9px] font-black text-primary tracking-widest uppercase">
-                      Biomechanics Summary
+                      Full-Body Biomechanics
                     </span>
                     <span className="text-[8px] font-black text-white/40 uppercase tracking-wider">
                       {(activeVision.mode || 'punches').toUpperCase()} MODE
                     </span>
                   </div>
+                  <p className="text-[8px] text-white/30 uppercase tracking-wider mb-3">
+                    Measured from real landmark motion, not estimated
+                  </p>
                   <div className="grid grid-cols-2 gap-2.5">
                     {[
-                      ...(activeVision.mode === 'defense'
+                      { label: 'Power', val: activeVision.power_score ?? 0 },
+                      { label: 'Hip Rotation', val: activeVision.hip_rotation_score ?? activeVision.rotation_score ?? 0 },
+                      { label: 'Torso Rotation', val: activeVision.torso_rotation_score ?? activeVision.rotation_score ?? 0 },
+                      { label: 'Knee Drive', val: activeVision.knee_drive_score ?? 0 },
+                      { label: 'Weight Transfer', val: activeVision.weight_transfer_score ?? 0 },
+                      { label: 'Rear Foot Pivot', val: activeVision.foot_pivot_score ?? 0 },
+                      ...(typeof activeVision.head_lateral_score === 'number' || typeof activeVision.head_drop_score === 'number'
                         ? [
-                            ['Head Lateral', activeVision.head_lateral_score],
-                            ['Head Drop', activeVision.head_drop_score],
+                            { label: 'Head Lateral (Slip)', val: activeVision.head_lateral_score ?? 0 },
+                            { label: 'Head Drop (Roll)', val: activeVision.head_drop_score ?? 0 },
                           ]
-                        : [
-                            ['Power', activeVision.power_score],
-                            ['Hip Rotation', activeVision.hip_rotation_score],
-                            ['Torso Rotation', activeVision.torso_rotation_score],
-                            ['Knee Drive', activeVision.knee_drive_score],
-                            ['Weight Transfer', activeVision.weight_transfer_score],
-                            ['Foot Pivot', activeVision.foot_pivot_score],
-                            ['Trajectory', activeVision.trajectory_accuracy],
-                          ]),
-                    ].filter((metric): metric is [string, number] => typeof metric[1] === 'number').map(([label, value]) => (
-                      <div key={label} className="bg-black/40 border border-white/5 rounded-xl p-3">
+                        : []),
+                    ].map((metric) => (
+                      <div key={metric.label} className="bg-black/40 border border-white/5 rounded-xl p-3">
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-[7px] font-black text-white/40 uppercase tracking-wider">{label}</span>
-                          <span className="text-[10px] font-black text-primary">{value}%</span>
+                          <span className="text-[7px] font-black text-white/40 uppercase tracking-wider">{metric.label}</span>
+                          <span className="text-[10px] font-black text-primary">{metric.val}%</span>
                         </div>
                         <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
-                          <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(100, Math.max(0, value))}%` }} />
+                          <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(100, Math.max(0, metric.val))}%` }} />
                         </div>
                       </div>
                     ))}
                   </div>
-                  <div className="grid grid-cols-3 gap-2 mt-3">
-                    {[
-                      ['Hits', activeVision.hits ?? activeVision.punches],
-                      ['Misses', activeVision.misses ?? 0],
-                      ['Accuracy', activeVision.accuracy],
-                    ].map(([label, value]) => (
-                      <div key={label} className="text-center border border-white/5 rounded-xl py-2">
-                        <div className="text-xs font-black text-white">{value}{label === 'Accuracy' ? '%' : ''}</div>
-                        <span className="text-[6px] font-black text-white/35 uppercase tracking-wider">{label}</span>
-                      </div>
-                    ))}
+
+                  <div className="flex justify-between items-center mt-3 pt-2 border-t border-white/5 px-1">
+                    <span className="text-[7px] font-black text-white/35 uppercase tracking-wider">
+                      Punch Trajectory Accuracy
+                    </span>
+                    <span className="text-[10px] font-black text-primary">{activeVision.trajectory_accuracy ?? 0}%</span>
                   </div>
                 </GlassCard>
+
+                {/* Capture Quality Card */}
+                {typeof activeVision.tracking_score === 'number' && (
+                  <GlassCard className="p-4 border-white/5 bg-black/40">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[9px] font-black text-primary tracking-widest uppercase">
+                        Capture Quality
+                      </span>
+                      <span className="text-[11px] font-black text-white">
+                        {activeVision.tracking_score}%
+                      </span>
+                    </div>
+                    <p className="text-[8px] text-white/35 uppercase tracking-wider">
+                      How clearly the 33-point pose engine tracked you during the session
+                    </p>
+                  </GlassCard>
+                )}
 
                 {activeVision.detailed_flaws && activeVision.detailed_flaws.length > 0 && (
                   <GlassCard className="p-5 border-white/5 bg-black/40">
