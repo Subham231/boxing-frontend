@@ -64,7 +64,7 @@ const MAX_PLAUSIBLE_SPEED = 6.0;
  * pretending we know where it is. Past this, confidence goes to 0 and the
  * consumer should exclude it rather than trust a long extrapolation.
  */
-const MAX_PREDICTION_MS = 220;
+const MAX_PREDICTION_MS = 280;
 
 /** Per-landmark filter + motion state. */
 interface LandmarkState {
@@ -156,8 +156,9 @@ export class LandmarkFilter {
     let rejectedCount = 0;
     let occludedCount = 0;
 
-    for (let i = 0; i < raw.length; i++) {
-      const point = raw[i];
+    const totalLandmarks = Math.max(raw.length, 33);
+    for (let i = 0; i < totalLandmarks; i++) {
+      const point = i < raw.length ? raw[i] : undefined;
       const state = this.stateFor(i);
       const visibility = point?.visibility ?? (point ? 1 : 0);
 
@@ -195,8 +196,6 @@ export class LandmarkFilter {
         state.lastGoodTs = timestampMs;
         state.predictedForMs = 0;
 
-        // Confidence tracks the model's own visibility once the reading has
-        // passed our sanity checks — no invented certainty.
         out.push({
           x: smoothed.x,
           y: smoothed.y,
@@ -240,7 +239,7 @@ export class LandmarkFilter {
 
   /**
    * Extrapolate an occluded/rejected landmark from its last known position
-   * and velocity, with confidence decaying to zero over MAX_PREDICTION_MS.
+   * and velocity, with confidence decaying smoothly over MAX_PREDICTION_MS.
    */
   private predict(
     index: number,
@@ -253,7 +252,7 @@ export class LandmarkFilter {
       return { x: 0, y: 0, z: 0, visibility, confidence: 0, predicted: true };
     }
 
-    const elapsedMs = timestampMs - state.lastGoodTs;
+    const elapsedMs = Math.max(0, timestampMs - state.lastGoodTs);
     state.predictedForMs = elapsedMs;
 
     if (elapsedMs > MAX_PREDICTION_MS) {
@@ -270,18 +269,15 @@ export class LandmarkFilter {
     }
 
     const dtSec = elapsedMs / 1000;
-    // Damp the extrapolation: a limb decelerates during an occlusion far
-    // more often than it keeps accelerating, so projecting full velocity
-    // overshoots badly. Half-velocity is a deliberate underestimate.
-    const damping = 0.5;
-    const decay = 1 - elapsedMs / MAX_PREDICTION_MS;
+    const damping = 0.55;
+    const decay = Math.max(0, 1 - elapsedMs / MAX_PREDICTION_MS);
 
     return {
       x: state.lastGood.x + state.velocity.x * dtSec * damping,
       y: state.lastGood.y + state.velocity.y * dtSec * damping,
       z: state.lastGood.z + state.velocity.z * dtSec * damping,
-      visibility,
-      confidence: Math.max(0, decay) * 0.5, // predicted data is never full confidence
+      visibility: Math.max(visibility, decay * 0.6),
+      confidence: Math.round(decay * 0.65 * 100) / 100,
       predicted: true,
     };
   }

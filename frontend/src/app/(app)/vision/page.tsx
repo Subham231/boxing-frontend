@@ -87,7 +87,7 @@ const SKELETON_CONNECTIONS: [number, number][] = [
 ];
 
 const CORE_ANCHORS = [LM.L_SHOULDER, LM.R_SHOULDER, LM.L_HIP, LM.R_HIP];
-const VISIBILITY_THRESHOLD = 0.6;
+const VISIBILITY_THRESHOLD = 0.42; // Quorum floor for bladed/angled 45° boxing stance
 const CALIBRATION_HOLD_MS = 2000;
 const TRACKING_LOSS_GRACE_MS = 500;
 const TRACKING_RECOVERY_MS = 400;
@@ -98,10 +98,10 @@ const REACTION_WINDOW_PAD_MS = 250;
 // (GUARD -> STRIKE -> GUARD), not a single frame threshold. This is what
 // prevents false positives from idle movement, camera shake, or slowly
 // raising an arm to scratch your face.
-const ELBOW_EXTEND_THRESHOLD = 155;   // deg — webcam pose landmarks rarely reach a perfect 165° extension
-const ELBOW_RETRACT_THRESHOLD = 135;  // deg — must drop back below this to re-arm (hysteresis band kills flicker/vibration double-counts)
-const MIN_PUNCH_ANGULAR_VELOCITY = 180; // deg/sec — tolerate 30fps landmark smoothing without accepting slow arm raises
-const SMOOTHING_ALPHA = 0.45; // exponential smoothing factor for elbow angle, reduces landmark jitter
+const ELBOW_EXTEND_THRESHOLD = 138;   // deg — calibrated so snappy non-hyperextending punches register cleanly at 30fps
+const ELBOW_RETRACT_THRESHOLD = 124;  // deg — hysteresis band kills flicker/vibration double-counts
+const MIN_PUNCH_ANGULAR_VELOCITY = 125; // deg/sec — responsive to genuine punches across varied framerates
+const SMOOTHING_ALPHA = 0.35; // exponential smoothing factor — preserves raw signal peak
 const MIN_ROTATION_FOR_FULL_SCORE = 22; // deg of shoulder-line rotation for a "fully rotated" hook/cross
 const FULL_KNEE_DRIVE_DEG = 18;         // deg of knee-angle change (push-off/extension) for a full drive score
 const FULL_WEIGHT_TRANSFER_RATIO = 0.12; // hip horizontal shift, as a fraction of shoulder width, for a full transfer score
@@ -110,8 +110,8 @@ const FULL_FOOT_PIVOT_DEG = 20;         // deg of rear-foot rotation for a full 
 // fast — angular velocity alone can be tripped by a shoulder shrug or a
 // twitch near full extension. Requiring BOTH signals to agree is a much
 // stronger check than either alone.
-const MIN_WRIST_SPEED = 0.35; // shoulder-widths per second; normalized webcam motion is usually below 1.0
-const MOTION_MEMORY_MS = 350;
+const MIN_WRIST_SPEED = 0.22; // shoulder-widths per second; normalized webcam motion is usually below 1.0
+const MOTION_MEMORY_MS = 500; // ms — prevents peak trackers from resetting mid-hook or during combination pauses
 // After retracting to guard, the arm must stay there briefly before the
 // next strike can be evaluated — without this, noise flickering right
 // across the hysteresis band can register as several strikes in a row.
@@ -119,13 +119,12 @@ const GUARD_REARM_MS = 70;
 // Trajectory classification needs a real, decisive wrist path to trust —
 // below this displacement (relative to shoulder width) there isn't enough
 // signal to say what shape was thrown, so we don't penalize it.
-const MIN_TRAJECTORY_CONFIDENCE = 0.18;
+const MIN_TRAJECTORY_CONFIDENCE = 0.16;
 // A hook is thrown with the elbow staying bent (often ~80-120°) the whole
 // way through — it can legitimately never reach ELBOW_EXTEND_THRESHOLD,
-// which is what a straight punch/uppercut needs. This is just a floor to
-// rule out near-zero arm movement (pose noise, a shoulder twitch) from
-// ever qualifying as a hook's start — real hooks clear it easily.
+// which is what a straight punch needs.
 const MIN_HOOK_ELBOW_ANGLE = 50;
+const UPPERCUT_MIN_VERTICAL_TRAVEL = 0.10; // shoulder-widths of upward wrist displacement
 // Reference magnitudes (normalized by shoulder width, same units as
 // noseOffset/drop above) for a "fully committed" slip or roll, used to
 // convert raw peak displacement into a 0-100 score the same way peak
@@ -152,7 +151,7 @@ const TRACKED_LANDMARK_INDICES = [
 // A rep whose mean landmark confidence falls below this is logged, but its
 // biomechanics are marked untrustworthy so the flaw engine discounts them
 // rather than diagnosing off noise.
-const REP_CONFIDENCE_FLOOR = 0.45;
+const REP_CONFIDENCE_FLOOR = 0.38;
 
 // How long after peak extension we keep sampling the wrist's distance from
 // guard to measure the return.
@@ -161,42 +160,18 @@ const RECOVERY_SAMPLE_WINDOW_MS = 900;
 // A hook is defined by the elbow STAYING bent through the whole punch; a
 // straight punch passes through this angle on its way out to full
 // extension. This is the signal that actually separates the two shapes.
-const HOOK_MAX_ELBOW_ANGLE = 135;
+const HOOK_MAX_ELBOW_ANGLE = 138;
 // Minimum lateral wrist travel (in shoulder-widths) before a punch can be
 // called a hook at all.
-const MIN_HOOK_LATERAL = 0.3;
+const MIN_HOOK_LATERAL = 0.28;
 // --- Hook detection (its own cycle, deliberately NOT the straight-punch
 // hysteresis) ----------------------------------------------------------
-// A hook can't be validated the way a jab is, for two independent reasons:
-//  1. It never crosses ELBOW_EXTEND_THRESHOLD, so the extension gate never
-//     fires — this is why hooks previously went completely undetected.
-//  2. Its elbow also never crosses ELBOW_RETRACT_THRESHOLD on the way back
-//     (it was already below it), so if a hook were allowed to enter
-//     'strike', it would drop straight back to 'guard' on the next frame
-//     and re-validate over and over — one hook counted three or four times.
-// So a hook is detected as a *completed sweep* instead: the wrist travels a
-// decisive distance, the elbow stays bent for the whole travel (which is
-// what makes it a hook and not a straight punch mid-flight), and the wrist
-// has started coming back. One validation per motion burst, then it's
-// disarmed until the fighter returns to rest.
-const HOOK_MIN_SWEEP = 0.45;      // shoulder-widths of peak wrist travel
-const HOOK_RETURN_RATIO = 0.7;    // wrist must fall back to this fraction of peak
+const HOOK_MIN_SWEEP = 0.32;      // shoulder-widths of peak wrist travel
+const HOOK_RETURN_RATIO = 0.72;    // wrist must fall back to this fraction of peak
 
 // Wrist displacement (normalized by shoulder width) shape used to classify
 // what kind of punch was actually thrown, independent of what was called —
 // lets us flag when a "HOOK" call was actually thrown as a straight punch.
-//
-// `elbowAngleAtPeak` is the measured elbow angle at the moment of peak
-// wrist displacement, and it is what makes hook-vs-straight reliable.
-// Lateral displacement ALONE cannot separate them: at the 45° camera angle
-// the setup guide asks for, a jab or cross travelling straight out at the
-// target projects into the image plane as a large horizontal wrist sweep —
-// nx well above MIN_HOOK_LATERAL with near-zero ny — i.e. geometrically
-// identical to a hook. The old purely-geometric rule therefore labelled
-// ordinary jabs and crosses as 'hook', which both marked them "wrong path"
-// in the log and (once hooks were given their own strike-entry path) risked
-// validating a straight punch's mid-flight as a hook. Gating on a bent
-// elbow removes that ambiguity in both directions.
 function classifyTrajectory(
   dx: number,
   dy: number,
@@ -206,10 +181,9 @@ function classifyTrajectory(
   if (shoulderWidth <= 0) return 'straight';
   const nx = dx / shoulderWidth;
   const ny = dy / shoulderWidth;
-  if (Math.abs(ny) > Math.abs(nx) * 1.3 && ny < -0.12) return 'uppercut';
+  // Upward punch vector: ny is negative in screen space (y=0 at top)
+  if (ny < -UPPERCUT_MIN_VERTICAL_TRAVEL && Math.abs(ny) > Math.abs(nx) * 0.7) return 'uppercut';
   const lateralEnough = Math.abs(nx) > MIN_HOOK_LATERAL;
-  // No elbow reading available (shouldn't happen in the live loop, but keep
-  // the function total): fall back to the old flatness heuristic.
   const elbowStayedBent =
     elbowAngleAtPeak === undefined
       ? Math.abs(ny) < Math.abs(nx) * 0.8
@@ -943,6 +917,68 @@ export default function VisionPage() {
   // -------------------------------------------------------------------------
   const drawSkeleton = (landmarks: PoseLandmark[], ctx: CanvasRenderingContext2D, w: number, h: number) => {
     ctx.clearRect(0, 0, w, h);
+
+    // --- Body-anchored tactical grid (tracks the torso quadrilateral) ------
+    // Replaces the old static SVG grid that was pinned to the viewport.
+    // Uses shoulder+hip landmarks to create a perspective-correct grid that
+    // moves, rotates, and scales with the fighter's body.
+    const _lS = landmarks[LM.L_SHOULDER], _rS = landmarks[LM.R_SHOULDER];
+    const _lH = landmarks[LM.L_HIP], _rH = landmarks[LM.R_HIP];
+    const _gridVis = 0.3;
+    if (_lS && _rS && _lH && _rH &&
+        (_lS.visibility ?? 1) >= _gridVis && (_rS.visibility ?? 1) >= _gridVis &&
+        (_lH.visibility ?? 1) >= _gridVis && (_rH.visibility ?? 1) >= _gridVis) {
+      const tl = { x: _lS.x * w, y: _lS.y * h };
+      const tr = { x: _rS.x * w, y: _rS.y * h };
+      const bl = { x: _lH.x * w, y: _lH.y * h };
+      const br = { x: _rH.x * w, y: _rH.y * h };
+      const gcx = (tl.x + tr.x + bl.x + br.x) / 4;
+      const gcy = (tl.y + tr.y + bl.y + br.y) / 4;
+      const gridExpand = 1.6;
+      const ep = (p: { x: number; y: number }) => ({
+        x: gcx + (p.x - gcx) * gridExpand,
+        y: gcy + (p.y - gcy) * gridExpand,
+      });
+      const etl = ep(tl), etr = ep(tr), ebl = ep(bl), ebr = ep(br);
+      const gridN = 6;
+      // Grid lines
+      ctx.strokeStyle = 'rgba(226, 255, 59, 0.07)';
+      ctx.lineWidth = 0.8;
+      for (let gi = 0; gi <= gridN; gi++) {
+        const gt = gi / gridN;
+        // Horizontal
+        ctx.beginPath();
+        ctx.moveTo(etl.x + (ebl.x - etl.x) * gt, etl.y + (ebl.y - etl.y) * gt);
+        ctx.lineTo(etr.x + (ebr.x - etr.x) * gt, etr.y + (ebr.y - etr.y) * gt);
+        ctx.stroke();
+        // Vertical
+        ctx.beginPath();
+        ctx.moveTo(etl.x + (etr.x - etl.x) * gt, etl.y + (etr.y - etl.y) * gt);
+        ctx.lineTo(ebl.x + (ebr.x - ebl.x) * gt, ebl.y + (ebr.y - ebl.y) * gt);
+        ctx.stroke();
+      }
+      // Center crosshair (brighter)
+      ctx.strokeStyle = 'rgba(226, 255, 59, 0.15)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo((etl.x + etr.x) / 2, (etl.y + etr.y) / 2);
+      ctx.lineTo((ebl.x + ebr.x) / 2, (ebl.y + ebr.y) / 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo((etl.x + ebl.x) / 2, (etl.y + ebl.y) / 2);
+      ctx.lineTo((etr.x + ebr.x) / 2, (etr.y + ebr.y) / 2);
+      ctx.stroke();
+      // Outer grid border
+      ctx.strokeStyle = 'rgba(226, 255, 59, 0.12)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(etl.x, etl.y);
+      ctx.lineTo(etr.x, etr.y);
+      ctx.lineTo(ebr.x, ebr.y);
+      ctx.lineTo(ebl.x, ebl.y);
+      ctx.closePath();
+      ctx.stroke();
+    }
 
     // Outer glow stroke
     ctx.lineWidth = 5;
@@ -3059,15 +3095,7 @@ export default function VisionPage() {
                 ref={canvasRef}
                 className="absolute inset-0 w-full h-full object-cover transform -scale-x-100 pointer-events-none"
               />
-              {/* Subtle tactical grid overlay */}
-              <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-[0.06]" xmlns="http://www.w3.org/2000/svg">
-                <defs>
-                  <pattern id="hud-grid" width="48" height="48" patternUnits="userSpaceOnUse">
-                    <path d="M 48 0 L 0 0 0 48" fill="none" stroke="#e2ff3b" strokeWidth="0.6"/>
-                  </pattern>
-                </defs>
-                <rect width="100%" height="100%" fill="url(#hud-grid)" />
-              </svg>
+              {/* Grid overlay is now body-anchored and drawn on the canvas — see drawSkeleton */}
             </div>
 
             {/* ── Corner brackets ── */}
