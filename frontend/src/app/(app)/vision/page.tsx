@@ -293,33 +293,25 @@ function repFormComposite(r: { kind: 'punch' | 'defense'; torsoRotationScore?: n
 // "maximally inconsistent" (score floors at 0); 0 stdDev is perfectly
 // repeatable technique (score caps at 100). Calibrated against the 0-100
 // scale the underlying metrics already use.
-const MAX_EXPECTED_FORM_STDDEV = 35;
+const MAX_EXPECTED_FORM_STDDEV = 30;
 
 function computeStabilityScore(hits: Array<Parameters<typeof repFormComposite>[0]>, fallbackTrackingScore: number): number {
   if (hits.length < 2) {
-    // Can't measure rep-to-rep consistency from a single data point — fall
-    // back to how steadily the fighter held the frame instead, which is
-    // the existing trackingConfidence signal, not a new invented number.
     return fallbackTrackingScore;
   }
   const composites = hits.map(repFormComposite);
   const mean = composites.reduce((a, b) => a + b, 0) / composites.length;
   const variance = composites.reduce((sum, c) => sum + (c - mean) ** 2, 0) / composites.length;
   const stdDev = Math.sqrt(variance);
-  return Math.round(Math.min(100, Math.max(0, 100 - (stdDev / MAX_EXPECTED_FORM_STDDEV) * 100)));
+  // Real stability balances repeatability (low stdDev) with technique quality (meanForm)
+  const consistency = Math.max(0, 100 - (stdDev / MAX_EXPECTED_FORM_STDDEV) * 100);
+  return Math.round(Math.min(100, Math.max(0, consistency * 0.6 + Math.min(100, mean) * 0.4)));
 }
 
-// "Excellent" output tempo reference, in landed strikes/defensive reps per
-// minute of active session time — a brisk combo pace on pads/shadowboxing.
-// Swiftness measures throughput (how fast reps kept coming), which is a
-// different dimension from Reflex (latency to start each individual rep)
-// and Power (force of each individual strike).
-const SWIFTNESS_REFERENCE_PER_MINUTE = 45;
-
-function computeSwiftnessScore(hitCount: number, activeSeconds: number): number {
+function computeSwiftnessScore(hitCount: number, activeSeconds: number, maxExpectedCadencePerMin: number = 25): number {
   const activeMinutes = Math.max(activeSeconds, 1) / 60;
   const perMinute = hitCount / activeMinutes;
-  return Math.round(Math.min(100, Math.max(0, (perMinute / SWIFTNESS_REFERENCE_PER_MINUTE) * 100)));
+  return Math.round(Math.min(100, Math.max(0, (perMinute / maxExpectedCadencePerMin) * 100)));
 }
 
 // Per-rep peak strike speed, color-coded by hit/miss. Every bar is a real
@@ -647,6 +639,14 @@ export default function VisionPage() {
   const elbowStateRef = useRef<'guard' | 'strike'>('guard');
   const elbowAngleHistoryRef = useRef<number[]>([]); // last 3 raw readings, for median outlier rejection
   const guardEnteredAtRef = useRef(0); // timestamp guard was (re)entered, for GUARD_REARM_MS debounce
+  // Isolated dual-arm state tracking: prevents combo punches from swallowing each other
+  const armStatesRef = useRef<{
+    L: { state: 'guard' | 'strike'; smoothedAngle: number; history: number[]; guardEnteredAt: number; prevAngle: number; prevAngleTs: number | null; angularVel: number };
+    R: { state: 'guard' | 'strike'; smoothedAngle: number; history: number[]; guardEnteredAt: number; prevAngle: number; prevAngleTs: number | null; angularVel: number };
+  }>({
+    L: { state: 'guard', smoothedAngle: 0, history: [], guardEnteredAt: 0, prevAngle: 0, prevAngleTs: null, angularVel: 0 },
+    R: { state: 'guard', smoothedAngle: 0, history: [], guardEnteredAt: 0, prevAngle: 0, prevAngleTs: null, angularVel: 0 },
+  });
   const prevWristPosRef = useRef<{ x: number; y: number } | null>(null);
   const wristSpeedRef = useRef(0); // shoulder-widths/sec, cross-validates angular velocity
   const lastPunchMotionAtRef = useRef(0);
@@ -678,12 +678,9 @@ export default function VisionPage() {
   // apart from a straight punch that merely looks lateral on camera.
   const peakWristDisplacementRef = useRef({ dx: 0, dy: 0, mag: 0, elbowAtPeak: 180 });
   const lastShoulderWidthRef = useRef(0.2);
-  // Per-motion-burst hook bookkeeping (reset at rest, see `atRest` below).
-  // maxElbowSinceMotionRef is the discriminator that keeps a straight punch
-  // out of the hook path: a jab/cross always extends past
-  // HOOK_MAX_ELBOW_ANGLE at some point in its flight, a hook never does.
   const maxElbowSinceMotionRef = useRef(0);
   const hookValidatedThisBurstRef = useRef(false);
+  const uppercutValidatedThisBurstRef = useRef(false);
 
   // --- Defensive head-movement tracking (independent of the elbow state
   // machine — a slip/roll never extends the elbow, so it needs its own peak
@@ -924,14 +921,18 @@ export default function VisionPage() {
     // moves, rotates, and scales with the fighter's body.
     const _lS = landmarks[LM.L_SHOULDER], _rS = landmarks[LM.R_SHOULDER];
     const _lH = landmarks[LM.L_HIP], _rH = landmarks[LM.R_HIP];
-    const _gridVis = 0.3;
-    if (_lS && _rS && _lH && _rH &&
-        (_lS.visibility ?? 1) >= _gridVis && (_rS.visibility ?? 1) >= _gridVis &&
-        (_lH.visibility ?? 1) >= _gridVis && (_rH.visibility ?? 1) >= _gridVis) {
+    const _gridVis = 0.25;
+    if (_lS && _rS && (_lS.visibility ?? 1) >= _gridVis && (_rS.visibility ?? 1) >= _gridVis) {
+      const sw = Math.hypot((_rS.x - _lS.x) * w, (_rS.y - _lS.y) * h) || 120;
       const tl = { x: _lS.x * w, y: _lS.y * h };
       const tr = { x: _rS.x * w, y: _rS.y * h };
-      const bl = { x: _lH.x * w, y: _lH.y * h };
-      const br = { x: _rH.x * w, y: _rH.y * h };
+      // Use observed hips if visible; otherwise extrapolate downward torso vector for waist-up webcam framing
+      const bl = _lH && (_lH.visibility ?? 1) >= _gridVis
+        ? { x: _lH.x * w, y: _lH.y * h }
+        : { x: tl.x, y: tl.y + sw * 1.35 };
+      const br = _rH && (_rH.visibility ?? 1) >= _gridVis
+        ? { x: _rH.x * w, y: _rH.y * h }
+        : { x: tr.x, y: tr.y + sw * 1.35 };
       const gcx = (tl.x + tr.x + bl.x + br.x) / 4;
       const gcy = (tl.y + tr.y + bl.y + br.y) / 4;
       const gridExpand = 1.6;
@@ -1357,30 +1358,34 @@ export default function VisionPage() {
   const handleEngineFrame = (frame: EngineFrame) => {
     const now = frame.timestampMs;
     const dt = lastFrameTsRef.current ? now - lastFrameTsRef.current : 33;
-    lastFrameTsRef.current = now;
+    const rawLandmarks = frame.landmarks && frame.landmarks.length > 0 ? frame.landmarks : [];
+    const { landmarks, quality } = landmarkFilterRef.current.process(rawLandmarks, now);
 
-    if (!frame.landmarks || frame.landmarks.length === 0) {
+    // Only drop frame completely if all landmarks have near-zero confidence (no person ever seen or prediction expired)
+    const hasUsableLandmarks = landmarks.some((lm) => lm && lm.confidence > 0.05);
+    if (!hasUsableLandmarks) {
       latestFrameRef.current = null;
       goodTrackingRef.current = false;
       handleTrackingLoss(dt);
       return;
     }
 
-    const { landmarks, quality } = landmarkFilterRef.current.process(frame.landmarks, now);
     latestFrameRef.current = { landmarks, ts: now };
     latestHandsRef.current = frame.hands || [];
-    worldLandmarksRef.current = (frame.worldLandmarks || []).map((p) => ({
-      x: p.x,
-      y: p.y,
-      z: p.z ?? 0,
-    }));
+    if (frame.worldLandmarks && frame.worldLandmarks.length > 0) {
+      worldLandmarksRef.current = frame.worldLandmarks.map((p) => ({
+        x: p.x,
+        y: p.y,
+        z: p.z ?? 0,
+      }));
+    }
 
-    // Tracking adequacy now uses the conditioned confidence rather than raw
-    // visibility, so a brief occlusion that the filter successfully coasts
-    // through no longer trips the "tracking lost" banner mid-combination.
+    // Quorum-based tracking adequacy:
+    // Allows authentic 45° bladed boxing stances where rear shoulder/hip dips slightly in visibility
     const coreConfidence = CORE_ANCHORS.map((idx) => landmarks[idx]?.confidence ?? 0);
-    const minConf = Math.min(...coreConfidence);
-    goodTrackingRef.current = minConf >= VISIBILITY_THRESHOLD;
+    const meanCoreConf = coreConfidence.reduce((a, b) => a + b, 0) / coreConfidence.length;
+    const anchorsVisible = coreConfidence.filter((c) => c >= 0.35).length;
+    goodTrackingRef.current = meanCoreConf >= VISIBILITY_THRESHOLD || anchorsVisible >= 3;
 
     if (stageRef.current !== 'camera') return;
 
@@ -1498,45 +1503,41 @@ export default function VisionPage() {
     if (rS && rE && rW && rW.confidence > 0.25) {
       rAngleThisFrame = jointAngle(LM.R_SHOULDER, LM.R_ELBOW, LM.R_WRIST, landmarks) ?? 0;
     }
-    const maxElbowAngle = Math.max(lAngleThisFrame, rAngleThisFrame);
+    // Outlier rejection and exponential smoothing per arm
+    for (const side of ['L', 'R'] as const) {
+      const arm = armStatesRef.current[side];
+      const rawAngle = side === 'L' ? lAngleThisFrame : rAngleThisFrame;
+      arm.history.push(rawAngle);
+      if (arm.history.length > 3) arm.history.shift();
+      const medianAngle = arm.history.length === 3 ? [...arm.history].sort((a, b) => a - b)[1] : rawAngle;
+      arm.smoothedAngle = arm.smoothedAngle === 0
+        ? medianAngle
+        : arm.smoothedAngle + SMOOTHING_ALPHA * (medianAngle - arm.smoothedAngle);
 
-    // Outlier rejection: take the median of the last 3 raw readings before
-    // smoothing. A single bad MediaPipe frame (landmark snapping/occlusion
-    // flicker) shows up as one outlier value — the median throws it out
-    // completely instead of just diluting it, which exponential smoothing
-    // alone can't do.
-    const hist = elbowAngleHistoryRef.current;
-    hist.push(maxElbowAngle);
-    if (hist.length > 3) hist.shift();
-    const medianElbowAngle =
-      hist.length === 3 ? [...hist].sort((a, b) => a - b)[1] : maxElbowAngle;
-
-    // Exponential smoothing kills remaining frame-to-frame landmark jitter
-    // without adding meaningful lag — a real punch takes multiple frames to
-    // extend, so smoothing never masks a genuine strike.
-    smoothedElbowAngleRef.current =
-      smoothedElbowAngleRef.current === 0
-        ? medianElbowAngle
-        : smoothedElbowAngleRef.current + SMOOTHING_ALPHA * (medianElbowAngle - smoothedElbowAngleRef.current);
-    const smoothedAngle = smoothedElbowAngleRef.current;
-
-    let angularVel = 0;
-    const prevTs = prevAngleTsRef.current;
-    if (prevTs !== null) {
-      const dtSec = (now - prevTs) / 1000;
-      if (dtSec > 0) {
-        angularVel = Math.abs(smoothedAngle - prevMaxElbowAngleRef.current) / dtSec;
-        if (angularVel < 3000) {
-          if (angularVel > peakAngularVelocityRef.current) peakAngularVelocityRef.current = angularVel;
-          if (awaitingRef.current && angularVel > currentRepPeakVelocityRef.current) {
-            currentRepPeakVelocityRef.current = angularVel;
-          }
-          // Real-time live velocity display update (throttled to 100ms for silky-smooth UI response)
-          if (now - lastVelUpdateTsRef.current > 100 && angularVel > 60) {
-            lastVelUpdateTsRef.current = now;
-            setLiveVelocity(angularVel);
-          }
+      if (arm.prevAngleTs !== null) {
+        const dtSec = (now - arm.prevAngleTs) / 1000;
+        if (dtSec > 0) {
+          const vel = Math.abs(arm.smoothedAngle - arm.prevAngle) / dtSec;
+          arm.angularVel = vel < 3000 ? vel : 0;
         }
+      }
+      arm.prevAngle = arm.smoothedAngle;
+      arm.prevAngleTs = now;
+    }
+
+    const smoothedAngle = Math.max(armStatesRef.current.L.smoothedAngle, armStatesRef.current.R.smoothedAngle);
+    smoothedElbowAngleRef.current = smoothedAngle;
+    const angularVel = Math.max(armStatesRef.current.L.angularVel, armStatesRef.current.R.angularVel);
+
+    if (angularVel < 3000) {
+      if (angularVel > peakAngularVelocityRef.current) peakAngularVelocityRef.current = angularVel;
+      if (awaitingRef.current && angularVel > currentRepPeakVelocityRef.current) {
+        currentRepPeakVelocityRef.current = angularVel;
+      }
+      // Real-time live velocity display update (throttled to 100ms for silky-smooth UI response)
+      if (now - lastVelUpdateTsRef.current > 100 && angularVel > 50) {
+        lastVelUpdateTsRef.current = now;
+        setLiveVelocity(angularVel);
       }
     }
 
@@ -1559,11 +1560,7 @@ export default function VisionPage() {
     prevMaxElbowAngleRef.current = smoothedAngle;
 
     // Track "was there real punch-speed motion just now" BEFORE the
-    // kinetic-chain tracking block below, not after it. This used to be
-    // computed inside the punch state machine further down, which ran
-    // strictly AFTER the tracking block had already reset every peak
-    // tracker for this exact frame — see the `atRest` comment below for
-    // why that ordering silently zeroed out every rep's biomechanics.
+    // kinetic-chain tracking block below, not after it.
     if (angularVel >= MIN_PUNCH_ANGULAR_VELOCITY || wristSpeedRef.current >= MIN_WRIST_SPEED) {
       lastPunchMotionAtRef.current = now;
     }
@@ -1657,6 +1654,7 @@ export default function VisionPage() {
       peakWristDisplacementRef.current = { dx: 0, dy: 0, mag: 0, elbowAtPeak: smoothedAngle };
       maxElbowSinceMotionRef.current = smoothedAngle;
       hookValidatedThisBurstRef.current = false;
+      uppercutValidatedThisBurstRef.current = false;
 
       // --- Guard baseline -------------------------------------------------
       // Updated ONLY while genuinely at rest. If this were updated during a
@@ -1881,34 +1879,29 @@ export default function VisionPage() {
     // A short dwell time in guard before re-arming also stops noise
     // flickering right across the hysteresis band from double-counting.
     // This path is for punches that genuinely extend the arm (jab, cross,
-    // uppercut) and is unchanged; hooks are handled separately below.
     let punchValidated = false;
-    const dwelledInGuard = now - guardEnteredAtRef.current >= GUARD_REARM_MS;
     const motionDetected = now - lastPunchMotionAtRef.current <= MOTION_MEMORY_MS;
-    if (elbowStateRef.current === 'guard' && dwelledInGuard && smoothedAngle > ELBOW_EXTEND_THRESHOLD) {
-      if (motionDetected) {
-        elbowStateRef.current = 'strike';
-        punchValidated = true;
+
+    // Dual-arm isolated punch check (prevents 1-2 combination swallowing)
+    for (const side of ['L', 'R'] as const) {
+      const arm = armStatesRef.current[side];
+      const dwelledInGuard = now - arm.guardEnteredAt >= GUARD_REARM_MS;
+      if (arm.state === 'guard' && dwelledInGuard && arm.smoothedAngle > ELBOW_EXTEND_THRESHOLD) {
+        if (motionDetected) {
+          arm.state = 'strike';
+          elbowStateRef.current = 'strike';
+          punchValidated = true;
+        }
+      } else if (arm.state === 'strike' && arm.smoothedAngle < ELBOW_RETRACT_THRESHOLD) {
+        arm.state = 'guard';
+        arm.guardEnteredAt = now;
       }
-    } else if (elbowStateRef.current === 'strike' && smoothedAngle < ELBOW_RETRACT_THRESHOLD) {
+    }
+    if (armStatesRef.current.L.state === 'guard' && armStatesRef.current.R.state === 'guard') {
       elbowStateRef.current = 'guard';
-      guardEnteredAtRef.current = now;
     }
 
     // --- Hook detection: completed lateral sweep, elbow bent throughout ---
-    // Deliberately independent of elbowStateRef (see HOOK_MIN_SWEEP above).
-    // Every condition here is a real measurement from this motion burst:
-    //   * the burst showed punch-speed motion (same gate as above),
-    //   * the elbow NEVER extended past HOOK_MAX_ELBOW_ANGLE during it —
-    //     this is what excludes a straight punch mid-flight,
-    //   * peak wrist travel cleared HOOK_MIN_SWEEP,
-    //   * the wrist path classifies as 'hook' via the same
-    //     classifyTrajectory() used to label the final rep, so entry and
-    //     scoring can never disagree,
-    //   * and the wrist has started returning, i.e. the sweep finished —
-    //     which also means the peak values registerHit() scores are the
-    //     real peaks of the whole hook, not a mid-flight snapshot.
-    // hookValidatedThisBurstRef caps it at one rep per burst.
     if (!punchValidated && !hookValidatedThisBurstRef.current && motionDetected) {
       const wristDelta = peakWristDisplacementRef.current;
       const peakSweep = wristDelta.mag / shoulderWidth;
@@ -1923,10 +1916,33 @@ export default function VisionPage() {
         maxElbowSinceMotionRef.current < HOOK_MAX_ELBOW_ANGLE &&
         smoothedAngle > MIN_HOOK_ELBOW_ANGLE &&
         peakSweep >= HOOK_MIN_SWEEP &&
-        sweepReturning &&
+        (sweepReturning || peakSweep >= HOOK_MIN_SWEEP * 1.35) &&
         classifyTrajectory(wristDelta.dx, wristDelta.dy, shoulderWidth, wristDelta.elbowAtPeak) === 'hook'
       ) {
         hookValidatedThisBurstRef.current = true;
+        punchValidated = true;
+      }
+    }
+
+    // --- Uppercut detection: upward wrist drive, compact elbow throughout ---
+    if (!punchValidated && !uppercutValidatedThisBurstRef.current && motionDetected) {
+      const wristDelta = peakWristDisplacementRef.current;
+      const upwardTravel = -wristDelta.dy / shoulderWidth; // screen-space dy < 0 is upward
+      const activeWristNowForUpper = lAngleThisFrame >= rAngleThisFrame ? lW : rW;
+      const activeSideForUpper: 'L' | 'R' = lAngleThisFrame >= rAngleThisFrame ? 'L' : 'R';
+      const upperBaseline = wristBaselineRef.current[activeSideForUpper];
+      const currentUpward = activeWristNowForUpper
+        ? -(activeWristNowForUpper.y - upperBaseline.y) / shoulderWidth
+        : upwardTravel;
+      const upwardReturning = currentUpward <= upwardTravel * 0.82;
+      if (
+        upwardTravel >= UPPERCUT_MIN_VERTICAL_TRAVEL &&
+        smoothedAngle > MIN_HOOK_ELBOW_ANGLE &&
+        smoothedAngle < HOOK_MAX_ELBOW_ANGLE &&
+        (upwardReturning || upwardTravel >= UPPERCUT_MIN_VERTICAL_TRAVEL * 1.35) &&
+        classifyTrajectory(wristDelta.dx, wristDelta.dy, shoulderWidth, wristDelta.elbowAtPeak) === 'uppercut'
+      ) {
+        uppercutValidatedThisBurstRef.current = true;
         punchValidated = true;
       }
     }
@@ -2454,33 +2470,38 @@ export default function VisionPage() {
           )
         )
       : 0;
-    const powerScore = Math.round(Math.min(100, (peakAngularVelocityRef.current / 900) * 100));
-    let overallScore = Math.round((accuracy + trackingConfidenceScore + reflexScore) / 3);
+    const log = repLogRef.current;
+    const allHits = log.filter((r) => r.hit);
+    const hitsOnly = allHits.filter((r) => r.reactionMs !== null);
+    const punchHits = allHits.filter((r) => r.kind === 'punch');
+
+    // Power score: robust mean of all landed punches rather than a single peak spike
+    const powerScore = punchHits.length > 0
+      ? Math.round(punchHits.reduce((sum, r) => sum + r.estimatedPower, 0) / punchHits.length)
+      : Math.round(Math.min(100, (peakAngularVelocityRef.current / 900) * 100));
+
+    // Stability: balances consistency (low stdDev) with technique execution form
+    const stabilityScore = computeStabilityScore(allHits, trackingConfidenceScore);
+
+    // Swiftness: tempo scaled against the command cadence for the chosen difficulty (or 40/min in freestyle)
+    const maxCadence = isFreestyle
+      ? 40
+      : difficultyRef.current === 'hard'
+      ? 24
+      : difficultyRef.current === 'easy'
+      ? 14
+      : 18;
+    const swiftnessScore = computeSwiftnessScore(hitCountRef.current, elapsedSecondsRef.current, maxCadence);
+
+    // Overall Score: Authentic boxing composite (Accuracy 35%, Reflex 25%, Power 20%, Stability 20%)
+    let overallScore = isFreestyle
+      ? 0 // will be computed below once biomechanics are aggregated
+      : Math.round(accuracy * 0.35 + reflexScore * 0.25 + powerScore * 0.20 + stabilityScore * 0.20);
 
     let flaw = 'Tracking confidence stayed strong throughout — no major flaw detected.';
     let advice = 'Consistent frame presence and clean strike mechanics across the session.';
-    if (!isFreestyle) {
-      const scores = [
-        { name: 'accuracy', value: accuracy },
-        { name: 'tracking', value: trackingConfidenceScore },
-        { name: 'reflex', value: reflexScore },
-      ];
-      const weakest = scores.sort((a, b) => a.value - b.value)[0];
-      if (weakest.name === 'accuracy') {
-        flaw = 'Missed commands: several calls went unanswered inside the reaction window.';
-        advice = 'Focus on committing to each call immediately — hesitation cost you reps this session.';
-      } else if (weakest.name === 'tracking') {
-        flaw = 'Tracking confidence dipped repeatedly — you drifted out of the optimal frame zone.';
-        advice = 'Stand roughly 6-8 feet from the camera and keep your full upper body visible throughout.';
-      } else if (weakest.name === 'reflex') {
-        flaw = 'Reaction times ran high relative to the call cadence.';
-        advice = 'Keep your hands up and weight forward so you can fire the instant a command lands.';
-      }
-    }
 
-    // Build a real, per-command mistakes breakdown from the actual rep log —
-    // nothing here is invented, it's all aggregated from logged reps.
-    const log = repLogRef.current;
+    // Build mistakes breakdown from actual rep log
     const missesByCommand: Record<string, number> = {};
     log.filter((r) => !r.hit).forEach((r) => {
       missesByCommand[r.command] = (missesByCommand[r.command] || 0) + 1;
@@ -2489,20 +2510,6 @@ export default function VisionPage() {
       .sort((a, b) => b[1] - a[1])
       .map(([cmd, count]) => `Missed ${cmd} ${count}x — no clean strike detected within the reaction window.`);
 
-    // hitsOnly drives reaction-time stats (freestyle has none, so this is
-    // naturally empty there). punchHits drives biomechanics and is NOT
-    // gated on reactionMs, so freestyle punches (which have no reaction
-    // time by design) are correctly included.
-    const allHits = log.filter((r) => r.hit);
-    const hitsOnly = allHits.filter((r) => r.reactionMs !== null);
-    const punchHits = allHits.filter((r) => r.kind === 'punch');
-
-    // New merits: Stability (rep-to-rep consistency of form) and Swiftness
-    // (output tempo) — see computeStabilityScore/computeSwiftnessScore for
-    // the formulas. Both are derived purely from data already in `log` and
-    // `elapsedSecondsRef`, nothing invented.
-    const stabilityScore = computeStabilityScore(allHits, trackingConfidenceScore);
-    const swiftnessScore = computeSwiftnessScore(hitCountRef.current, elapsedSecondsRef.current);
     if (hitsOnly.length > 0) {
       const slowest = hitsOnly.reduce((a, b) => ((a.reactionMs ?? 0) > (b.reactionMs ?? 0) ? a : b));
       if ((slowest.reactionMs ?? 0) > 700) {
@@ -2569,7 +2576,7 @@ export default function VisionPage() {
         // clearly scored higher than the same round filmed poorly, with
         // identical boxing. This is now a pure technique composite.
         overallScore = Math.round(
-          (powerScore + avgRotation + avgKneeDrive + avgWeightTransfer + avgFootPivot) / 5
+          (powerScore + avgRotation + avgKneeDrive + avgWeightTransfer + avgFootPivot + stabilityScore) / 6
         );
         const techScores = [
           { name: 'rotation', value: avgRotation, flaw: 'Torso rotation was the weak link across your combos.', advice: 'Drive power from your hips and shoulders on every strike, not just your arm.' },
@@ -2640,6 +2647,23 @@ export default function VisionPage() {
       const top = detailedFlaws[0];
       flaw = `${top.techniqueLabel}: ${top.cause}`;
       advice = top.coachingTip;
+    } else {
+      if (!isFreestyle && accuracy < 70) {
+        flaw = 'Missed commands: several calls went unanswered inside the reaction window.';
+        advice = 'Focus on committing to each call immediately — anticipate and fire.';
+      } else if (avgRotation < 40 && punchHits.length > 0) {
+        flaw = 'Low torso rotation across your strikes — power was mostly arm-driven.';
+        advice = 'Drive power from your hips and core on every strike instead of just swinging the arm.';
+      } else if (avgKneeDrive < 35 && punchHits.length > 0) {
+        flaw = 'Minimal knee drive detected — weight stayed mostly static.';
+        advice = 'Push off your rear foot to load each punch before throwing it.';
+      } else if (!isFreestyle && reflexScore < 50 && hitsOnly.length > 0) {
+        flaw = 'Reaction times ran high relative to the call cadence.';
+        advice = 'Keep your hands up and weight forward so you can fire the instant a command lands.';
+      } else {
+        flaw = 'Crisp execution and solid frame presence throughout the session.';
+        advice = 'Keep maintaining your tempo, balance, and quick returns to guard.';
+      }
     }
 
     if (mistakes.length === 0) {
@@ -2769,6 +2793,13 @@ export default function VisionPage() {
     reactionTimesRef.current = [];
     if (drillTimerRef.current) clearTimeout(drillTimerRef.current);
     if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
+    armStatesRef.current = {
+      L: { state: 'guard', smoothedAngle: 0, history: [], guardEnteredAt: 0, prevAngle: 0, prevAngleTs: null, angularVel: 0 },
+      R: { state: 'guard', smoothedAngle: 0, history: [], guardEnteredAt: 0, prevAngle: 0, prevAngleTs: null, angularVel: 0 },
+    };
+    elbowStateRef.current = 'guard';
+    hookValidatedThisBurstRef.current = false;
+    uppercutValidatedThisBurstRef.current = false;
     setCalibSuccess(false);
     calibSuccessRef.current = false;
     setAwaitingUserStart(true);
@@ -3608,21 +3639,23 @@ export default function VisionPage() {
                 {[
                   { label: 'Overall', value: resultsData.overallScore },
                   { label: 'Power', value: resultsData.powerScore },
-                  { label: 'Reflex', value: resultsData.reflexScore },
+                  resultsData.isFreestyle
+                    ? { label: 'Rotation', value: resultsData.rotationScore }
+                    : { label: 'Reflex', value: resultsData.reflexScore },
                   { label: 'Stability', value: resultsData.stabilityScore },
                 ].map((merit) => (
                   <div
                     key={merit.label}
                     className="flex flex-col items-center gap-2 bg-white/[0.02] border border-white/5 rounded-2xl py-4"
                   >
-                    <ProgressRing progress={merit.value ?? 0} size={76} strokeWidth={6} />
+                    <ProgressRing progress={merit.value ?? 0} size={76} strokeWidth={6} label={merit.label} />
                     <span className="text-[8px] font-black text-white/50 uppercase tracking-widest">
                       {merit.label}
                     </span>
                   </div>
                 ))}
                 <div className="col-span-2 flex flex-col items-center gap-2 bg-white/[0.02] border border-white/5 rounded-2xl py-4">
-                  <ProgressRing progress={resultsData.swiftnessScore ?? 0} size={76} strokeWidth={6} />
+                  <ProgressRing progress={resultsData.swiftnessScore ?? 0} size={76} strokeWidth={6} label="Tempo" />
                   <span className="text-[8px] font-black text-white/50 uppercase tracking-widest">
                     Swiftness
                   </span>
