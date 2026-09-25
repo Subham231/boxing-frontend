@@ -8,6 +8,9 @@ import {
   fetchSignInMethodsForEmail,
   sendEmailVerification,
   sendPasswordResetEmail,
+  sendSignInLinkToEmail,
+  isSignInWithEmailLink,
+  signInWithEmailLink,
   linkWithCredential,
   EmailAuthProvider,
   reload,
@@ -313,6 +316,12 @@ export function formatEmailAuthError(error: unknown): string {
   const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
 
   switch (code) {
+    case 'auth/invalid-action-code':
+      return 'This sign-in link has expired or has already been used. Please request a new link.';
+    case 'auth/expired-action-code':
+      return 'This sign-in link has expired. Please request a new one.';
+    case 'auth/operation-not-allowed':
+      return 'Email link sign-in is not enabled. Please check Firebase Authentication settings.';
     case 'auth/email-already-in-use':
       return 'An account already exists for this email. Try logging in instead.';
     case 'auth/invalid-email':
@@ -334,7 +343,7 @@ export function formatEmailAuthError(error: unknown): string {
     case 'auth/network-request-failed':
       return 'Network problem. Check your connection and try again.';
     case 'auth/provider-already-linked':
-      return 'This account already has an email login. Log in with that email instead.';
+      return 'This account already has an email login.';
     case 'auth/user-disabled':
       return 'This account has been disabled. Contact support.';
     default: {
@@ -359,6 +368,67 @@ export function isPhoneOnlyUser(user: User | null | undefined): user is User {
   return hasPhone && !hasPassword;
 }
 
+/** Where the passwordless magic link returns the fighter back to */
+export function getEmailLinkActionSettings(email: string, continuePath: string = '/dashboard'): ActionCodeSettings {
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://sparai.in';
+  return {
+    url: `${origin}/auth/finish?email=${encodeURIComponent(email.trim().toLowerCase())}&continue=${encodeURIComponent(continuePath)}`,
+    handleCodeInApp: true,
+  };
+}
+
+/**
+ * Sends a passwordless sign-in magic link to the fighter's email.
+ * Clicking the link authenticates the user directly and verifies their email.
+ */
+export async function sendPasswordlessSignInLink(email: string, continuePath: string = '/dashboard'): Promise<void> {
+  const cleanEmail = email.trim().toLowerCase();
+  const settings = getEmailLinkActionSettings(cleanEmail, continuePath);
+  await sendSignInLinkToEmail(firebaseAuth, cleanEmail, settings);
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem('sparai_email_for_signin', cleanEmail);
+    window.localStorage.setItem('sparai_email_signin_ts', Date.now().toString());
+  }
+}
+
+/**
+ * Checks whether the current URL contains a valid Firebase sign-in link.
+ */
+export function isPasswordlessSignInLink(url?: string): boolean {
+  const target = url || (typeof window !== 'undefined' ? window.location.href : '');
+  return isSignInWithEmailLink(firebaseAuth, target);
+}
+
+/**
+ * Completes sign-in with the incoming magic link.
+ * Resolves email from local storage, URL params, or the provided fallback.
+ */
+export async function completePasswordlessSignIn(emailFallback?: string, url?: string): Promise<User> {
+  const currentUrl = url || (typeof window !== 'undefined' ? window.location.href : '');
+  if (!isSignInWithEmailLink(firebaseAuth, currentUrl)) {
+    throw new Error('This sign-in link is invalid or has already been used.');
+  }
+
+  let emailToUse = (emailFallback || '').trim().toLowerCase();
+  if (!emailToUse && typeof window !== 'undefined') {
+    emailToUse = window.localStorage.getItem('sparai_email_for_signin') || '';
+  }
+  if (!emailToUse && typeof window !== 'undefined') {
+    const params = new URLSearchParams(window.location.search);
+    emailToUse = (params.get('email') || '').trim().toLowerCase();
+  }
+
+  if (!emailToUse) {
+    throw new Error('NO_EMAIL_FOUND');
+  }
+
+  const result = await signInWithEmailLink(firebaseAuth, emailToUse, currentUrl);
+  if (typeof window !== 'undefined') {
+    window.localStorage.removeItem('sparai_email_for_signin');
+  }
+  return result.user;
+}
+
 /** Where the verification link should send the fighter back to. */
 function verificationActionSettings(): ActionCodeSettings | undefined {
   if (typeof window === 'undefined') return undefined;
@@ -366,11 +436,7 @@ function verificationActionSettings(): ActionCodeSettings | undefined {
 }
 
 /**
- * Sends the Firebase verification email. The link returns the fighter to
- * /verify-email (which auto-detects the verified state). If Firebase rejects
- * the continue URL because the domain is not in Authentication -> Settings ->
- * Authorized domains, we fall back to Firebase's default template so the email
- * is ALWAYS sent instead of the whole signup failing.
+ * Sends the Firebase verification email.
  */
 export async function sendVerificationEmailSafe(user: User): Promise<void> {
   const settings = verificationActionSettings();
@@ -389,16 +455,7 @@ export async function sendVerificationEmailSafe(user: User): Promise<void> {
 }
 
 /**
- * New-user signup with email + password. Creates the Firebase account,
- * fires off the verification email, and returns the (unverified) user.
- * Does NOT create the Supabase profile row yet — that only happens once
- * the email is verified (see ensureUserProfile / the /verify-email page),
- * so an unverified signup can never occupy a phone-style profile slot.
- *
- * SAFETY: if a phone-only fighter is still signed in on this device, we LINK
- * the email onto their existing account instead of creating a brand-new one.
- * Creating a new account here would swap the session to a fresh, empty uid and
- * orphan all of their existing streaks / subscription / scores in Supabase.
+ * New-user signup with email + password (legacy fallback).
  */
 export async function signUpWithEmail(email: string, password: string): Promise<User> {
   const current = firebaseAuth.currentUser;
@@ -412,11 +469,7 @@ export async function signUpWithEmail(email: string, password: string): Promise<
 }
 
 /**
- * Login with email + password. Throws the raw Firebase error on bad
- * credentials — callers should run it through formatEmailAuthError. Does
- * NOT check emailVerified itself; callers decide what to do with an
- * unverified user (normally: send them to /verify-email). The backend
- * enforces verification independently on any protected route.
+ * Login with email + password (legacy fallback).
  */
 export async function loginWithEmail(email: string, password: string): Promise<User> {
   const cred = await signInWithEmailAndPassword(firebaseAuth, email.trim(), password);
@@ -429,16 +482,11 @@ export async function resendVerificationEmail(user: User): Promise<void> {
 }
 
 /**
- * Forces a fresh token fetch from Firebase and returns whether the email
- * is verified now. Firebase's local `user.emailVerified` is a snapshot from
- * sign-in time — it does NOT update on its own after the user clicks the
- * link in their inbox, so this reload is required before checking.
+ * Forces a fresh token fetch from Firebase and returns whether the email is verified now.
  */
 export async function refreshEmailVerified(user: User): Promise<boolean> {
   const live = firebaseAuth.currentUser && firebaseAuth.currentUser.uid === user.uid ? firebaseAuth.currentUser : user;
   await reload(live);
-  // The ID token can still contain the pre-verification claim after reload.
-  // Force a fresh token before protected profile APIs inspect email_verified.
   if (live.emailVerified) {
     await live.getIdToken(true);
   }
@@ -450,13 +498,7 @@ export async function sendResetPasswordEmail(email: string): Promise<void> {
 }
 
 /**
- * Migration path for existing phone-auth users: links an email/password
- * credential onto the CURRENT Firebase user without creating a new account
- * or a new uid. All existing Supabase data (keyed by uid) is untouched —
- * ensureUserProfile just adds the email onto the same profile row after
- * this succeeds. Firebase itself rejects the link if the email is already
- * used by a different account (auth/credential-already-in-use — see
- * formatEmailAuthError above).
+ * Migration path for existing phone-auth users: links an email/password credential.
  */
 export async function linkEmailPasswordToUser(user: User, email: string, password: string): Promise<void> {
   const credential = EmailAuthProvider.credential(email.trim(), password);

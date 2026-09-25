@@ -1,117 +1,155 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, ShieldCheck, Eye, EyeOff, Phone } from 'lucide-react';
-import { signUpWithEmail, formatEmailAuthError } from '@/lib/firebase-auth';
+import { ArrowRight, ShieldCheck, Phone, MailCheck, RefreshCw, Sparkles } from 'lucide-react';
+import { sendPasswordlessSignInLink, formatEmailAuthError } from '@/lib/firebase-auth';
+
+const RESEND_COOLDOWN = 30;
 
 export default function SignupPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sentLink, setSentLink] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
 
-  const handleSignup = async () => {
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setInterval(() => setCooldown((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(timer);
+  }, [cooldown]);
+
+  const handleSignup = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setError(null);
-    const trimmedEmail = email.trim();
+    const trimmedEmail = email.trim().toLowerCase();
+
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
       setError('Enter a valid email address.');
-      return;
-    }
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
       return;
     }
 
     setLoading(true);
     try {
-      await signUpWithEmail(trimmedEmail, password);
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem('sparai_pending_email', trimmedEmail);
-      }
-      router.replace('/verify-email');
-    } catch (signupError) {
-      setError(formatEmailAuthError(signupError));
+      await sendPasswordlessSignInLink(trimmedEmail, '/onboarding');
+      setSentLink(true);
+      setCooldown(RESEND_COOLDOWN);
+    } catch (err: any) {
+      setError(formatEmailAuthError(err));
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleResend = async () => {
+    if (cooldown > 0 || loading) return;
+    await handleSignup();
   };
 
   return (
     <main className="min-h-screen bg-[#0a0a0c] px-6 py-10 text-white">
       <div className="mx-auto flex min-h-[80vh] w-full max-w-md flex-col justify-between">
         <div>
-          <span className="text-sm font-black italic uppercase tracking-tight">Spar<span className="text-primary">ai</span></span>
+          <span className="text-sm font-black italic uppercase tracking-tight">
+            Spar<span className="text-primary">ai</span>
+          </span>
           <div className="mt-10 flex items-center gap-2 text-primary">
             <ShieldCheck className="h-5 w-5" />
-            <span className="text-[10px] font-black uppercase tracking-[0.2em]">Create account</span>
+            <span className="text-[10px] font-black uppercase tracking-[0.2em]">Passwordless Signup</span>
           </div>
           <h1 className="mt-4 text-4xl font-black italic uppercase leading-[0.95] tracking-tighter">
             Become a <span className="text-primary">fighter.</span>
           </h1>
           <p className="mt-4 text-sm font-semibold leading-relaxed text-white/55">
-            Sign up with your email — we&apos;ll send a verification link before you can enter the ring.
+            {sentLink
+              ? 'Check your email — tap the sign-in link to start training immediately.'
+              : 'No passwords to remember. Enter your email to begin your combat journey.'}
           </p>
         </div>
 
-        <section className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1">
-            <span className="text-[9px] font-bold text-white/40 uppercase">Email</span>
-            <input
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              onKeyDown={(event) => event.key === 'Enter' && handleSignup()}
-              placeholder="you@email.com"
-              className="w-full border-b border-white/20 bg-transparent px-1 py-3 text-2xl font-bold tracking-tight outline-none focus:border-primary"
-              autoFocus
-            />
-          </div>
+        {sentLink ? (
+          <section className="flex flex-col items-center gap-6 my-auto">
+            <div className="flex h-24 w-24 items-center justify-center rounded-full border border-primary/30 bg-primary/10 shadow-[0_0_30px_rgba(226,255,59,0.2)]">
+              <MailCheck className="h-10 w-10 text-primary animate-pulse" />
+            </div>
 
-          <div className="flex flex-col gap-1">
-            <span className="text-[9px] font-bold text-white/40 uppercase">Password</span>
-            <div className="flex items-center border-b border-white/20 focus-within:border-primary">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                autoComplete="new-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                onKeyDown={(event) => event.key === 'Enter' && handleSignup()}
-                placeholder="At least 6 characters"
-                className="w-full bg-transparent px-1 py-3 text-2xl font-bold tracking-tight outline-none"
-              />
-              <button type="button" onClick={() => setShowPassword((v) => !v)} className="px-1 text-white/40 hover:text-white">
-                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+            <div className="text-center">
+              <span className="text-xs uppercase font-black text-white/40 tracking-widest block mb-1">
+                Verification link sent to
+              </span>
+              <p className="text-xl font-bold text-white tracking-tight">{email.trim()}</p>
+              <p className="mt-2 text-xs text-white/50 leading-relaxed max-w-xs mx-auto">
+                Open your email app and tap the link to activate your fighter profile.
+              </p>
+            </div>
+
+            <div className="flex w-full flex-col gap-3 mt-4">
+              <button
+                onClick={handleResend}
+                disabled={cooldown > 0 || loading}
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-white/10 text-[11px] font-black uppercase tracking-widest text-white/70 hover:border-primary hover:text-primary disabled:opacity-40"
+              >
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                {loading ? 'SENDING...' : cooldown > 0 ? `RESEND IN ${cooldown}S` : 'RESEND VERIFICATION LINK'}
+              </button>
+
+              <button
+                onClick={() => {
+                  setSentLink(false);
+                  setError(null);
+                }}
+                className="text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white py-2"
+              >
+                Use a different email
               </button>
             </div>
-          </div>
+          </section>
+        ) : (
+          <form onSubmit={handleSignup} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1">
+              <span className="text-[9px] font-bold text-white/40 uppercase">Email</span>
+              <input
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="you@email.com"
+                className="w-full border-b border-white/20 bg-transparent px-1 py-3 text-2xl font-bold tracking-tight outline-none focus:border-primary text-white"
+                autoFocus
+              />
+            </div>
 
-          {error && <p className="text-center text-[11px] font-bold leading-relaxed text-red-400">{error}</p>}
+            {error && <p className="text-center text-[11px] font-bold leading-relaxed text-red-400">{error}</p>}
 
-          <button
-            onClick={handleSignup}
-            disabled={loading}
-            className="btn-primary flex h-14 w-full items-center justify-center gap-2 disabled:opacity-50"
-          >
-            {loading ? 'CREATING ACCOUNT...' : 'SEND VERIFICATION EMAIL'}
-            <ArrowRight className="h-4 w-4" />
-          </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn-primary flex h-14 w-full items-center justify-center gap-2 disabled:opacity-50 mt-2"
+            >
+              {loading ? 'SENDING LINK...' : 'SEND VERIFICATION LINK'}
+              <ArrowRight className="h-4 w-4" />
+            </button>
 
-          <button onClick={() => router.push('/login')} className="text-[10px] font-black uppercase tracking-widest text-primary hover:text-white">
-            Already a fighter? Log in
-          </button>
+            <button
+              type="button"
+              onClick={() => router.push('/login')}
+              className="text-[10px] font-black uppercase tracking-widest text-primary hover:text-white text-center py-1"
+            >
+              Already a fighter? Log in
+            </button>
 
-          <button
-            onClick={() => router.push('/login/phone')}
-            className="flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white"
-          >
-            <Phone className="h-3.5 w-3.5" />
-            Joined before with your phone? Log in with phone
-          </button>
-        </section>
+            <button
+              type="button"
+              onClick={() => router.push('/login/phone')}
+              className="flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white mt-2"
+            >
+              <Phone className="h-3.5 w-3.5" />
+              Joined before with your phone? Log in with phone
+            </button>
+          </form>
+        )}
       </div>
     </main>
   );

@@ -7,6 +7,7 @@ import { useFirebaseUser } from '@/lib/useFirebaseUser';
 import { firebaseAuth } from '@/lib/firebase';
 import {
   resendVerificationEmail,
+  sendPasswordlessSignInLink,
   refreshEmailVerified,
   ensureUserProfile,
   signOutFirebase,
@@ -138,8 +139,16 @@ export default function VerifyEmailPage() {
     setInfo(null);
     setResending(true);
     try {
-      await resendVerificationEmail(current);
-      setInfo('Verification email sent again — check your inbox and spam folder. Use only the newest email.');
+      if (current.email) {
+        try {
+          await sendPasswordlessSignInLink(current.email, '/dashboard');
+        } catch {
+          await resendVerificationEmail(current);
+        }
+      } else {
+        await resendVerificationEmail(current);
+      }
+      setInfo('Sign-in link sent again — check your inbox and spam folder. Tap the link to enter directly.');
       setCooldown(RESEND_COOLDOWN_SECONDS);
     } catch (e) {
       const code = e && typeof e === 'object' && 'code' in e ? String((e as { code?: string }).code) : '';

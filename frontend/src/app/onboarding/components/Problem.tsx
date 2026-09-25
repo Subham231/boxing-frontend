@@ -132,52 +132,15 @@ const Identity: React.FC = () => {
         if (!email) { setSignupError('Email address is mandatory.'); return; }
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setSignupError('Enter a valid email address.'); return; }
 
-        setCheckingAccount(true);
-        try {
-            if (await emailAccountExists(email)) {
-                // Check if this is a phone-only account that needs email linking
-                try {
-                    const res = await fetch('/api/reflex/check-phone-for-email', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ email }),
-                    });
-                    if (res.ok) {
-                        const { isPhoneOnly } = await res.json();
-                        if (isPhoneOnly) {
-                            setPhoneOnlyAccount(true);
-                            setSignupError('This email is linked to a phone-only account. Log in to link it now.');
-                            return;
-                        }
-                    }
-                } catch { /* ignore — fall through to generic message */ }
-                setExistingAccount(true);
-                setSignupError('This email already has an account. Log in to continue.');
-                return;
-            }
-
-            updateData({
-                ringName: name,
-                age,
-                profession: profession || 'Fighter',
-                promiseWord: promiseWord.toUpperCase(),
-                email,
-                ...(phone ? { phoneNumber: normalisePhone(phone) } : {}),
-            });
-            nextStep();
-        } catch {
-            updateData({
-                ringName: name,
-                age,
-                profession: profession || 'Fighter',
-                promiseWord: promiseWord.toUpperCase(),
-                email,
-                ...(phone ? { phoneNumber: normalisePhone(phone) } : {}),
-            });
-            nextStep();
-        } finally {
-            setCheckingAccount(false);
-        }
+        updateData({
+            ringName: name,
+            age,
+            profession: profession || 'Fighter',
+            promiseWord: promiseWord.toUpperCase(),
+            email,
+            ...(phone ? { phoneNumber: normalisePhone(phone) } : {}),
+        });
+        nextStep();
     };
 
     return (

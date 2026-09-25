@@ -2,16 +2,16 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronRight, ShieldCheck, ArrowLeft, Sparkles, Lock, RefreshCw, MailCheck, Eye, EyeOff } from 'lucide-react';
+import { ChevronRight, ShieldCheck, ArrowLeft, Sparkles, Lock, RefreshCw, MailCheck } from 'lucide-react';
 import { useOnboarding } from '@/context/OnboardingContext';
 import StepBadge from './StepBadge';
 import {
-  signUpWithEmail,
-  resendVerificationEmail,
+  sendPasswordlessSignInLink,
   refreshEmailVerified,
   ensureUserProfile,
   saveProfileDetails,
   formatEmailAuthError,
+  watchAuthState,
 } from '@/lib/firebase-auth';
 import { firebaseAuth } from '@/lib/firebase';
 
@@ -21,13 +21,10 @@ const EmailVerification: React.FC = () => {
   const { data, updateData, nextStep, prevStep } = useOnboarding();
   const [step, setStep] = useState<'details' | 'pending'>('details');
   const [email, setEmail] = useState(data.email || '');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
-  const [existingAccount, setExistingAccount] = useState(false);
   const [cooldown, setCooldown] = useState(0);
 
   useEffect(() => {
@@ -36,32 +33,46 @@ const EmailVerification: React.FC = () => {
     return () => clearInterval(t);
   }, [cooldown]);
 
-  const handleCreateAccount = async () => {
+  // Listen to auth state: if user clicked the magic link in another tab or app,
+  // automatically advance them without requiring manual button clicks!
+  useEffect(() => {
+    const unsubscribe = watchAuthState(async (currentUser) => {
+      if (currentUser && currentUser.emailVerified) {
+        try {
+          await ensureUserProfile(currentUser);
+          const avatar = typeof window !== 'undefined' ? localStorage.getItem('boxing_user_avatar') || undefined : undefined;
+          await saveProfileDetails(currentUser, {
+            displayName: data.ringName,
+            age: Number(data.age),
+            profession: data.profession,
+            promiseWord: data.promiseWord,
+            avatarUrl: avatar,
+          });
+          nextStep();
+        } catch {
+          // ignore — user can tap manual button below
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, [data, nextStep]);
+
+  const handleSendLink = async () => {
     setError(null);
-    setExistingAccount(false);
-    const trimmedEmail = email.trim();
+    const trimmedEmail = email.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
       setError('Enter a valid email address.');
-      return;
-    }
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
       return;
     }
 
     setLoading(true);
     try {
-      await signUpWithEmail(trimmedEmail, password);
+      await sendPasswordlessSignInLink(trimmedEmail, '/onboarding');
       updateData({ email: trimmedEmail });
       setStep('pending');
       setCooldown(RESEND_COOLDOWN_SECONDS);
+      setInfo(`1-tap sign-in link sent to ${trimmedEmail}`);
     } catch (e) {
-      const code = e && typeof e === 'object' && 'code' in e ? String((e as { code?: string }).code) : '';
-      if (code === 'auth/email-already-in-use') {
-        setExistingAccount(true);
-        setError('This email is already registered. Log in with the existing password, or reset it.');
-        return;
-      }
       setError(formatEmailAuthError(e));
     } finally {
       setLoading(false);
@@ -69,35 +80,26 @@ const EmailVerification: React.FC = () => {
   };
 
   const handleResend = async () => {
-    const user = firebaseAuth.currentUser;
-    if (!user || cooldown > 0) return;
-    setError(null);
-    setInfo(null);
-    try {
-      await resendVerificationEmail(user);
-      setInfo('Verification email sent again — check your inbox and spam folder.');
-      setCooldown(RESEND_COOLDOWN_SECONDS);
-    } catch {
-      setError('Could not resend right now. Wait a bit and try again.');
-    }
+    if (cooldown > 0 || loading) return;
+    await handleSendLink();
   };
 
   const handleCheckVerified = async () => {
     const user = firebaseAuth.currentUser;
-    if (!user) return;
+    if (!user) {
+      setError('Please open the link sent to your email to verify and sign in.');
+      return;
+    }
     setError(null);
     setInfo(null);
     setChecking(true);
     try {
       const verified = await refreshEmailVerified(user);
       if (!verified) {
-        setError("Not verified yet. Open the link in the email we sent, then try again.");
+        setError('Not verified yet. Open the link in the email we sent, then try again.');
         return;
       }
 
-      // Create the private profile row first. Email signup creates the
-      // Firebase account before verification, while profile details are
-      // intentionally stored only after the verified token is accepted.
       await ensureUserProfile(user);
       const avatar = typeof window !== 'undefined' ? localStorage.getItem('boxing_user_avatar') || undefined : undefined;
       const savedProfile = await saveProfileDetails(user, {
@@ -107,8 +109,9 @@ const EmailVerification: React.FC = () => {
         promiseWord: data.promiseWord,
         avatarUrl: avatar,
       });
+
       if (!savedProfile) {
-        setError('Your account was verified, but saving your profile details failed. Please try again.');
+        setError('Your account was verified, but saving profile details failed. Try again.');
         return;
       }
 
@@ -143,7 +146,7 @@ const EmailVerification: React.FC = () => {
                 2 COMBAT MERITS WAITING AHEAD
               </span>
               <span className="text-[10px] font-bold text-white/85 leading-tight block mt-0.5">
-                Punch Power (PSI) & Reflex Speed unlock right after your email is verified.
+                Punch Power (PSI) &amp; Reflex Speed unlock right after your email is verified.
               </span>
             </div>
           </div>
@@ -155,15 +158,15 @@ const EmailVerification: React.FC = () => {
 
         <h1 className="text-2xl sm:text-3xl font-black italic uppercase leading-[0.95] tracking-tighter text-white">
           {step === 'details' ? (
-            <>Create your <span className="text-primary">fighter account</span>.</>
+            <>Verify your <span className="text-primary">fighter account</span>.</>
           ) : (
             <>Check your <span className="text-primary">email</span>.</>
           )}
         </h1>
         <p className="text-white/50 mt-2 text-xs sm:text-sm leading-relaxed font-semibold">
           {step === 'details'
-            ? 'Email + password — no SMS, no OTP. We just need to verify it once.'
-            : `Open the link we sent to ${email}, then come back and tap the button below.`}
+            ? 'No passwords required. We will send a secure 1-tap sign-in link to verify your email.'
+            : `Open the link we sent to ${email} to unlock your combat merits.`}
         </p>
       </header>
 
@@ -183,36 +186,19 @@ const EmailVerification: React.FC = () => {
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);
-                  setExistingAccount(false);
                   setError(null);
                 }}
                 placeholder="you@email.com"
-                className="w-full bg-transparent border-b border-white/20 py-2 text-2xl font-bold outline-none focus:border-primary transition-all pb-1 tracking-tight"
+                className="w-full bg-transparent border-b border-white/20 py-2 text-2xl font-bold outline-none focus:border-primary transition-all pb-1 tracking-tight text-white"
                 autoFocus
               />
-            </div>
-            <div className="flex flex-col gap-2">
-              <span className="text-[9px] font-bold text-white/40 uppercase">Password</span>
-              <div className="flex items-center border-b border-white/20 focus-within:border-primary">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  autoComplete="new-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="At least 6 characters"
-                  className="w-full bg-transparent py-2 text-2xl font-bold outline-none pb-1 tracking-tight"
-                />
-                <button type="button" onClick={() => setShowPassword((v) => !v)} className="px-1 text-white/40 hover:text-white">
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
-              </div>
             </div>
           </div>
         ) : (
           <div className="flex flex-col gap-3">
             <div className="flex justify-center py-2">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full border border-primary/30 bg-primary/10">
-                <MailCheck className="h-7 w-7 text-primary" />
+              <div className="flex h-16 w-16 items-center justify-center rounded-full border border-primary/30 bg-primary/10 shadow-[0_0_20px_rgba(226,255,59,0.2)]">
+                <MailCheck className="h-7 w-7 text-primary animate-pulse" />
               </div>
             </div>
 
@@ -227,7 +213,7 @@ const EmailVerification: React.FC = () => {
               </button>
 
               <button
-                disabled={cooldown > 0}
+                disabled={cooldown > 0 || loading}
                 onClick={handleResend}
                 className="text-[10px] font-black uppercase tracking-widest py-1 flex items-center gap-1 disabled:opacity-30 text-primary hover:underline"
               >
@@ -238,24 +224,23 @@ const EmailVerification: React.FC = () => {
         )}
 
         {error && <p className="text-[10px] font-bold text-red-400">{error}</p>}
-        {existingAccount && (
-          <button
-            type="button"
-            onClick={() => window.location.assign('/login')}
-            className="btn-primary flex h-11 w-full items-center justify-center gap-2 text-xs"
-          >
-            LOG IN WITH EMAIL <ChevronRight size={16} />
-          </button>
-        )}
       </main>
 
       <footer className="mt-6 sm:mt-8 flex flex-col gap-3 sm:gap-4">
         {step === 'details' ? (
-          <button onClick={handleCreateAccount} disabled={loading || existingAccount} className="btn-primary w-full h-14 sm:h-16 flex items-center justify-center gap-2 disabled:opacity-50">
-            {loading ? 'CREATING...' : existingAccount ? 'ACCOUNT EXISTS — LOG IN' : 'CREATE ACCOUNT'} <ChevronRight size={20} />
+          <button
+            onClick={handleSendLink}
+            disabled={loading}
+            className="btn-primary w-full h-14 sm:h-16 flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {loading ? 'SENDING LINK...' : 'SEND VERIFICATION LINK'} <ChevronRight size={20} />
           </button>
         ) : (
-          <button onClick={handleCheckVerified} disabled={checking} className="btn-primary w-full h-14 sm:h-16 flex items-center justify-center gap-2 disabled:opacity-50">
+          <button
+            onClick={handleCheckVerified}
+            disabled={checking}
+            className="btn-primary w-full h-14 sm:h-16 flex items-center justify-center gap-2 disabled:opacity-50"
+          >
             {checking ? 'CHECKING...' : "I'VE VERIFIED — UNLOCK ALL MERITS"} <ChevronRight size={20} />
           </button>
         )}
