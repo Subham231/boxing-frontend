@@ -20,13 +20,15 @@ const FEATURES = [
 
 const Promise: React.FC = () => {
     const { nextStep, prevStep } = useOnboarding();
-    const [accepted, setAccepted] = useState(false);
+    const [accepted, setAccepted] = useState(true);
+    const [termsError, setTermsError] = useState<string | null>(null);
 
     const handleInitialize = () => {
         if (!accepted) {
-            alert('The protocol requires your commitment. Accept the promise.');
+            setTermsError('The protocol requires your commitment. Please accept the terms to proceed.');
             return;
         }
+        setTermsError(null);
         nextStep();
     };
 
@@ -76,6 +78,11 @@ const Promise: React.FC = () => {
             </main>
 
             <footer className="mt-6 sm:mt-8 flex flex-col gap-3 sm:gap-4">
+                {termsError && (
+                    <div className="p-2.5 rounded-xl border border-red-500/50 bg-red-500/15 text-xs font-bold text-center leading-relaxed text-red-400">
+                        {termsError}
+                    </div>
+                )}
                 <button
                     type="button"
                     onClick={handleInitialize}

@@ -108,35 +108,41 @@ const Identity: React.FC = () => {
         }
     };
 
+    const emailInputRef = useRef<HTMLInputElement>(null);
+    const ringNameInputRef = useRef<HTMLInputElement>(null);
+
     const handleSignUp = async () => {
         setSignupError(null);
         setPhoneOnlyAccount(false);
         const name = (data.ringName || '').trim();
-        const age = Number(data.age) || 0;
-        const profession = (data.profession || '').trim();
-        const promiseWord = (data.promiseWord || '').trim();
+        const age = Number(data.age) || 25;
+        const profession = (data.profession || 'Fighter').trim();
+        const promiseWord = (data.promiseWord || 'DISCIPLINE').trim();
         const email = (data.email || '').trim();
         const phone = (data.phoneNumber || '').trim();
 
-        // 1. Name Validation
-        if (!name) { setSignupError('Ring Name is mandatory. Please enter your name.'); return; }
-        if (name.length < 3 || name.length > 20) { setSignupError('Ring Name must be between 3 and 20 characters long.'); return; }
+        // 1. Email Validation
+        if (!email) {
+            setSignupError('Email address is mandatory. Please enter your email.');
+            emailInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            emailInputRef.current?.focus();
+            return;
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            setSignupError('Enter a valid email address (e.g. you@gmail.com).');
+            emailInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            emailInputRef.current?.focus();
+            return;
+        }
 
-        // 2. Age Validation
-        if (!age || age < 10 || age > 100) { setSignupError('Age is mandatory. Please select a valid age.'); return; }
-
-        // 3. Promise Word Validation
-        if (!promiseWord || promiseWord.length < 2) { setSignupError('Promise Word is mandatory. Choose or enter your commitment word.'); return; }
-
-        // 4. Email Validation
-        if (!email) { setSignupError('Email address is mandatory.'); return; }
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setSignupError('Enter a valid email address.'); return; }
+        // 2. Ring Name Validation (fallback to TITAN if not entered)
+        const finalName = name || 'TITAN';
 
         updateData({
-            ringName: name,
-            age,
+            ringName: finalName,
+            age: age >= 10 && age <= 100 ? age : 25,
             profession: profession || 'Fighter',
-            promiseWord: promiseWord.toUpperCase(),
+            promiseWord: (promiseWord || 'DISCIPLINE').toUpperCase(),
             email,
             ...(phone ? { phoneNumber: normalisePhone(phone) } : {}),
         });
@@ -162,6 +168,7 @@ const Identity: React.FC = () => {
                 <div className="flex flex-col gap-1.5">
                     <label className="text-[9px] font-black tracking-widest text-primary uppercase">Email Address</label>
                     <input
+                        ref={emailInputRef}
                         type="email"
                         autoComplete="email"
                         value={data.email || ''}
@@ -238,6 +245,7 @@ const Identity: React.FC = () => {
                             </span>
                         </div>
                         <input
+                            ref={ringNameInputRef}
                             type="text"
                             placeholder="ENTER YOUR RING NAME"
                             maxLength={20}
@@ -372,11 +380,6 @@ const Identity: React.FC = () => {
 
                 </div>
 
-                {signupError && (
-                    <div className="p-2.5 rounded-xl border border-red-500/40 bg-red-500/10 text-xs font-bold text-center leading-relaxed text-red-400">
-                        {signupError}
-                    </div>
-                )}
                 {/* Phone-only account: redirect to link-email flow */}
                 {phoneOnlyAccount && (
                     <a
@@ -399,6 +402,11 @@ const Identity: React.FC = () => {
             </main>
 
             <footer className="mt-3 flex flex-col gap-2">
+                {signupError && (
+                    <div className="p-2.5 rounded-xl border border-red-500/50 bg-red-500/15 text-xs font-bold text-center leading-relaxed text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.2)]">
+                        {signupError}
+                    </div>
+                )}
                 <button
                     onClick={handleSignUp}
                     disabled={checkingAccount}

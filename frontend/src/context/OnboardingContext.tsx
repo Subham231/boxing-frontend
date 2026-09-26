@@ -76,33 +76,37 @@ const defaultData: OnboardingData = {
 };
 
 function serializeOnboarding(data: OnboardingData): Record<string, unknown> {
-    if (typeof window === 'undefined') return {};
+    if (typeof window === 'undefined' || !data) return {};
     const avatar = localStorage.getItem('boxing_user_avatar');
-    const goals = data.goals.length > 0 ? data.goals : (data.primary_goal ? [data.primary_goal] : []);
+    const goals = Array.isArray(data.goals) && data.goals.length > 0 ? data.goals : (data.primary_goal ? [data.primary_goal] : []);
+
+    const ringName = (data.ringName || 'TITAN').trim().toUpperCase();
+    const email = (data.email || '').trim().toLowerCase();
+    const phone = (data.phoneNumber || '').trim();
 
     return {
-        ring_name: data.ringName.trim().toUpperCase(),
-        ...(data.email ? { email: data.email.trim().toLowerCase() } : {}),
-        ...(data.phoneNumber ? { phone_number: data.phoneNumber.trim(), phone: data.phoneNumber.trim() } : {}),
+        ring_name: ringName,
+        ...(email ? { email } : {}),
+        ...(phone ? { phone_number: phone, phone } : {}),
         ...(avatar ? { avatar_url: avatar } : {}),
         user_metrics: {
-            age: Number(data.age),
-            weight: Number(data.weight),
-            height: Number(data.height),
+            age: Number(data.age) || 25,
+            weight: Number(data.weight) || 75,
+            height: Number(data.height) || 175,
         },
-        primary_goal: data.primary_goal,
+        primary_goal: data.primary_goal || 'Aerial',
         goals,
-        experience_level: data.experience_level,
-        available_time: data.available_time,
-        constraints: data.constraints,
-        stance: data.stance,
-        trigger: data.trigger,
-        intensity: data.intensity,
-        frequency: data.frequency,
-        daysPerWeek: data.daysPerWeek,
-        combatFocus: data.combatFocus,
-        fitnessBaseline: data.fitnessBaseline,
-        promise: data.promiseWord,
+        experience_level: data.experience_level || '',
+        available_time: Number(data.available_time) || 45,
+        constraints: data.constraints || { equipment: [], injuries: '' },
+        stance: data.stance || 'Orthodox',
+        trigger: data.trigger || 'Pro Ambitions',
+        intensity: Number(data.intensity) || 3,
+        frequency: Number(data.frequency) || 3,
+        daysPerWeek: Number(data.daysPerWeek) || 3,
+        combatFocus: data.combatFocus || '',
+        fitnessBaseline: data.fitnessBaseline || { pushupMax: '', boxingExperience: '' },
+        promise: (data.promiseWord || 'DISCIPLINE').trim().toUpperCase(),
     };
 }
 
@@ -187,17 +191,27 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     const persistProgress = useCallback(() => {
         if (typeof window === 'undefined') return;
-        const existing = JSON.parse(localStorage.getItem('boxing_onboarding_data') || '{}');
-        const merged = { ...existing, ...serializeOnboarding(data) };
-        localStorage.setItem('boxing_onboarding_data', JSON.stringify(merged));
+        try {
+            const existing = JSON.parse(localStorage.getItem('boxing_onboarding_data') || '{}');
+            const merged = { ...existing, ...serializeOnboarding(data) };
+            localStorage.setItem('boxing_onboarding_data', JSON.stringify(merged));
+        } catch (e) {
+            console.warn('Failed to persist onboarding data locally:', e);
+        }
     }, [data]);
 
     const nextStep = () => {
-        persistProgress();
+        try {
+            persistProgress();
+        } catch (e) {
+            console.warn('persistProgress error:', e);
+        }
         setCurrentStep(prev => {
             const next = Math.min(prev + 1, totalSteps + 1);
             if (typeof window !== 'undefined') {
-                localStorage.setItem('boxing_onboarding_step', String(next));
+                try {
+                    localStorage.setItem('boxing_onboarding_step', String(next));
+                } catch {}
             }
             return next;
         });

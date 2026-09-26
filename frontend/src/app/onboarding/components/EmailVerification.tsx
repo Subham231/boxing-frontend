@@ -223,10 +223,14 @@ const EmailVerification: React.FC = () => {
           </div>
         )}
 
-        {error && <p className="text-[10px] font-bold text-red-400">{error}</p>}
       </main>
 
       <footer className="mt-6 sm:mt-8 flex flex-col gap-3 sm:gap-4">
+        {error && (
+          <div className="p-2.5 rounded-xl border border-red-500/50 bg-red-500/15 text-xs font-bold text-center leading-relaxed text-red-400">
+            {error}
+          </div>
+        )}
         {step === 'details' ? (
           <button
             onClick={handleSendLink}
