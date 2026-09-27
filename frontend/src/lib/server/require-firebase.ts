@@ -37,6 +37,10 @@ export async function requireVerifiedFirebaseUid(req: NextRequest): Promise<
 
   const { token } = result;
   const provider = token.firebase?.sign_in_provider;
+  // Only email/password accounts require explicit email verification.
+  // Phone accounts are verified via SMS code. Google accounts are
+  // auto-verified by Google (email_verified is always true). Any other
+  // federated provider (GitHub, Apple, etc.) is also trusted.
   const isPasswordAccount = provider === 'password';
   const hasVerifiedEmail = token.email_verified === true;
 

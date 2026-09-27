@@ -13,6 +13,10 @@ import {
   signInWithEmailLink,
   linkWithCredential,
   EmailAuthProvider,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   reload,
   type ActionCodeSettings,
   type ConfirmationResult,
@@ -505,3 +509,97 @@ export async function linkEmailPasswordToUser(user: User, email: string, passwor
   await linkWithCredential(user, credential);
   await sendVerificationEmailSafe(user);
 }
+
+// ---------------------------------------------------------------------------
+// Google Sign-In (1-Tap)
+//
+// Solves two critical problems at once:
+//   1. Gmail users who never receive the magic link (Spam / throttle / missing
+//      SPF/DKIM on the Firebase default sender domain).
+//   2. PWA / installed web app users — tapping a magic link in Gmail opens
+//      Chrome, not the standalone PWA. signInWithPopup runs entirely inside
+//      the PWA's own webview, so the session stays in the app.
+//
+// Uses popup first (fastest, works in most browsers). If the popup is blocked
+// (e.g. iOS Safari in a PWA) falls back to redirect, which is slower but
+// universally supported.
+// ---------------------------------------------------------------------------
+
+const googleProvider = new GoogleAuthProvider();
+// Prompt the user to select an account every time (avoids silently picking
+// a stale account the fighter doesn't want to use).
+googleProvider.setCustomParameters({ prompt: 'select_account' });
+
+/**
+ * Sign in with Google via popup. Falls back to redirect if popup is blocked.
+ * Returns the authenticated Firebase User.
+ */
+export async function loginWithGoogle(): Promise<User> {
+  try {
+    const result = await signInWithPopup(firebaseAuth, googleProvider);
+    return result.user;
+  } catch (err: unknown) {
+    const code =
+      err && typeof err === 'object' && 'code' in err
+        ? String((err as { code?: string }).code)
+        : '';
+
+    // Popup blocked or unavailable (common in PWAs on iOS)
+    if (
+      code === 'auth/popup-blocked' ||
+      code === 'auth/popup-closed-by-user' ||
+      code === 'auth/cancelled-popup-request'
+    ) {
+      // Fall back to full-page redirect
+      await signInWithRedirect(firebaseAuth, googleProvider);
+      // signInWithRedirect navigates away; this line won't execute.
+      // After redirect, getRedirectResult on page load resolves the user.
+      throw new Error('REDIRECT_STARTED');
+    }
+    throw new Error(formatGoogleAuthError(err));
+  }
+}
+
+/**
+ * Call on page load to pick up a Google redirect result (only fires when
+ * the user was sent through signInWithRedirect in the previous session).
+ */
+export async function checkGoogleRedirectResult(): Promise<User | null> {
+  try {
+    const result = await getRedirectResult(firebaseAuth);
+    return result?.user ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Map Google sign-in errors to user-friendly strings. */
+export function formatGoogleAuthError(error: unknown): string {
+  const code =
+    error && typeof error === 'object' && 'code' in error
+      ? String((error as { code?: string }).code)
+      : '';
+  switch (code) {
+    case 'auth/popup-closed-by-user':
+    case 'auth/cancelled-popup-request':
+      return 'Sign-in was cancelled. Try again when ready.';
+    case 'auth/popup-blocked':
+      return 'Popup was blocked by your browser. Allow popups for this site, or try again.';
+    case 'auth/account-exists-with-different-credential':
+      return 'An account already exists with this email using a different sign-in method.';
+    case 'auth/network-request-failed':
+      return 'Network problem. Check your connection and try again.';
+    case 'auth/user-disabled':
+      return 'This account has been disabled. Contact support.';
+    case 'auth/too-many-requests':
+      return 'Too many attempts. Wait a bit, then try again.';
+    default: {
+      const message = error instanceof Error ? error.message : '';
+      const cleaned = message
+        .replace(/^Firebase:\s*/i, '')
+        .replace(/\s*\(auth\/[^)]+\)\s*$/i, '');
+      return cleaned || 'Google sign-in failed. Please try again.';
+    }
+  }
+}
+

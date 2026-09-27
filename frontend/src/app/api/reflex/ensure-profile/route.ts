@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
   // never anything the client body could claim.
   const email = typeof decoded.email === 'string' ? decoded.email.trim().toLowerCase() : '';
   const emailVerified = decoded.email_verified === true;
-  const authMethod: 'phone' | 'email' = decoded.firebase?.sign_in_provider === 'password' ? 'email' : 'phone';
+  const authMethod: 'phone' | 'email' = (decoded.firebase?.sign_in_provider === 'password' || decoded.firebase?.sign_in_provider === 'google.com') ? 'email' : 'phone';
 
   const body = await req.json().catch(() => ({}));
   const referredBy = typeof body.referredBy === 'string' ? body.referredBy.trim().toUpperCase() : null;
