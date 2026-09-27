@@ -29,3 +29,34 @@ export async function verifyFirebaseIdToken(idToken: string) {
   const auth = getAuth(getFirebaseAdminApp());
   return auth.verifyIdToken(idToken);
 }
+
+// ---------------------------------------------------------------------------
+// Used by /api/email-auth/* once our own OTP check (Supabase, not Firebase)
+// has succeeded. Firebase's `email_verified` claim only changes when we flip
+// it here — the client must then force-refresh its ID token
+// (getIdToken(true)) before that claim shows up, same as any other custom
+// claim change.
+// ---------------------------------------------------------------------------
+
+/** Marks a Firebase user's email as verified after a successful email-OTP check. */
+export async function markFirebaseEmailVerified(uid: string): Promise<void> {
+  const auth = getAuth(getFirebaseAdminApp());
+  await auth.updateUser(uid, { emailVerified: true });
+}
+
+/** Looks up a Firebase user by email. Returns null if none exists (never throws on not-found). */
+export async function getFirebaseUserByEmail(email: string) {
+  const auth = getAuth(getFirebaseAdminApp());
+  try {
+    return await auth.getUserByEmail(email);
+  } catch (err: unknown) {
+    if (err && typeof err === 'object' && 'code' in err && err.code === 'auth/user-not-found') return null;
+    throw err;
+  }
+}
+
+/** Sets a new password for a user after a successful password-reset email-OTP check. */
+export async function setFirebaseUserPassword(uid: string, newPassword: string): Promise<void> {
+  const auth = getAuth(getFirebaseAdminApp());
+  await auth.updateUser(uid, { password: newPassword });
+}

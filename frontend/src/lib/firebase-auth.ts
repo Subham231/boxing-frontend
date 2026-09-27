@@ -6,8 +6,6 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   fetchSignInMethodsForEmail,
-  sendEmailVerification,
-  sendPasswordResetEmail,
   sendSignInLinkToEmail,
   isSignInWithEmailLink,
   signInWithEmailLink,
@@ -55,6 +53,7 @@ export interface UserProfile {
 }
 
 const recaptchaVerifiers = new Map<string, RecaptchaVerifier>();
+const googleProvider = new GoogleAuthProvider();
 
 // Phone OTP architecture:
 //   1. Firebase Auth sends + verifies the SMS code (RecaptchaVerifier +
@@ -202,12 +201,10 @@ export async function confirmOtp(
  * check `error.code` instead of parsing the message string. */
 export class ProfileRequestError extends Error {
   code?: string;
-  status?: number;
-  constructor(message: string, code?: string, status?: number) {
+  constructor(message: string, code?: string) {
     super(message);
     this.name = 'ProfileRequestError';
     this.code = code;
-    this.status = status;
   }
 }
 
@@ -215,39 +212,18 @@ export async function ensureUserProfile(
   user: User,
   referralCodeEntered?: string,
 ): Promise<{ profile: UserProfile; isNew: boolean; sessionToken?: string }> {
-  // One retry on a transient (network / 5xx) failure. Business errors such as
-  // 403 EMAIL_NOT_VERIFIED or 409 conflicts are returned immediately.
-  let lastError: unknown;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const idToken = await user.getIdToken();
-      const res = await fetch('/api/reflex/ensure-profile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({ referredBy: referralCodeEntered || null }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        const failure = new ProfileRequestError(err?.error || 'Could not create profile.', err?.code, res.status);
-        if (res.status >= 500 && attempt === 0) {
-          lastError = failure;
-          await new Promise((r) => setTimeout(r, 600));
-          continue;
-        }
-        throw failure;
-      }
-      const { profile, isNew, sessionToken } = await res.json();
-      return { profile: profile as UserProfile, isNew: !!isNew, sessionToken };
-    } catch (e) {
-      if (e instanceof ProfileRequestError) throw e;
-      lastError = e;
-      if (attempt === 0) {
-        await new Promise((r) => setTimeout(r, 600));
-        continue;
-      }
-    }
+  const idToken = await user.getIdToken();
+  const res = await fetch('/api/reflex/ensure-profile', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+    body: JSON.stringify({ referredBy: referralCodeEntered || null }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new ProfileRequestError(err?.error || 'Could not create profile.', err?.code);
   }
-  throw lastError instanceof Error ? lastError : new ProfileRequestError('Could not create profile.');
+  const { profile, isNew, sessionToken } = await res.json();
+  return { profile: profile as UserProfile, isNew: !!isNew, sessionToken };
 }
 
 export async function claimReferralIfNeeded(user: User): Promise<void> {
@@ -320,12 +296,6 @@ export function formatEmailAuthError(error: unknown): string {
   const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
 
   switch (code) {
-    case 'auth/invalid-action-code':
-      return 'This sign-in link has expired or has already been used. Please request a new link.';
-    case 'auth/expired-action-code':
-      return 'This sign-in link has expired. Please request a new one.';
-    case 'auth/operation-not-allowed':
-      return 'Email link sign-in is not enabled. Please check Firebase Authentication settings.';
     case 'auth/email-already-in-use':
       return 'An account already exists for this email. Try logging in instead.';
     case 'auth/invalid-email':
@@ -344,10 +314,6 @@ export function formatEmailAuthError(error: unknown): string {
       return 'For security, please log in again before doing this.';
     case 'auth/credential-already-in-use':
       return 'This email is already linked to a different account.';
-    case 'auth/network-request-failed':
-      return 'Network problem. Check your connection and try again.';
-    case 'auth/provider-already-linked':
-      return 'This account already has an email login.';
     case 'auth/user-disabled':
       return 'This account has been disabled. Contact support.';
     default: {
@@ -363,17 +329,15 @@ export async function emailAccountExists(email: string): Promise<boolean> {
   return methods.length > 0;
 }
 
-/** True when this Firebase user signed up with a phone number and has no email yet. */
+/** True when the account is phone-authenticated without an email/password provider. */
 export function isPhoneOnlyUser(user: User | null | undefined): user is User {
   if (!user) return false;
-  const providers = user.providerData.map((p) => p.providerId);
-  const hasPhone = providers.includes('phone') || !!user.phoneNumber;
-  const hasPassword = providers.includes('password');
-  return hasPhone && !hasPassword;
+  const providers = user.providerData.map((provider) => provider.providerId);
+  return (providers.includes('phone') || !!user.phoneNumber) && !providers.includes('password');
 }
 
-/** Where the passwordless magic link returns the fighter back to */
-export function getEmailLinkActionSettings(email: string, continuePath: string = '/dashboard'): ActionCodeSettings {
+/** Build the Firebase action URL for an existing passwordless sign-in flow. */
+export function getEmailLinkActionSettings(email: string, continuePath = '/dashboard'): ActionCodeSettings {
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://sparai.in';
   return {
     url: `${origin}/auth/finish?email=${encodeURIComponent(email.trim().toLowerCase())}&continue=${encodeURIComponent(continuePath)}`,
@@ -381,225 +345,219 @@ export function getEmailLinkActionSettings(email: string, continuePath: string =
   };
 }
 
-/**
- * Sends a passwordless sign-in magic link to the fighter's email.
- * Clicking the link authenticates the user directly and verifies their email.
- */
-export async function sendPasswordlessSignInLink(email: string, continuePath: string = '/dashboard'): Promise<void> {
+export async function sendPasswordlessSignInLink(email: string, continuePath = '/dashboard'): Promise<void> {
   const cleanEmail = email.trim().toLowerCase();
-  const settings = getEmailLinkActionSettings(cleanEmail, continuePath);
-  await sendSignInLinkToEmail(firebaseAuth, cleanEmail, settings);
+  await sendSignInLinkToEmail(firebaseAuth, cleanEmail, getEmailLinkActionSettings(cleanEmail, continuePath));
   if (typeof window !== 'undefined') {
     window.localStorage.setItem('sparai_email_for_signin', cleanEmail);
     window.localStorage.setItem('sparai_email_signin_ts', Date.now().toString());
   }
 }
 
-/**
- * Checks whether the current URL contains a valid Firebase sign-in link.
- */
 export function isPasswordlessSignInLink(url?: string): boolean {
   const target = url || (typeof window !== 'undefined' ? window.location.href : '');
   return isSignInWithEmailLink(firebaseAuth, target);
 }
 
-/**
- * Completes sign-in with the incoming magic link.
- * Resolves email from local storage, URL params, or the provided fallback.
- */
 export async function completePasswordlessSignIn(emailFallback?: string, url?: string): Promise<User> {
   const currentUrl = url || (typeof window !== 'undefined' ? window.location.href : '');
   if (!isSignInWithEmailLink(firebaseAuth, currentUrl)) {
     throw new Error('This sign-in link is invalid or has already been used.');
   }
 
-  let emailToUse = (emailFallback || '').trim().toLowerCase();
-  if (!emailToUse && typeof window !== 'undefined') {
-    emailToUse = window.localStorage.getItem('sparai_email_for_signin') || '';
+  let email = (emailFallback || '').trim().toLowerCase();
+  if (!email && typeof window !== 'undefined') {
+    email = window.localStorage.getItem('sparai_email_for_signin') || '';
   }
-  if (!emailToUse && typeof window !== 'undefined') {
-    const params = new URLSearchParams(window.location.search);
-    emailToUse = (params.get('email') || '').trim().toLowerCase();
+  if (!email && typeof window !== 'undefined') {
+    email = (new URLSearchParams(window.location.search).get('email') || '').trim().toLowerCase();
   }
+  if (!email) throw new Error('NO_EMAIL_FOUND');
 
-  if (!emailToUse) {
-    throw new Error('NO_EMAIL_FOUND');
-  }
-
-  const result = await signInWithEmailLink(firebaseAuth, emailToUse, currentUrl);
-  if (typeof window !== 'undefined') {
-    window.localStorage.removeItem('sparai_email_for_signin');
-  }
+  const result = await signInWithEmailLink(firebaseAuth, email, currentUrl);
+  if (typeof window !== 'undefined') window.localStorage.removeItem('sparai_email_for_signin');
   return result.user;
 }
 
-/** Where the verification link should send the fighter back to. */
-function verificationActionSettings(): ActionCodeSettings | undefined {
-  if (typeof window === 'undefined') return undefined;
-  return { url: `${window.location.origin}/verify-email?verified=1` };
+export async function loginWithGoogle(): Promise<User> {
+  try {
+    return (await signInWithPopup(firebaseAuth, googleProvider)).user;
+  } catch (error: unknown) {
+    const code = error && typeof error === 'object' && 'code' in error
+      ? String((error as { code?: string }).code)
+      : '';
+    if (['auth/popup-blocked', 'auth/popup-closed-by-user', 'auth/cancelled-popup-request'].includes(code)) {
+      await signInWithRedirect(firebaseAuth, googleProvider);
+      throw new Error('REDIRECT_STARTED');
+    }
+    throw new Error(formatGoogleAuthError(error));
+  }
 }
 
-/**
- * Sends the Firebase verification email.
- */
-export async function sendVerificationEmailSafe(user: User): Promise<void> {
-  const settings = verificationActionSettings();
-  if (settings) {
-    try {
-      await sendEmailVerification(user, settings);
-      return;
-    } catch (e) {
-      const code = e && typeof e === 'object' && 'code' in e ? String((e as { code?: string }).code) : '';
-      if (code !== 'auth/unauthorized-continue-uri' && code !== 'auth/invalid-continue-uri' && code !== 'auth/missing-continue-uri') {
-        throw e;
-      }
+export async function checkGoogleRedirectResult(): Promise<User | null> {
+  try {
+    return (await getRedirectResult(firebaseAuth))?.user ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function formatGoogleAuthError(error: unknown): string {
+  const code = error && typeof error === 'object' && 'code' in error
+    ? String((error as { code?: string }).code)
+    : '';
+  switch (code) {
+    case 'auth/popup-closed-by-user':
+    case 'auth/cancelled-popup-request':
+      return 'Sign-in was cancelled. Try again when ready.';
+    case 'auth/popup-blocked':
+      return 'Popup was blocked. Allow popups for this site or try again.';
+    case 'auth/account-exists-with-different-credential':
+      return 'An account already exists with this email using another sign-in method.';
+    case 'auth/network-request-failed':
+      return 'Network problem. Check your connection and try again.';
+    default: {
+      const message = error instanceof Error ? error.message : '';
+      const cleaned = message.replace(/^Firebase:\s*/i, '').replace(/\s*\(auth\/[^)]+\)\s*$/i, '');
+      return cleaned || 'Google sign-in failed. Please try again.';
     }
   }
-  await sendEmailVerification(user);
 }
 
 /**
- * New-user signup with email + password (legacy fallback).
+ * New-user signup with email + password. Creates the Firebase account and
+ * returns the (unverified) user. Does NOT send a verification email itself
+ * and does NOT create the Supabase profile row yet — that only happens
+ * once the email is verified (see ensureUserProfile / the /verify-email
+ * page). Callers should follow this with sendEmailVerificationOtp(user).
+ *
+ * Verification is a 6-digit code sent via our own /api/email-auth/send-otp
+ * (real transactional email API), not Firebase's built-in
+ * sendEmailVerification() — Firebase's own mailer is what was causing
+ * verification emails to never arrive in Gmail inboxes, and its link-based
+ * flow doesn't return cleanly into an installed PWA. See
+ * lib/server/email-otp.ts for details.
  */
 export async function signUpWithEmail(email: string, password: string): Promise<User> {
-  const current = firebaseAuth.currentUser;
-  if (isPhoneOnlyUser(current)) {
-    await linkEmailPasswordToUser(current, email, password);
-    return current;
-  }
   const cred = await createUserWithEmailAndPassword(firebaseAuth, email.trim(), password);
-  await sendVerificationEmailSafe(cred.user);
   return cred.user;
 }
 
+/** Sends a 6-digit email-verification code to the signed-in user's own email. */
+export async function sendEmailVerificationOtp(user: User): Promise<{ ok: boolean; message?: string }> {
+  const idToken = await user.getIdToken();
+  const res = await fetch('/api/email-auth/send-otp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+    body: JSON.stringify({ purpose: 'verify' }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { ok: false, message: data?.message || data?.error || 'Could not send the code.' };
+  return { ok: true };
+}
+
 /**
- * Login with email + password (legacy fallback).
+ * Submits the 6-digit code the fighter received by email. On success,
+ * flips emailVerified=true server-side (Firebase Admin) and force-refreshes
+ * this client's ID token so `token.email_verified` shows true on the very
+ * next protected API call (e.g. ensureUserProfile).
+ */
+export async function verifyEmailVerificationOtp(user: User, otp: string): Promise<{ ok: boolean; message?: string }> {
+  const idToken = await user.getIdToken();
+  const res = await fetch('/api/email-auth/verify-otp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+    body: JSON.stringify({ purpose: 'verify', otp }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.verified) {
+    const messages: Record<string, string> = {
+      incorrect_code: 'That code is incorrect.',
+      too_many_attempts: 'Too many incorrect attempts. Request a new code.',
+      no_active_otp: 'That code has expired. Request a new one.',
+      invalid_input: 'Enter the 6-digit code.',
+    };
+    return { ok: false, message: messages[data?.reason] || 'Could not verify that code.' };
+  }
+  await reload(user);
+  await user.getIdToken(true);
+  return { ok: true };
+}
+
+/** Step 1 of the forgot-password flow — sends a 6-digit reset code by email. */
+export async function sendPasswordResetOtp(email: string): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch('/api/email-auth/send-otp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ purpose: 'reset', email: email.trim().toLowerCase() }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { ok: false, message: data?.message || data?.error || 'Could not send the code.' };
+  return { ok: true };
+}
+
+/** Step 2 of the forgot-password flow — verifies the code and sets the new password. */
+export async function verifyPasswordResetOtp(
+  email: string,
+  otp: string,
+  newPassword: string,
+): Promise<{ ok: boolean; message?: string }> {
+  const res = await fetch('/api/email-auth/verify-otp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ purpose: 'reset', email: email.trim().toLowerCase(), otp, newPassword }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.verified) {
+    const messages: Record<string, string> = {
+      incorrect_code: 'That code is incorrect.',
+      too_many_attempts: 'Too many incorrect attempts. Request a new code.',
+      no_active_otp: 'That code has expired. Request a new one.',
+      invalid_input: 'Enter the 6-digit code.',
+      weak_password: 'Choose a password with at least 6 characters.',
+    };
+    return { ok: false, message: messages[data?.reason] || 'Could not reset your password.' };
+  }
+  return { ok: true };
+}
+
+/**
+ * Login with email + password. Throws the raw Firebase error on bad
+ * credentials — callers should run it through formatEmailAuthError. Does
+ * NOT check emailVerified itself; callers decide what to do with an
+ * unverified user (normally: send them to /verify-email). The backend
+ * enforces verification independently on any protected route.
  */
 export async function loginWithEmail(email: string, password: string): Promise<User> {
   const cred = await signInWithEmailAndPassword(firebaseAuth, email.trim(), password);
   return cred.user;
 }
 
-/** Re-sends the verification email to the currently signed-in user. */
-export async function resendVerificationEmail(user: User): Promise<void> {
-  await sendVerificationEmailSafe(user);
-}
-
 /**
- * Forces a fresh token fetch from Firebase and returns whether the email is verified now.
+ * Forces a fresh token fetch from Firebase and returns whether the email
+ * is verified now. Firebase's local `user.emailVerified` is a snapshot from
+ * sign-in time — it does NOT update on its own after the user clicks the
+ * link in their inbox, so this reload is required before checking.
  */
 export async function refreshEmailVerified(user: User): Promise<boolean> {
-  const live = firebaseAuth.currentUser && firebaseAuth.currentUser.uid === user.uid ? firebaseAuth.currentUser : user;
-  await reload(live);
-  if (live.emailVerified) {
-    await live.getIdToken(true);
-  }
-  return live.emailVerified;
-}
-
-export async function sendResetPasswordEmail(email: string): Promise<void> {
-  await sendPasswordResetEmail(firebaseAuth, email.trim());
+  await reload(user);
+  // The ID token can still contain the pre-verification claim after reload.
+  // Force a fresh token before protected profile APIs inspect email_verified.
+  await user.getIdToken(true);
+  return user.emailVerified;
 }
 
 /**
- * Migration path for existing phone-auth users: links an email/password credential.
+ * Migration path for existing phone-auth users: links an email/password
+ * credential onto the CURRENT Firebase user without creating a new account
+ * or a new uid. All existing Supabase data (keyed by uid) is untouched —
+ * ensureUserProfile just adds the email onto the same profile row after
+ * this succeeds. Firebase itself rejects the link if the email is already
+ * used by a different account (auth/credential-already-in-use — see
+ * formatEmailAuthError above). Does not send a verification code itself —
+ * call sendEmailVerificationOtp(user) right after this succeeds.
  */
 export async function linkEmailPasswordToUser(user: User, email: string, password: string): Promise<void> {
   const credential = EmailAuthProvider.credential(email.trim(), password);
   await linkWithCredential(user, credential);
-  await sendVerificationEmailSafe(user);
 }
-
-// ---------------------------------------------------------------------------
-// Google Sign-In (1-Tap)
-//
-// Solves two critical problems at once:
-//   1. Gmail users who never receive the magic link (Spam / throttle / missing
-//      SPF/DKIM on the Firebase default sender domain).
-//   2. PWA / installed web app users — tapping a magic link in Gmail opens
-//      Chrome, not the standalone PWA. signInWithPopup runs entirely inside
-//      the PWA's own webview, so the session stays in the app.
-//
-// Uses popup first (fastest, works in most browsers). If the popup is blocked
-// (e.g. iOS Safari in a PWA) falls back to redirect, which is slower but
-// universally supported.
-// ---------------------------------------------------------------------------
-
-const googleProvider = new GoogleAuthProvider();
-// Prompt the user to select an account every time (avoids silently picking
-// a stale account the fighter doesn't want to use).
-googleProvider.setCustomParameters({ prompt: 'select_account' });
-
-/**
- * Sign in with Google via popup. Falls back to redirect if popup is blocked.
- * Returns the authenticated Firebase User.
- */
-export async function loginWithGoogle(): Promise<User> {
-  try {
-    const result = await signInWithPopup(firebaseAuth, googleProvider);
-    return result.user;
-  } catch (err: unknown) {
-    const code =
-      err && typeof err === 'object' && 'code' in err
-        ? String((err as { code?: string }).code)
-        : '';
-
-    // Popup blocked or unavailable (common in PWAs on iOS)
-    if (
-      code === 'auth/popup-blocked' ||
-      code === 'auth/popup-closed-by-user' ||
-      code === 'auth/cancelled-popup-request'
-    ) {
-      // Fall back to full-page redirect
-      await signInWithRedirect(firebaseAuth, googleProvider);
-      // signInWithRedirect navigates away; this line won't execute.
-      // After redirect, getRedirectResult on page load resolves the user.
-      throw new Error('REDIRECT_STARTED');
-    }
-    throw new Error(formatGoogleAuthError(err));
-  }
-}
-
-/**
- * Call on page load to pick up a Google redirect result (only fires when
- * the user was sent through signInWithRedirect in the previous session).
- */
-export async function checkGoogleRedirectResult(): Promise<User | null> {
-  try {
-    const result = await getRedirectResult(firebaseAuth);
-    return result?.user ?? null;
-  } catch {
-    return null;
-  }
-}
-
-/** Map Google sign-in errors to user-friendly strings. */
-export function formatGoogleAuthError(error: unknown): string {
-  const code =
-    error && typeof error === 'object' && 'code' in error
-      ? String((error as { code?: string }).code)
-      : '';
-  switch (code) {
-    case 'auth/popup-closed-by-user':
-    case 'auth/cancelled-popup-request':
-      return 'Sign-in was cancelled. Try again when ready.';
-    case 'auth/popup-blocked':
-      return 'Popup was blocked by your browser. Allow popups for this site, or try again.';
-    case 'auth/account-exists-with-different-credential':
-      return 'An account already exists with this email using a different sign-in method.';
-    case 'auth/network-request-failed':
-      return 'Network problem. Check your connection and try again.';
-    case 'auth/user-disabled':
-      return 'This account has been disabled. Contact support.';
-    case 'auth/too-many-requests':
-      return 'Too many attempts. Wait a bit, then try again.';
-    default: {
-      const message = error instanceof Error ? error.message : '';
-      const cleaned = message
-        .replace(/^Firebase:\s*/i, '')
-        .replace(/\s*\(auth\/[^)]+\)\s*$/i, '');
-      return cleaned || 'Google sign-in failed. Please try again.';
-    }
-  }
-}
-

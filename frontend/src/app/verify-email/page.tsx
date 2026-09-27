@@ -1,41 +1,58 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { MailCheck, RefreshCw, LogOut, ShieldCheck, Phone } from 'lucide-react';
+import { ShieldCheck, RefreshCw, LogOut } from 'lucide-react';
 import { useFirebaseUser } from '@/lib/useFirebaseUser';
-import { firebaseAuth } from '@/lib/firebase';
 import {
-  resendVerificationEmail,
-  sendPasswordlessSignInLink,
-  refreshEmailVerified,
+  sendEmailVerificationOtp,
+  verifyEmailVerificationOtp,
   ensureUserProfile,
+  saveProfileDetails,
   signOutFirebase,
   ProfileRequestError,
-  formatEmailAuthError,
 } from '@/lib/firebase-auth';
 import { cacheProfileLocally } from '@/lib/profile-client';
 
-const RESEND_COOLDOWN_SECONDS = 30;
-const AUTO_CHECK_INTERVAL_MS = 4000;
+const RESEND_COOLDOWN_SECONDS = 45;
+const CODE_LENGTH = 6;
 
+// A 6-digit code typed back into the same page beats a "click the link in
+// your email" flow on two counts:
+//  1. Deliverability — the code goes out through a real transactional email
+//     API (see lib/server/email-otp.ts), not Firebase's own shared mailer,
+//     which is what Gmail was silently dropping/spam-filtering.
+//  2. Installed PWA — there's no external link to open, so there's no
+//     "opens in the system browser and loses the app context" problem.
+//     Everything happens on this one screen, browser tab or installed app
+//     alike.
 export default function VerifyEmailPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useFirebaseUser();
-  const [checking, setChecking] = useState(false);
+  const [digits, setDigits] = useState<string[]>(Array(CODE_LENGTH).fill(''));
+  const [verifying, setVerifying] = useState(false);
   const [resending, setResending] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
-
-  // Guards so the auto-check and the button can never both run the "finish"
-  // step (profile creation + redirect) at the same time.
-  const finishing = useRef(false);
-  const inFlight = useRef(false);
+  const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
+  const autoSentRef = useRef(false);
 
   useEffect(() => {
     if (authLoading) return;
-    if (!user) router.replace('/login');
+    if (!user) {
+      router.replace('/login');
+      return;
+    }
+    // If the fighter lands here directly (e.g. refresh) with no code sent
+    // yet this session, send the first one automatically.
+    if (!autoSentRef.current) {
+      autoSentRef.current = true;
+      sendEmailVerificationOtp(user).then((res) => {
+        if (!res.ok) setError(res.message || 'Could not send the code.');
+        else setCooldown(RESEND_COOLDOWN_SECONDS);
+      });
+    }
   }, [user, authLoading, router]);
 
   useEffect(() => {
@@ -44,120 +61,101 @@ export default function VerifyEmailPage() {
     return () => clearInterval(t);
   }, [cooldown]);
 
-  const finishAfterVerified = useCallback(async (): Promise<void> => {
-    const current = firebaseAuth.currentUser;
-    if (!current || finishing.current) return;
-    finishing.current = true;
+  const finishAfterVerified = async () => {
+    if (!user) return;
     try {
-      const { profile } = await ensureUserProfile(current);
+      const { profile } = await ensureUserProfile(user);
       cacheProfileLocally(profile);
       const onboardingData = (profile.onboarding_data ?? {}) as Record<string, unknown>;
-      const onboarded = !!onboardingData.onboarding_completed || !!onboardingData.ring_name;
-      if (typeof window !== 'undefined' && onboarded) {
+      if (typeof window !== 'undefined' && onboardingData.onboarding_completed) {
         localStorage.setItem('boxing_onboarding_done', 'true');
       }
-      router.replace(onboarded ? '/dashboard' : '/onboarding');
-    } catch (e) {
-      finishing.current = false;
-      if (e instanceof ProfileRequestError) {
-        if (e.code === 'EMAIL_NOT_VERIFIED') {
-          // Stale ID token edge case — the auto-check will retry shortly.
-          setError('Email confirmed — finishing up. If this stays, tap the button again.');
-          return;
-        }
-        if (e.code === 'ACCOUNT_EMAIL_CONFLICT' || e.code === 'ACCOUNT_PHONE_CONFLICT') {
-          setError(e.message);
-          return;
-        }
+      if (!onboardingData.onboarding_completed) {
+        saveProfileDetails(user, { onboardingData: { ...onboardingData } }).catch(() => {});
+        router.replace('/onboarding');
+        return;
       }
-      // Anything else (network blip, server hiccup): the email IS verified, so
-      // let the fighter in — the app layout retries profile creation on every
-      // protected route.
+      router.replace('/dashboard');
+    } catch (e) {
+      if (e instanceof ProfileRequestError && e.code === 'EMAIL_NOT_VERIFIED') {
+        setError('Still showing as unverified — try again in a moment.');
+        return;
+      }
+      // Profile creation is best-effort here; the app-level layout also
+      // calls ensureUserProfile on every protected route.
       router.replace('/dashboard');
     }
-  }, [router]);
+  };
 
-  const runCheck = useCallback(
-    async (manual: boolean): Promise<void> => {
-      const current = firebaseAuth.currentUser;
-      if (!current || inFlight.current || finishing.current) return;
-      inFlight.current = true;
-      if (manual) {
-        setError(null);
-        setInfo(null);
-        setChecking(true);
+  const handleDigitChange = (index: number, value: string) => {
+    const clean = value.replace(/\D/g, '');
+    if (!clean) {
+      const next = [...digits];
+      next[index] = '';
+      setDigits(next);
+      return;
+    }
+    // Supports pasting the whole code into one box.
+    const chars = clean.split('');
+    const next = [...digits];
+    for (let i = 0; i < chars.length && index + i < CODE_LENGTH; i++) {
+      next[index + i] = chars[i];
+    }
+    setDigits(next);
+    const nextIndex = Math.min(index + chars.length, CODE_LENGTH - 1);
+    inputsRef.current[nextIndex]?.focus();
+    if (next.every((d) => d)) handleVerify(next.join(''));
+  };
+
+  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !digits[index] && index > 0) {
+      inputsRef.current[index - 1]?.focus();
+    }
+  };
+
+  const handleVerify = async (code?: string) => {
+    if (!user) return;
+    const otp = code ?? digits.join('');
+    if (otp.length !== CODE_LENGTH) {
+      setError('Enter the 6-digit code.');
+      return;
+    }
+    setError(null);
+    setInfo(null);
+    setVerifying(true);
+    try {
+      const result = await verifyEmailVerificationOtp(user, otp);
+      if (!result.ok) {
+        setError(result.message || 'Could not verify that code.');
+        setDigits(Array(CODE_LENGTH).fill(''));
+        inputsRef.current[0]?.focus();
+        return;
       }
-      try {
-        const verified = await refreshEmailVerified(current);
-        if (verified) {
-          setError(null);
-          await finishAfterVerified();
-        } else if (manual) {
-          setError(
-            `Not verified yet for ${current.email || 'this email'}. Open the newest link in that inbox (check Spam / Promotions), then tap again — or resend the email.`,
-          );
-        }
-      } catch (e) {
-        if (manual) setError(formatEmailAuthError(e) || 'Could not check verification status. Try again.');
-      } finally {
-        inFlight.current = false;
-        if (manual) setChecking(false);
-      }
-    },
-    [finishAfterVerified],
-  );
-
-  // Auto-detect verification: when the fighter comes back to this tab/app, and
-  // every few seconds while it is visible — they should not have to guess when
-  // to tap the button. The ?verified=1 return link from the email also lands
-  // here, so the first check fires immediately.
-  useEffect(() => {
-    if (authLoading || !user) return;
-    void runCheck(false);
-
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') void runCheck(false);
-    };
-    const onFocus = () => void runCheck(false);
-    document.addEventListener('visibilitychange', onVisible);
-    window.addEventListener('focus', onFocus);
-    const timer = setInterval(() => {
-      if (document.visibilityState === 'visible') void runCheck(false);
-    }, AUTO_CHECK_INTERVAL_MS);
-
-    return () => {
-      document.removeEventListener('visibilitychange', onVisible);
-      window.removeEventListener('focus', onFocus);
-      clearInterval(timer);
-    };
-  }, [authLoading, user, runCheck]);
+      await finishAfterVerified();
+    } catch {
+      setError('Could not verify that code. Try again.');
+    } finally {
+      setVerifying(false);
+    }
+  };
 
   const handleResend = async () => {
-    const current = firebaseAuth.currentUser;
-    if (!current || cooldown > 0) return;
+    if (!user || cooldown > 0) return;
     setError(null);
     setInfo(null);
     setResending(true);
     try {
-      if (current.email) {
-        try {
-          await sendPasswordlessSignInLink(current.email, '/dashboard');
-        } catch {
-          await resendVerificationEmail(current);
-        }
-      } else {
-        await resendVerificationEmail(current);
+      const result = await sendEmailVerificationOtp(user);
+      if (!result.ok) {
+        setError(result.message || 'Could not resend right now.');
+        return;
       }
-      setInfo('Sign-in link sent again — check your inbox and spam folder. Tap the link to enter directly.');
+      setInfo('New code sent — check your inbox (and spam folder, just in case).');
       setCooldown(RESEND_COOLDOWN_SECONDS);
-    } catch (e) {
-      const code = e && typeof e === 'object' && 'code' in e ? String((e as { code?: string }).code) : '';
-      setError(
-        code === 'auth/too-many-requests'
-          ? 'Too many emails requested. Wait a few minutes, then try again.'
-          : 'Could not resend right now. Wait a bit and try again.',
-      );
-      setCooldown(RESEND_COOLDOWN_SECONDS);
+      setDigits(Array(CODE_LENGTH).fill(''));
+      inputsRef.current[0]?.focus();
+    } catch {
+      setError('Could not resend right now. Wait a bit and try again.');
     } finally {
       setResending(false);
     }
@@ -166,11 +164,6 @@ export default function VerifyEmailPage() {
   const handleUseDifferentEmail = async () => {
     await signOutFirebase();
     router.replace('/signup');
-  };
-
-  const handleUsePhone = async () => {
-    await signOutFirebase();
-    router.replace('/login/phone');
   };
 
   return (
@@ -183,18 +176,31 @@ export default function VerifyEmailPage() {
             <span className="text-[10px] font-black uppercase tracking-[0.2em]">One step left</span>
           </div>
           <h1 className="mt-4 text-4xl font-black italic uppercase leading-[0.95] tracking-tighter">
-            Check your <span className="text-primary">email.</span>
+            Enter your <span className="text-primary">code.</span>
           </h1>
           <p className="mt-4 text-sm font-semibold leading-relaxed text-white/55">
-            We sent a verification link to{' '}
-            <span className="text-white">{user?.email || 'your email'}</span>. Open it — this page
-            continues on its own once it&apos;s verified. You can also tap &ldquo;I&apos;ve verified&rdquo; below.
+            We sent a 6-digit code to <span className="text-white">{user?.email || 'your email'}</span>. It expires in
+            10 minutes.
           </p>
         </div>
 
         <section className="flex flex-col items-center gap-6">
-          <div className="flex h-24 w-24 items-center justify-center rounded-full border border-primary/30 bg-primary/10">
-            <MailCheck className="h-10 w-10 text-primary" />
+          <div className="flex gap-2">
+            {digits.map((digit, i) => (
+              <input
+                key={i}
+                ref={(el) => { inputsRef.current[i] = el; }}
+                type="text"
+                inputMode="numeric"
+                maxLength={CODE_LENGTH}
+                value={digit}
+                onChange={(e) => handleDigitChange(i, e.target.value)}
+                onKeyDown={(e) => handleKeyDown(i, e)}
+                disabled={verifying}
+                className="h-14 w-11 rounded-xl border border-white/20 bg-white/5 text-center text-2xl font-black outline-none focus:border-primary disabled:opacity-50"
+                autoFocus={i === 0}
+              />
+            ))}
           </div>
 
           {error && <p className="text-center text-[11px] font-bold leading-relaxed text-red-400">{error}</p>}
@@ -202,11 +208,11 @@ export default function VerifyEmailPage() {
 
           <div className="flex w-full flex-col gap-4">
             <button
-              onClick={() => runCheck(true)}
-              disabled={checking}
+              onClick={() => handleVerify()}
+              disabled={verifying}
               className="btn-primary flex h-14 w-full items-center justify-center gap-2 disabled:opacity-50"
             >
-              {checking ? 'CHECKING...' : "I'VE VERIFIED — CONTINUE"}
+              {verifying ? 'VERIFYING...' : 'VERIFY & CONTINUE'}
             </button>
 
             <button
@@ -215,7 +221,7 @@ export default function VerifyEmailPage() {
               className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-white/10 text-[11px] font-black uppercase tracking-widest text-white/70 hover:border-primary hover:text-primary disabled:opacity-40"
             >
               <RefreshCw className="h-4 w-4" />
-              {resending ? 'SENDING...' : cooldown > 0 ? `RESEND (${cooldown}s)` : 'RESEND VERIFICATION EMAIL'}
+              {resending ? 'SENDING...' : cooldown > 0 ? `RESEND (${cooldown}s)` : 'RESEND CODE'}
             </button>
 
             <button
@@ -224,14 +230,6 @@ export default function VerifyEmailPage() {
             >
               <LogOut className="h-3.5 w-3.5" />
               Use a different email
-            </button>
-
-            <button
-              onClick={handleUsePhone}
-              className="flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white"
-            >
-              <Phone className="h-3.5 w-3.5" />
-              Joined before with your phone? Log in with phone
             </button>
           </div>
         </section>
