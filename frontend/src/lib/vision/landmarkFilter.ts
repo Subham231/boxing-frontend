@@ -22,6 +22,7 @@
 // ---------------------------------------------------------------------------
 
 import { OneEuroPointFilter, OneEuroOptions } from './oneEuroFilter';
+import { VISION_CONFIG } from './visionConfig';
 
 export interface RawLandmark {
   x: number;
@@ -45,6 +46,16 @@ export interface FilteredLandmark {
   confidence: number;
   /** True when this position was extrapolated rather than measured. */
   predicted: boolean;
+  /**
+   * True when the point has been gone longer than the prediction window and
+   * the position is just the last known one (a "frozen ghost"). Renderers
+   * must not draw stale points.
+   */
+  stale: boolean;
+  /** Last measured velocity in normalized image units per second (x). */
+  vx: number;
+  /** Last measured velocity in normalized image units per second (y). */
+  vy: number;
 }
 
 /** Below this, a landmark is treated as not genuinely observed this frame. */
@@ -64,7 +75,7 @@ const MAX_PLAUSIBLE_SPEED = 6.0;
  * pretending we know where it is. Past this, confidence goes to 0 and the
  * consumer should exclude it rather than trust a long extrapolation.
  */
-const MAX_PREDICTION_MS = 280;
+const MAX_PREDICTION_MS = VISION_CONFIG.tracking.maxPredictionMs;
 
 /** Per-landmark filter + motion state. */
 interface LandmarkState {
@@ -203,6 +214,9 @@ export class LandmarkFilter {
           visibility,
           confidence: Math.min(1, visibility),
           predicted: false,
+          stale: false,
+          vx: state.velocity.x,
+          vy: state.velocity.y,
         });
         continue;
       }
@@ -249,7 +263,7 @@ export class LandmarkFilter {
   ): FilteredLandmark {
     if (!state.lastGood || state.lastGoodTs === null) {
       // Never had a good reading for this point — nothing to predict from.
-      return { x: 0, y: 0, z: 0, visibility, confidence: 0, predicted: true };
+      return { x: 0, y: 0, z: 0, visibility, confidence: 0, predicted: true, stale: true, vx: 0, vy: 0 };
     }
 
     const elapsedMs = Math.max(0, timestampMs - state.lastGoodTs);
@@ -265,6 +279,9 @@ export class LandmarkFilter {
         visibility,
         confidence: 0,
         predicted: true,
+        stale: true,
+        vx: 0,
+        vy: 0,
       };
     }
 
@@ -279,6 +296,9 @@ export class LandmarkFilter {
       visibility: Math.max(visibility, decay * 0.6),
       confidence: Math.round(decay * 0.65 * 100) / 100,
       predicted: true,
+      stale: false,
+      vx: state.velocity.x * damping,
+      vy: state.velocity.y * damping,
     };
   }
 }

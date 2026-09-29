@@ -47,6 +47,8 @@ import {
   Vec3,
 } from '@/lib/vision/kinematics';
 import { GuardTracker, measureWristAlignment, matchHandToWrist, HAND_LM } from '@/lib/vision/guardTracker';
+import { syncCanvasToVideo, buildDrawablePose, drawOverlay } from '@/lib/vision/overlayRenderer';
+import { VISION_CONFIG } from '@/lib/vision/visionConfig';
 
 // ---------------------------------------------------------------------------
 // Landmark indices we care about (MediaPipe Pose / BlazePose 33-point model)
@@ -150,10 +152,11 @@ const REACTION_WINDOW_PAD_MS = 250;
 // (GUARD -> STRIKE -> GUARD), not a single frame threshold. This is what
 // prevents false positives from idle movement, camera shake, or slowly
 // raising an arm to scratch your face.
-const ELBOW_EXTEND_THRESHOLD = 138;   // deg — calibrated so snappy non-hyperextending punches register cleanly at 30fps
-const ELBOW_RETRACT_THRESHOLD = 124;  // deg — hysteresis band kills flicker/vibration double-counts
-const MIN_PUNCH_ANGULAR_VELOCITY = 125; // deg/sec — responsive to genuine punches across varied framerates
-const SMOOTHING_ALPHA = 0.35; // exponential smoothing factor — preserves raw signal peak
+const ELBOW_EXTEND_THRESHOLD = VISION_CONFIG.detection.elbowExtendDeg; // deg — see visionConfig.ts
+const ELBOW_RETRACT_THRESHOLD = VISION_CONFIG.detection.elbowRetractDeg; // deg
+const MIN_PUNCH_ANGULAR_VELOCITY = VISION_CONFIG.detection.minAngularVelocity; // deg/sec
+// Landmarks are already One Euro smoothed upstream, so this stage stays light.
+const SMOOTHING_ALPHA = 0.6;
 const MIN_ROTATION_FOR_FULL_SCORE = 22; // deg of shoulder-line rotation for a "fully rotated" hook/cross
 const FULL_KNEE_DRIVE_DEG = 18;         // deg of knee-angle change (push-off/extension) for a full drive score
 const FULL_WEIGHT_TRANSFER_RATIO = 0.12; // hip horizontal shift, as a fraction of shoulder width, for a full transfer score
@@ -162,7 +165,7 @@ const FULL_FOOT_PIVOT_DEG = 20;         // deg of rear-foot rotation for a full 
 // fast — angular velocity alone can be tripped by a shoulder shrug or a
 // twitch near full extension. Requiring BOTH signals to agree is a much
 // stronger check than either alone.
-const MIN_WRIST_SPEED = 0.22; // shoulder-widths per second; normalized webcam motion is usually below 1.0
+const MIN_WRIST_SPEED = VISION_CONFIG.detection.minWristSpeed; // shoulder-widths per second
 const MOTION_MEMORY_MS = 500; // ms — prevents peak trackers from resetting mid-hook or during combination pauses
 // After retracting to guard, the arm must stay there briefly before the
 // next strike can be evaluated — without this, noise flickering right
@@ -176,7 +179,7 @@ const MIN_TRAJECTORY_CONFIDENCE = 0.16;
 // way through — it can legitimately never reach ELBOW_EXTEND_THRESHOLD,
 // which is what a straight punch needs.
 const MIN_HOOK_ELBOW_ANGLE = 50;
-const UPPERCUT_MIN_VERTICAL_TRAVEL = 0.10; // shoulder-widths of upward wrist displacement
+const UPPERCUT_MIN_VERTICAL_TRAVEL = VISION_CONFIG.detection.uppercutMinVertical;
 // Reference magnitudes (normalized by shoulder width, same units as
 // noseOffset/drop above) for a "fully committed" slip or roll, used to
 // convert raw peak displacement into a 0-100 score the same way peak
@@ -212,10 +215,10 @@ const RECOVERY_SAMPLE_WINDOW_MS = 900;
 // A hook is defined by the elbow STAYING bent through the whole punch; a
 // straight punch passes through this angle on its way out to full
 // extension. This is the signal that actually separates the two shapes.
-const HOOK_MAX_ELBOW_ANGLE = 138;
+const HOOK_MAX_ELBOW_ANGLE = VISION_CONFIG.detection.hookMaxElbowDeg;
 // Minimum lateral wrist travel (in shoulder-widths) before a punch can be
 // called a hook at all.
-const MIN_HOOK_LATERAL = 0.28;
+const MIN_HOOK_LATERAL = VISION_CONFIG.detection.hookMinLateral;
 // --- Hook detection (its own cycle, deliberately NOT the straight-punch
 // hysteresis) ----------------------------------------------------------
 const HOOK_MIN_SWEEP = 0.32;      // shoulder-widths of peak wrist travel
@@ -617,6 +620,8 @@ export default function VisionPage() {
   // Latest filtered frame, kept so the render tick can redraw the skeleton
   // at full camera rate while inference runs slower.
   const latestFrameRef = useRef<{ landmarks: FilteredLandmark[]; ts: number } | null>(null);
+  // `?debug=1` on the URL turns on the tuning HUD drawn over the video.
+  const debugHudRef = useRef<boolean | null>(null);
 
   // Per-frame confidence samples for the rep currently being measured.
   const repConfidenceSamplesRef = useRef<number[]>([]);
@@ -693,11 +698,11 @@ export default function VisionPage() {
   const guardEnteredAtRef = useRef(0); // timestamp guard was (re)entered, for GUARD_REARM_MS debounce
   // Isolated dual-arm state tracking: prevents combo punches from swallowing each other
   const armStatesRef = useRef<{
-    L: { state: 'guard' | 'strike'; smoothedAngle: number; history: number[]; guardEnteredAt: number; prevAngle: number; prevAngleTs: number | null; angularVel: number };
-    R: { state: 'guard' | 'strike'; smoothedAngle: number; history: number[]; guardEnteredAt: number; prevAngle: number; prevAngleTs: number | null; angularVel: number };
+    L: { state: 'guard' | 'strike'; smoothedAngle: number; history: number[]; guardEnteredAt: number; prevAngle: number; prevAngleTs: number | null; angularVel: number; recent: { ts: number; angle: number }[]; valid: boolean };
+    R: { state: 'guard' | 'strike'; smoothedAngle: number; history: number[]; guardEnteredAt: number; prevAngle: number; prevAngleTs: number | null; angularVel: number; recent: { ts: number; angle: number }[]; valid: boolean };
   }>({
-    L: { state: 'guard', smoothedAngle: 0, history: [], guardEnteredAt: 0, prevAngle: 0, prevAngleTs: null, angularVel: 0 },
-    R: { state: 'guard', smoothedAngle: 0, history: [], guardEnteredAt: 0, prevAngle: 0, prevAngleTs: null, angularVel: 0 },
+    L: { state: 'guard', smoothedAngle: 0, history: [], guardEnteredAt: 0, prevAngle: 0, prevAngleTs: null, angularVel: 0, recent: [], valid: false },
+    R: { state: 'guard', smoothedAngle: 0, history: [], guardEnteredAt: 0, prevAngle: 0, prevAngleTs: null, angularVel: 0, recent: [], valid: false },
   });
   const prevWristPosRef = useRef<{ x: number; y: number } | null>(null);
   const wristSpeedRef = useRef(0); // shoulder-widths/sec, cross-validates angular velocity
@@ -962,172 +967,6 @@ export default function VisionPage() {
   };
 
   // -------------------------------------------------------------------------
-  // Skeleton drawing (GPU-accelerated batched paths; zero lag; full 33-point tracking)
-  // -------------------------------------------------------------------------
-  const drawSkeleton = (landmarks: PoseLandmark[], ctx: CanvasRenderingContext2D, w: number, h: number) => {
-    ctx.clearRect(0, 0, w, h);
-    if (!landmarks || landmarks.length === 0) return;
-
-    // Visibility floor for drawing lines and landmarks
-    const visFloor = 0.22;
-
-    // 1. Dynamic Bounding Envelope encompassing all 33 body landmarks
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    let visibleCount = 0;
-    for (let i = 0; i < landmarks.length; i++) {
-      const p = landmarks[i];
-      if (!p || (p.visibility ?? 1) < visFloor) continue;
-      visibleCount++;
-      const px = p.x * w;
-      const py = p.y * h;
-      if (px < minX) minX = px;
-      if (px > maxX) maxX = px;
-      if (py < minY) minY = py;
-      if (py > maxY) maxY = py;
-    }
-
-    const _lS = landmarks[LM.L_SHOULDER], _rS = landmarks[LM.R_SHOULDER];
-    const shouldersOk = _lS && _rS && (_lS.visibility ?? 1) >= visFloor && (_rS.visibility ?? 1) >= visFloor;
-
-    if (visibleCount >= 4 && shouldersOk) {
-      const shoulderDist = Math.hypot((_rS.x - _lS.x) * w, (_rS.y - _lS.y) * h) || 120;
-      // If waist-up framing (lower body out of view), extend envelope downwards past hips
-      if (maxY - minY < shoulderDist * 1.7) {
-        maxY = Math.min(h - 6, minY + shoulderDist * 2.2);
-      }
-
-      // Add comfortable padding around the fighter's silhouette
-      const padX = Math.max(22, (maxX - minX) * 0.08);
-      const padY = Math.max(22, (maxY - minY) * 0.06);
-      const gx1 = Math.max(6, minX - padX);
-      const gx2 = Math.min(w - 6, maxX + padX);
-      const gy1 = Math.max(6, minY - padY);
-      const gy2 = Math.min(h - 6, maxY + padY);
-      const gw = gx2 - gx1;
-      const gh = gy2 - gy1;
-
-      // ── BATCHED GRID PASS (1 single draw call for zero lag) ──
-      ctx.beginPath();
-      // Internal coordinate scan lines (4 horizontal, 3 vertical)
-      const rows = 4;
-      for (let r = 1; r < rows; r++) {
-        const y = gy1 + (gh * r) / rows;
-        ctx.moveTo(gx1, y);
-        ctx.lineTo(gx2, y);
-      }
-      const cols = 3;
-      for (let c = 1; c < cols; c++) {
-        const x = gx1 + (gw * c) / cols;
-        ctx.moveTo(x, gy1);
-        ctx.lineTo(x, gy2);
-      }
-      // Tactical outer frame
-      ctx.rect(gx1, gy1, gw, gh);
-      ctx.strokeStyle = 'rgba(34, 211, 238, 0.07)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-
-      // Tactical Corner Brackets (high-tech cyber HUD)
-      ctx.beginPath();
-      const bLen = Math.min(22, gw * 0.15, gh * 0.15);
-      // Top-Left [
-      ctx.moveTo(gx1, gy1 + bLen); ctx.lineTo(gx1, gy1); ctx.lineTo(gx1 + bLen, gy1);
-      // Top-Right ]
-      ctx.moveTo(gx2 - bLen, gy1); ctx.lineTo(gx2, gy1); ctx.lineTo(gx2, gy1 + bLen);
-      // Bottom-Left [
-      ctx.moveTo(gx1, gy2 - bLen); ctx.lineTo(gx1, gy2); ctx.lineTo(gx1 + bLen, gy2);
-      // Bottom-Right ]
-      ctx.moveTo(gx2 - bLen, gy2); ctx.lineTo(gx2, gy2); ctx.lineTo(gx2 - bLen, gy2);
-
-      // Center crosshair (center of kinetic mass)
-      const cx = (gx1 + gx2) / 2;
-      const cy = gy1 + gh * 0.42;
-      const chSize = 9;
-      ctx.moveTo(cx - chSize, cy); ctx.lineTo(cx + chSize, cy);
-      ctx.moveTo(cx, cy - chSize); ctx.lineTo(cx, cy + chSize);
-
-      ctx.strokeStyle = 'rgba(226, 255, 59, 0.45)';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-
-      // Top HUD tag
-      ctx.fillStyle = 'rgba(34, 211, 238, 0.85)';
-      ctx.font = 'bold 8px monospace';
-      ctx.fillText('AI TRACKER // 33-NODE LOCK', gx1 + 6, Math.max(14, gy1 - 6));
-    }
-
-    // ── BATCHED 33-LANDMARK SKELETON GLOW PASS (1 draw call) ──
-    ctx.beginPath();
-    for (let k = 0; k < SKELETON_CONNECTIONS.length; k++) {
-      const [i, j] = SKELETON_CONNECTIONS[k];
-      const a = landmarks[i];
-      const b = landmarks[j];
-      if (!a || !b) continue;
-      if ((a.visibility ?? 1) < visFloor || (b.visibility ?? 1) < visFloor) continue;
-      ctx.moveTo(a.x * w, a.y * h);
-      ctx.lineTo(b.x * w, b.y * h);
-    }
-    ctx.lineWidth = 4.5;
-    ctx.strokeStyle = 'rgba(6, 182, 212, 0.28)';
-    ctx.stroke();
-
-    // ── BATCHED 33-LANDMARK CRISP NEON PASS (1 draw call) ──
-    ctx.beginPath();
-    for (let k = 0; k < SKELETON_CONNECTIONS.length; k++) {
-      const [i, j] = SKELETON_CONNECTIONS[k];
-      const a = landmarks[i];
-      const b = landmarks[j];
-      if (!a || !b) continue;
-      if ((a.visibility ?? 1) < visFloor || (b.visibility ?? 1) < visFloor) continue;
-      ctx.moveTo(a.x * w, a.y * h);
-      ctx.lineTo(b.x * w, b.y * h);
-    }
-    ctx.lineWidth = 1.8;
-    ctx.strokeStyle = '#22d3ee';
-    ctx.stroke();
-
-    // ── BATCHED 33 JOINT NODES PASS (1 draw call) ──
-    ctx.beginPath();
-    for (let i = 0; i < landmarks.length; i++) {
-      const p = landmarks[i];
-      if (!p || (p.visibility ?? 1) < visFloor) continue;
-      const px = p.x * w;
-      const py = p.y * h;
-      const r = (i === LM.L_WRIST || i === LM.R_WRIST || i === LM.NOSE) ? 3.8 : 2.5;
-      ctx.moveTo(px + r, py);
-      ctx.arc(px, py, r, 0, Math.PI * 2);
-    }
-    ctx.fillStyle = '#67e8f9';
-    ctx.fill();
-
-    // ── TACTICAL WRIST ACTION RETICLES (Strikes vs Guard) ──
-    const drawWristReticle = (wristIdx: number, armKey: 'L' | 'R') => {
-      const p = landmarks[wristIdx];
-      if (!p || (p.visibility ?? 1) < visFloor) return;
-      const px = p.x * w;
-      const py = p.y * h;
-      const isStriking = armStatesRef.current?.[armKey]?.state === 'strike';
-      const rad = isStriking ? 13 : 9;
-
-      ctx.beginPath();
-      ctx.arc(px, py, rad, 0, Math.PI * 2);
-      ctx.moveTo(px - rad - 3, py); ctx.lineTo(px + rad + 3, py);
-      ctx.moveTo(px, py - rad - 3); ctx.lineTo(px, py + rad + 3);
-
-      ctx.strokeStyle = isStriking ? '#e2ff3b' : 'rgba(34, 211, 238, 0.7)';
-      ctx.lineWidth = isStriking ? 2 : 1.2;
-      ctx.stroke();
-
-      ctx.fillStyle = isStriking ? '#e2ff3b' : 'rgba(34, 211, 238, 0.75)';
-      ctx.font = 'bold 7px monospace';
-      ctx.fillText(isStriking ? `${armKey}-STRIKE` : `${armKey}-GUARD`, px + rad + 4, py + 3);
-    };
-
-    drawWristReticle(LM.L_WRIST, 'L');
-    drawWristReticle(LM.R_WRIST, 'R');
-  };
-
-  // -------------------------------------------------------------------------
   // Camera / MediaPipe start
   // -------------------------------------------------------------------------
   const waitForVideoElement = async (timeoutMs = 2000): Promise<HTMLVideoElement | null> => {
@@ -1260,8 +1099,8 @@ export default function VisionPage() {
     hookValidatedThisBurstRef.current = false;
     uppercutValidatedThisBurstRef.current = false;
     armStatesRef.current = {
-      L: { state: 'guard', smoothedAngle: 0, history: [], guardEnteredAt: 0, prevAngle: 0, prevAngleTs: null, angularVel: 0 },
-      R: { state: 'guard', smoothedAngle: 0, history: [], guardEnteredAt: 0, prevAngle: 0, prevAngleTs: null, angularVel: 0 },
+      L: { state: 'guard', smoothedAngle: 0, history: [], guardEnteredAt: 0, prevAngle: 0, prevAngleTs: null, angularVel: 0, recent: [], valid: false },
+      R: { state: 'guard', smoothedAngle: 0, history: [], guardEnteredAt: 0, prevAngle: 0, prevAngleTs: null, angularVel: 0, recent: [], valid: false },
     };
     noseYBaselineRef.current = 0;
     peakHeadLateralRef.current = 0;
@@ -1301,8 +1140,7 @@ export default function VisionPage() {
       await new Promise<void>((resolve) => {
         videoEl.onloadedmetadata = () => {
           if (canvasRef.current) {
-            canvasRef.current.width = videoEl.videoWidth || 640;
-            canvasRef.current.height = videoEl.videoHeight || 480;
+            syncCanvasToVideo(canvasRef.current, videoEl);
           }
           resolve();
         };
@@ -1353,8 +1191,7 @@ export default function VisionPage() {
             await new Promise<void>((resolve) => {
               videoEl.onloadedmetadata = () => {
                 if (canvasRef.current) {
-                  canvasRef.current.width = videoEl.videoWidth || 640;
-                  canvasRef.current.height = videoEl.videoHeight || 480;
+                  syncCanvasToVideo(canvasRef.current, videoEl);
                 }
                 resolve();
               };
@@ -1447,12 +1284,51 @@ export default function VisionPage() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    // Keep the canvas backing store locked to the video's intrinsic size
+    // (camera switches, orientation changes, late metadata).
+    syncCanvasToVideo(canvas, videoRef.current);
+
     const frame = latestFrameRef.current;
     if (!frame) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       return;
     }
-    drawSkeleton(frame.landmarks, ctx, canvas.width, canvas.height);
+
+    // Hold the last pose through brief tracking loss and fade it out.
+    const ageMs = Math.max(0, performance.now() - frame.ts);
+    const holdMs = VISION_CONFIG.tracking.holdPoseMs;
+    if (ageMs > holdMs + 200) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
+    const alpha = ageMs <= holdMs ? 1 : Math.max(0, 1 - (ageMs - holdMs) / 200);
+
+    const pose = buildDrawablePose(frame.landmarks, ageMs + VISION_CONFIG.tracking.overlayLeadMs);
+
+    let debugLines: string[] | undefined;
+    if (debugHudRef.current === null && typeof window !== 'undefined') {
+      debugHudRef.current = new URLSearchParams(window.location.search).get('debug') === '1';
+    }
+    if (debugHudRef.current) {
+      const L = armStatesRef.current.L;
+      const R = armStatesRef.current.R;
+      debugLines = [
+        `L ${L.state} ${Math.round(L.smoothedAngle)}deg ${Math.round(L.angularVel)}d/s`,
+        `R ${R.state} ${Math.round(R.smoothedAngle)}deg ${Math.round(R.angularVel)}d/s`,
+        `wrist ${wristSpeedRef.current.toFixed(2)} sw/s  age ${Math.round(ageMs)}ms`,
+        `canvas ${canvas.width}x${canvas.height}  video ${videoRef.current?.videoWidth ?? 0}x${videoRef.current?.videoHeight ?? 0}`,
+      ];
+    }
+
+    drawOverlay(ctx, pose, canvas.width, canvas.height, {
+      striking: {
+        L: armStatesRef.current.L.state === 'strike',
+        R: armStatesRef.current.R.state === 'strike',
+      },
+      mirrored: true, // canvas and video both carry -scale-x-100
+      alpha,
+      debugLines,
+    });
   };
 
   /**
@@ -1472,7 +1348,7 @@ export default function VisionPage() {
     // Only drop frame completely if all landmarks have near-zero confidence (no person ever seen or prediction expired)
     const hasUsableLandmarks = landmarks.some((lm) => lm && lm.confidence > 0.05);
     if (!hasUsableLandmarks) {
-      latestFrameRef.current = null;
+      // Keep latestFrameRef: renderTick holds and fades the last pose.
       goodTrackingRef.current = false;
       handleTrackingLoss(dt);
       return;
@@ -1599,28 +1475,47 @@ export default function VisionPage() {
     const lW = landmarks[LM.L_WRIST], rW = landmarks[LM.R_WRIST];
     const nose = landmarks[LM.NOSE];
 
-    let lAngleThisFrame = 0;
-    let rAngleThisFrame = 0;
-    // Confidence gate now uses the conditioned confidence rather than raw
-    // visibility, so a wrist briefly coasted through an occlusion still
-    // contributes a (discounted) measurement instead of dropping out of
-    // the punch entirely at the exact moment of peak extension.
-    if (lS && lE && lW && lW.confidence > 0.25) {
-      lAngleThisFrame = jointAngle(LM.L_SHOULDER, LM.L_ELBOW, LM.L_WRIST, landmarks) ?? 0;
+    // A missing or low-confidence wrist must NEVER be recorded as a 0° angle:
+    // that dragged the smoothed angle down and cut real punches short. An
+    // unmeasurable arm holds its last angle and is skipped by the state machine.
+    const armFloor = VISION_CONFIG.tracking.armConfidenceFloor;
+    let lAngleThisFrame = armStatesRef.current.L.smoothedAngle;
+    let rAngleThisFrame = armStatesRef.current.R.smoothedAngle;
+    let lMeasured: number | null = null;
+    let rMeasured: number | null = null;
+    if (lS && lE && lW && !lE.stale && !lW.stale && lW.confidence > armFloor) {
+      lMeasured = jointAngle(LM.L_SHOULDER, LM.L_ELBOW, LM.L_WRIST, landmarks);
     }
-    if (rS && rE && rW && rW.confidence > 0.25) {
-      rAngleThisFrame = jointAngle(LM.R_SHOULDER, LM.R_ELBOW, LM.R_WRIST, landmarks) ?? 0;
+    if (rS && rE && rW && !rE.stale && !rW.stale && rW.confidence > armFloor) {
+      rMeasured = jointAngle(LM.R_SHOULDER, LM.R_ELBOW, LM.R_WRIST, landmarks);
     }
-    // Outlier rejection and exponential smoothing per arm
+    if (lMeasured !== null) lAngleThisFrame = lMeasured;
+    if (rMeasured !== null) rAngleThisFrame = rMeasured;
+
     for (const side of ['L', 'R'] as const) {
       const arm = armStatesRef.current[side];
-      const rawAngle = side === 'L' ? lAngleThisFrame : rAngleThisFrame;
-      arm.history.push(rawAngle);
+      const measured = side === 'L' ? lMeasured : rMeasured;
+
+      if (measured === null) {
+        arm.valid = false;
+        arm.angularVel = 0;
+        arm.prevAngleTs = null; // next valid frame starts a fresh velocity delta
+        continue;
+      }
+      arm.valid = true;
+
+      arm.history.push(measured);
       if (arm.history.length > 3) arm.history.shift();
-      const medianAngle = arm.history.length === 3 ? [...arm.history].sort((a, b) => a - b)[1] : rawAngle;
+      const medianAngle = arm.history.length === 3 ? [...arm.history].sort((a, b) => a - b)[1] : measured;
       arm.smoothedAngle = arm.smoothedAngle === 0
         ? medianAngle
         : arm.smoothedAngle + SMOOTHING_ALPHA * (medianAngle - arm.smoothedAngle);
+
+      // Short peak window: a fast jab may sit near extension for only 2-3
+      // frames, which smoothing can flatten below the gate.
+      arm.recent.push({ ts: now, angle: medianAngle });
+      const windowStart = now - VISION_CONFIG.detection.windowMs;
+      while (arm.recent.length > 0 && arm.recent[0].ts < windowStart) arm.recent.shift();
 
       if (arm.prevAngleTs !== null) {
         const dtSec = (now - arm.prevAngleTs) / 1000;
@@ -1994,8 +1889,10 @@ export default function VisionPage() {
     // Dual-arm isolated punch check (prevents 1-2 combination swallowing)
     for (const side of ['L', 'R'] as const) {
       const arm = armStatesRef.current[side];
-      const dwelledInGuard = now - arm.guardEnteredAt >= GUARD_REARM_MS;
-      if (arm.state === 'guard' && dwelledInGuard && arm.smoothedAngle > ELBOW_EXTEND_THRESHOLD) {
+      if (!arm.valid) continue; // never transition on an unmeasured arm
+      const dwelledInGuard = now - arm.guardEnteredAt >= Math.max(GUARD_REARM_MS, VISION_CONFIG.detection.cooldownMs);
+      const windowPeak = arm.recent.reduce((m, r) => (r.angle > m ? r.angle : m), 0);
+      if (arm.state === 'guard' && dwelledInGuard && Math.max(arm.smoothedAngle, windowPeak) > ELBOW_EXTEND_THRESHOLD) {
         if (motionDetected) {
           arm.state = 'strike';
           elbowStateRef.current = 'strike';
@@ -2004,6 +1901,7 @@ export default function VisionPage() {
       } else if (arm.state === 'strike' && arm.smoothedAngle < ELBOW_RETRACT_THRESHOLD) {
         arm.state = 'guard';
         arm.guardEnteredAt = now;
+        arm.recent = []; // the old peak must not re-trigger the next strike
       }
     }
     if (armStatesRef.current.L.state === 'guard' && armStatesRef.current.R.state === 'guard') {
@@ -2903,8 +2801,8 @@ export default function VisionPage() {
     if (drillTimerRef.current) clearTimeout(drillTimerRef.current);
     if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
     armStatesRef.current = {
-      L: { state: 'guard', smoothedAngle: 0, history: [], guardEnteredAt: 0, prevAngle: 0, prevAngleTs: null, angularVel: 0 },
-      R: { state: 'guard', smoothedAngle: 0, history: [], guardEnteredAt: 0, prevAngle: 0, prevAngleTs: null, angularVel: 0 },
+      L: { state: 'guard', smoothedAngle: 0, history: [], guardEnteredAt: 0, prevAngle: 0, prevAngleTs: null, angularVel: 0, recent: [], valid: false },
+      R: { state: 'guard', smoothedAngle: 0, history: [], guardEnteredAt: 0, prevAngle: 0, prevAngleTs: null, angularVel: 0, recent: [], valid: false },
     };
     elbowStateRef.current = 'guard';
     hookValidatedThisBurstRef.current = false;
@@ -3235,7 +3133,7 @@ export default function VisionPage() {
                 ref={canvasRef}
                 className="absolute inset-0 w-full h-full object-cover transform -scale-x-100 pointer-events-none"
               />
-              {/* Grid overlay is now body-anchored and drawn on the canvas — see drawSkeleton */}
+              {/* Grid overlay is now body-anchored and drawn on the canvas — see lib/vision/overlayRenderer.ts */}
             </div>
 
             {/* ── Corner brackets ── */}
