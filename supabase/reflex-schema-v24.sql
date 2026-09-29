@@ -1,6 +1,6 @@
 -- reflex-schema-v24.sql - Safe Email/Phone identity coexistence (idempotent & additive).
--- Run this in the Supabase SQL Editor if reflex-schema-v21.sql was not yet executed
--- or needs to be verified.
+-- Run after reflex-schema-v23.sql in the Supabase SQL Editor. Re-running is
+-- safe if the email OTP RPCs are missing or the PostgREST schema cache is stale.
 --
 -- SAFETY GUARANTEES:
 -- 1. Does NOT drop, rename, or alter any existing column or table.

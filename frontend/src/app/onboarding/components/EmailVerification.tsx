@@ -2,35 +2,33 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronRight, ShieldCheck, ArrowLeft, Sparkles, Lock, RefreshCw, Eye, EyeOff } from 'lucide-react';
+import { ChevronRight, ShieldCheck, ArrowLeft, Sparkles, Lock, MailCheck, RefreshCw } from 'lucide-react';
 import { useOnboarding } from '@/context/OnboardingContext';
+import { useFirebaseUser } from '@/lib/useFirebaseUser';
 import StepBadge from './StepBadge';
 import {
-  signUpWithEmail,
-  sendEmailVerificationOtp,
-  verifyEmailVerificationOtp,
+  sendPasswordlessSignInLink,
+  refreshEmailVerified,
   ensureUserProfile,
   saveProfileDetails,
   formatEmailAuthError,
 } from '@/lib/firebase-auth';
-import { firebaseAuth } from '@/lib/firebase';
 
+const PENDING_SIGNUP_EMAIL_KEY = 'sparai_pending_signup_email';
 const RESEND_COOLDOWN_SECONDS = 30;
 
 const EmailVerification: React.FC = () => {
-  const { data, updateData, nextStep, prevStep } = useOnboarding();
+  const { data, updateData, nextStep, prevStep, isLoaded } = useOnboarding();
+  const { user, loading: authLoading } = useFirebaseUser();
   const [step, setStep] = useState<'details' | 'pending'>('details');
   const [email, setEmail] = useState(data.email || '');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
-  const [existingAccount, setExistingAccount] = useState(false);
   const [cooldown, setCooldown] = useState(0);
-  const [digits, setDigits] = useState<string[]>(Array(6).fill(''));
-  const inputsRef = React.useRef<(HTMLInputElement | null)[]>([]);
+  const finishingRef = React.useRef(false);
+  const advanceVerifiedRef = React.useRef(false);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -38,111 +36,30 @@ const EmailVerification: React.FC = () => {
     return () => clearInterval(t);
   }, [cooldown]);
 
-  const handleCreateAccount = async () => {
-    setError(null);
-    setExistingAccount(false);
-    const trimmedEmail = email.trim();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      setError('Enter a valid email address.');
-      return;
-    }
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const user = await signUpWithEmail(trimmedEmail, password);
-      updateData({ email: trimmedEmail });
-      const sendResult = await sendEmailVerificationOtp(user);
-      if (!sendResult.ok) {
-        setError(sendResult.message || 'Could not send the code. Try resending on the next screen.');
-      }
+  useEffect(() => {
+    if (!isLoaded) return;
+    const pendingEmail = localStorage.getItem(PENDING_SIGNUP_EMAIL_KEY);
+    if (pendingEmail) {
+      setEmail(pendingEmail);
       setStep('pending');
-      setCooldown(RESEND_COOLDOWN_SECONDS);
-    } catch (e) {
-      const code = e && typeof e === 'object' && 'code' in e ? String((e as { code?: string }).code) : '';
-      if (code === 'auth/email-already-in-use') {
-        setExistingAccount(true);
-        setError('This email is already registered. Log in with the existing password, or reset it.');
-        return;
-      }
-      setError(formatEmailAuthError(e));
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [isLoaded]);
 
-  const handleResend = async () => {
-    const user = firebaseAuth.currentUser;
-    if (!user || cooldown > 0) return;
+  const finishVerifiedSignup = async () => {
+    if (!user || finishingRef.current) return;
+    finishingRef.current = true;
     setError(null);
-    setInfo(null);
-    try {
-      const result = await sendEmailVerificationOtp(user);
-      if (!result.ok) {
-        setError(result.message || 'Could not resend right now.');
-        return;
-      }
-      setInfo('New code sent — check your inbox (and spam folder, just in case).');
-      setCooldown(RESEND_COOLDOWN_SECONDS);
-      setDigits(Array(6).fill(''));
-      inputsRef.current[0]?.focus();
-    } catch {
-      setError('Could not resend right now. Wait a bit and try again.');
-    }
-  };
-
-  const handleDigitChange = (index: number, value: string) => {
-    const clean = value.replace(/\D/g, '');
-    const next = [...digits];
-    if (!clean) {
-      next[index] = '';
-      setDigits(next);
-      return;
-    }
-    const chars = clean.split('');
-    for (let i = 0; i < chars.length && index + i < 6; i++) {
-      next[index + i] = chars[i];
-    }
-    setDigits(next);
-    const nextIndex = Math.min(index + chars.length, 5);
-    inputsRef.current[nextIndex]?.focus();
-    if (next.every((d) => d)) handleCheckVerified(next.join(''));
-  };
-
-  const handleDigitKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace' && !digits[index] && index > 0) {
-      inputsRef.current[index - 1]?.focus();
-    }
-  };
-
-  const handleCheckVerified = async (code?: string) => {
-    const user = firebaseAuth.currentUser;
-    if (!user) return;
-    const otp = code ?? digits.join('');
-    if (otp.length !== 6) {
-      setError('Enter the 6-digit code.');
-      return;
-    }
-    setError(null);
-    setInfo(null);
     setChecking(true);
     try {
-      const result = await verifyEmailVerificationOtp(user, otp);
-      if (!result.ok) {
-        setError(result.message || 'Could not verify that code.');
-        setDigits(Array(6).fill(''));
-        inputsRef.current[0]?.focus();
+      const verified = await refreshEmailVerified(user);
+      if (!verified) {
+        setError('Open the signup link in your email to verify your address first.');
+        finishingRef.current = false;
         return;
       }
 
-      // Create the private profile row first. Email signup creates the
-      // Firebase account before verification, while profile details are
-      // intentionally stored only after the verified token is accepted.
       await ensureUserProfile(user);
-      const avatar = typeof window !== 'undefined' ? localStorage.getItem('boxing_user_avatar') || undefined : undefined;
+      const avatar = localStorage.getItem('boxing_user_avatar') || undefined;
       const savedProfile = await saveProfileDetails(user, {
         displayName: data.ringName,
         age: Number(data.age),
@@ -151,15 +68,67 @@ const EmailVerification: React.FC = () => {
         avatarUrl: avatar,
       });
       if (!savedProfile) {
-        setError('Your account was verified, but saving your profile details failed. Please try again.');
-        return;
+        throw new Error('Your email is verified, but saving your fighter profile failed. Please try again.');
       }
 
+      localStorage.removeItem(PENDING_SIGNUP_EMAIL_KEY);
       nextStep();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not verify. Try again.');
+    } catch (finishError) {
+      setError(formatEmailAuthError(finishError));
+      finishingRef.current = false;
     } finally {
       setChecking(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isLoaded || authLoading || step !== 'pending' || !user) return;
+    void finishVerifiedSignup();
+  }, [isLoaded, authLoading, step, user]);
+
+  useEffect(() => {
+    if (!isLoaded || authLoading || step !== 'details' || !user?.emailVerified || advanceVerifiedRef.current) return;
+    advanceVerifiedRef.current = true;
+    updateData({ email: user.email || data.email });
+    nextStep();
+  }, [isLoaded, authLoading, step, user, data.email, nextStep, updateData]);
+
+  const handleCreateAccount = async () => {
+    setError(null);
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setError('Enter a valid email address.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await sendPasswordlessSignInLink(trimmedEmail, '/onboarding');
+      updateData({ email: trimmedEmail });
+      localStorage.setItem(PENDING_SIGNUP_EMAIL_KEY, trimmedEmail);
+      setEmail(trimmedEmail);
+      setStep('pending');
+      setCooldown(RESEND_COOLDOWN_SECONDS);
+    } catch (sendError) {
+      setError(formatEmailAuthError(sendError));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (cooldown > 0) return;
+    setError(null);
+    setInfo(null);
+    setLoading(true);
+    try {
+      await sendPasswordlessSignInLink(email, '/onboarding');
+      setInfo('A new secure link is on its way. Check your inbox.');
+      setCooldown(RESEND_COOLDOWN_SECONDS);
+    } catch (sendError) {
+      setError(formatEmailAuthError(sendError));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -200,13 +169,13 @@ const EmailVerification: React.FC = () => {
           {step === 'details' ? (
             <>Create your <span className="text-primary">fighter account</span>.</>
           ) : (
-            <>Enter your <span className="text-primary">code</span>.</>
+            <>Check your <span className="text-primary">inbox</span>.</>
           )}
         </h1>
         <p className="text-white/50 mt-2 text-xs sm:text-sm leading-relaxed font-semibold">
           {step === 'details'
-            ? 'Email + password — no SMS, no OTP. We just need to verify it once.'
-            : `We sent a 6-digit code to ${email}. It expires in 10 minutes.`}
+            ? 'Enter your email and we’ll send a secure one-click signup link. No password or code needed.'
+            : `We sent a secure signup link to ${email}. Open it to verify your email and continue.`}
         </p>
       </header>
 
@@ -226,7 +195,6 @@ const EmailVerification: React.FC = () => {
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);
-                  setExistingAccount(false);
                   setError(null);
                 }}
                 placeholder="you@email.com"
@@ -234,84 +202,53 @@ const EmailVerification: React.FC = () => {
                 autoFocus
               />
             </div>
-            <div className="flex flex-col gap-2">
-              <span className="text-[9px] font-bold text-white/40 uppercase">Password</span>
-              <div className="flex items-center border-b border-white/20 focus-within:border-primary">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  autoComplete="new-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="At least 6 characters"
-                  className="w-full bg-transparent py-2 text-2xl font-bold outline-none pb-1 tracking-tight"
-                />
-                <button type="button" onClick={() => setShowPassword((v) => !v)} className="px-1 text-white/40 hover:text-white">
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
-              </div>
-            </div>
           </div>
         ) : (
           <div className="flex flex-col gap-3">
-            <div className="flex justify-center gap-2 py-2">
-              {digits.map((digit, i) => (
-                <input
-                  key={i}
-                  ref={(el) => { inputsRef.current[i] = el; }}
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={digit}
-                  onChange={(e) => handleDigitChange(i, e.target.value)}
-                  onKeyDown={(e) => handleDigitKeyDown(i, e)}
-                  disabled={checking}
-                  className="h-12 w-9 rounded-lg border border-white/20 bg-white/5 text-center text-xl font-black outline-none focus:border-primary disabled:opacity-50"
-                  autoFocus={i === 0}
-                />
-              ))}
+            <div className="flex flex-col items-center gap-3 py-3 text-center">
+              <MailCheck className="h-10 w-10 text-primary" />
+              <p className="max-w-sm text-xs font-semibold leading-relaxed text-white/55">
+                Tap the link in your email. Your fighter profile will only be saved after Firebase confirms your email.
+              </p>
             </div>
 
             {info && <p className="text-[10px] font-bold text-primary text-center">{info}</p>}
 
             <div className="flex items-center justify-between pt-1">
               <button
-                onClick={() => { setStep('details'); setError(null); setInfo(null); }}
+                onClick={() => {
+                  localStorage.removeItem(PENDING_SIGNUP_EMAIL_KEY);
+                  setStep('details');
+                  setError(null);
+                  setInfo(null);
+                }}
                 className="text-[10px] font-black text-white/40 hover:text-white uppercase tracking-widest py-1 flex items-center gap-1"
               >
                 <ArrowLeft className="w-3 h-3" /> Change Email
               </button>
 
               <button
-                disabled={cooldown > 0}
+                disabled={cooldown > 0 || loading}
                 onClick={handleResend}
                 className="text-[10px] font-black uppercase tracking-widest py-1 flex items-center gap-1 disabled:opacity-30 text-primary hover:underline"
               >
-                <RefreshCw className="w-3 h-3" /> Resend {cooldown > 0 ? `(${cooldown}s)` : ''}
+                <RefreshCw className="w-3 h-3" /> {loading ? 'Sending...' : `Resend link ${cooldown > 0 ? `(${cooldown}s)` : ''}`}
               </button>
             </div>
           </div>
         )}
 
         {error && <p className="text-[10px] font-bold text-red-400">{error}</p>}
-        {existingAccount && (
-          <button
-            type="button"
-            onClick={() => window.location.assign('/login')}
-            className="btn-primary flex h-11 w-full items-center justify-center gap-2 text-xs"
-          >
-            LOG IN WITH EMAIL <ChevronRight size={16} />
-          </button>
-        )}
       </main>
 
       <footer className="mt-6 sm:mt-8 flex flex-col gap-3 sm:gap-4">
         {step === 'details' ? (
-          <button onClick={handleCreateAccount} disabled={loading || existingAccount} className="btn-primary w-full h-14 sm:h-16 flex items-center justify-center gap-2 disabled:opacity-50">
-            {loading ? 'CREATING...' : existingAccount ? 'ACCOUNT EXISTS — LOG IN' : 'CREATE ACCOUNT'} <ChevronRight size={20} />
+          <button onClick={handleCreateAccount} disabled={loading} className="btn-primary w-full h-14 sm:h-16 flex items-center justify-center gap-2 disabled:opacity-50">
+            {loading ? 'SENDING LINK...' : 'SEND ONE-CLICK SIGNUP LINK'} <ChevronRight size={20} />
           </button>
         ) : (
-          <button onClick={() => handleCheckVerified()} disabled={checking} className="btn-primary w-full h-14 sm:h-16 flex items-center justify-center gap-2 disabled:opacity-50">
-            {checking ? 'VERIFYING...' : "VERIFY — UNLOCK ALL MERITS"} <ChevronRight size={20} />
+          <button onClick={handleResend} disabled={loading || cooldown > 0 || checking} className="btn-primary w-full h-14 sm:h-16 flex items-center justify-center gap-2 disabled:opacity-50">
+            {checking ? 'FINALIZING...' : loading ? 'SENDING LINK...' : cooldown > 0 ? `LINK SENT — RESEND IN ${cooldown}S` : 'RESEND SIGNUP LINK'} <ChevronRight size={20} />
           </button>
         )}
 

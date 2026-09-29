@@ -8,6 +8,7 @@ import {
   ensureUserProfile,
   formatEmailAuthError,
   isPasswordlessSignInLink,
+  refreshEmailVerified,
 } from '@/lib/firebase-auth';
 import { cacheProfileLocally } from '@/lib/profile-client';
 
@@ -23,38 +24,38 @@ function FinishAuthContent() {
   const continueParam = searchParams?.get('continue') || '';
   const urlEmail = searchParams?.get('email') || '';
 
+  const finishVerifiedUser = async (user: import('firebase/auth').User) => {
+    if (!(await refreshEmailVerified(user))) {
+      throw new Error('Email verification could not be confirmed. Request a new link and try again.');
+    }
+    await user.getIdToken(true);
+    const { profile, sessionToken } = await ensureUserProfile(user);
+    cacheProfileLocally(profile);
+    if (sessionToken) localStorage.setItem('sparai_session_token', sessionToken);
+
+    const onboardingData = (profile.onboarding_data ?? {}) as Record<string, unknown>;
+    const isCompleted =
+      !!onboardingData.onboarding_completed ||
+      !!onboardingData.ring_name ||
+      localStorage.getItem('boxing_onboarding_done') === 'true';
+    if (isCompleted) localStorage.setItem('boxing_onboarding_done', 'true');
+
+    if (isCompleted) {
+      router.replace('/dashboard');
+    } else if (continueParam.startsWith('/') && !continueParam.startsWith('//') && continueParam !== '/auth/finish') {
+      router.replace(continueParam);
+    } else {
+      router.replace('/onboarding');
+    }
+  };
+
   const processSignIn = async (emailOverride?: string) => {
     setErrorMsg(null);
     setLoading(true);
     try {
       const user = await completePasswordlessSignIn(emailOverride || urlEmail);
       setStatus('success');
-
-      // Ensure token is fresh and profile exists in Supabase
-      await user.getIdToken(true);
-      const { profile, sessionToken } = await ensureUserProfile(user);
-      cacheProfileLocally(profile);
-
-      if (sessionToken && typeof window !== 'undefined') {
-        localStorage.setItem('sparai_session_token', sessionToken);
-      }
-
-      const onboardingData = (profile.onboarding_data ?? {}) as Record<string, unknown>;
-      const isCompleted =
-        !!onboardingData.onboarding_completed ||
-        !!onboardingData.ring_name ||
-        (typeof window !== 'undefined' && localStorage.getItem('boxing_onboarding_done') === 'true');
-
-      if (isCompleted && typeof window !== 'undefined') {
-        localStorage.setItem('boxing_onboarding_done', 'true');
-      }
-
-      // Route fighter to destination
-      if (continueParam && continueParam !== '/auth/finish') {
-        router.replace(continueParam);
-      } else {
-        router.replace(isCompleted ? '/dashboard' : '/onboarding');
-      }
+      await finishVerifiedUser(user);
     } catch (err: any) {
       if (err?.message === 'NO_EMAIL_FOUND') {
         setStatus('need_email');

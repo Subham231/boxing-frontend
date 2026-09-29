@@ -2,23 +2,20 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, ShieldCheck, Eye, EyeOff } from 'lucide-react';
+import { ArrowRight, ShieldCheck } from 'lucide-react';
 import { useFirebaseUser } from '@/lib/useFirebaseUser';
-import { linkEmailPasswordToUser, sendEmailVerificationOtp, formatEmailAuthError } from '@/lib/firebase-auth';
+import { setEmailOnCurrentAccount, formatEmailAuthError } from '@/lib/firebase-auth';
 
 /**
- * Lets an existing phone-auth fighter add an email/password credential
+ * Lets an existing phone-auth fighter add an email address
  * onto their CURRENT account — same Firebase uid, same Supabase profile
  * row, same subscription/streaks/analytics. Nothing about their existing
- * account is replaced; this only adds a second way to log in and a
- * verified email on file. See linkEmailPasswordToUser in firebase-auth.ts.
+ * account is replaced; the email is saved after Firebase verifies it.
  */
 export default function LinkEmailPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useFirebaseUser();
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,15 +32,9 @@ export default function LinkEmailPage() {
       setError('Enter a valid email address.');
       return;
     }
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
-      return;
-    }
-
     setLoading(true);
     try {
-      await linkEmailPasswordToUser(user, trimmedEmail, password);
-      await sendEmailVerificationOtp(user);
+      await setEmailOnCurrentAccount(user, trimmedEmail);
       router.replace('/verify-email');
     } catch (linkError) {
       setError(formatEmailAuthError(linkError));
@@ -65,8 +56,8 @@ export default function LinkEmailPage() {
             Add an <span className="text-primary">email.</span>
           </h1>
           <p className="mt-4 text-sm font-semibold leading-relaxed text-white/55">
-            Your phone number, streaks, subscription and history all stay exactly as they are — this just adds an
-            email + password login on top of your existing account.
+            Your phone number, streaks, subscription and history stay on this account. We&apos;ll send a one-click
+            verification link before saving the email.
           </p>
         </div>
 
@@ -85,24 +76,6 @@ export default function LinkEmailPage() {
             />
           </div>
 
-          <div className="flex flex-col gap-1">
-            <span className="text-[9px] font-bold text-white/40 uppercase">Password</span>
-            <div className="flex items-center border-b border-white/20 focus-within:border-primary">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                autoComplete="new-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                onKeyDown={(event) => event.key === 'Enter' && handleLink()}
-                placeholder="At least 6 characters"
-                className="w-full bg-transparent px-1 py-3 text-2xl font-bold tracking-tight outline-none"
-              />
-              <button type="button" onClick={() => setShowPassword((v) => !v)} className="px-1 text-white/40 hover:text-white">
-                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-              </button>
-            </div>
-          </div>
-
           {error && <p className="text-center text-[11px] font-bold leading-relaxed text-red-400">{error}</p>}
 
           <button
@@ -110,7 +83,7 @@ export default function LinkEmailPage() {
             disabled={loading}
             className="btn-primary flex h-14 w-full items-center justify-center gap-2 disabled:opacity-50"
           >
-            {loading ? 'LINKING...' : 'ADD EMAIL & SEND VERIFICATION'}
+            {loading ? 'SAVING EMAIL...' : 'ADD EMAIL & SEND VERIFICATION LINK'}
             <ArrowRight className="h-4 w-4" />
           </button>
 

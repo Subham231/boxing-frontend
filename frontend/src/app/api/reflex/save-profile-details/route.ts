@@ -15,9 +15,17 @@ export async function POST(req: NextRequest) {
   // Derive identity fields from the verified Firebase token, never from the
   // request body. This keeps the Supabase profile linked to the real account.
   const email = typeof auth.token.email === 'string' ? auth.token.email.trim().toLowerCase() : '';
+  const emailVerified = auth.token.email_verified === true;
 
   const body = await req.json().catch(() => ({}));
-  const onboardingData = body.onboardingData && typeof body.onboardingData === 'object' ? body.onboardingData : undefined;
+  const rawOnboardingData =
+    body.onboardingData && typeof body.onboardingData === 'object' ? body.onboardingData : undefined;
+  const onboardingData = rawOnboardingData ? { ...rawOnboardingData } : undefined;
+  if (onboardingData && !emailVerified) {
+    delete onboardingData.email;
+    delete onboardingData.email_verified;
+    delete onboardingData.auth_method;
+  }
   
   const rawDisplayName = body.displayName || onboardingData?.ring_name || onboardingData?.ringName;
   const rawPhone = body.phone || onboardingData?.phone_number || onboardingData?.phone;
@@ -34,7 +42,7 @@ export async function POST(req: NextRequest) {
   const avatarUrl = typeof rawAvatarUrl === 'string' ? rawAvatarUrl.trim().slice(0, 2000) : undefined;
 
   const update: Record<string, unknown> = {};
-  if (email) {
+  if (email && emailVerified) {
     update.email = email;
     update.email_verified = true;
   }

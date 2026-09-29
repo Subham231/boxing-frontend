@@ -57,8 +57,10 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
-Email verification and password-reset OTP routes also require these **server-only**
-variables in the frontend runtime environment:
+The frontend uses Firebase one-click email links for signup and sign-in. Firebase
+email-link sign-in verifies the address before the app creates a Supabase profile.
+Email-verification links do not use the Resend OTP service. These **server-only**
+variables remain required only for password-reset codes for legacy accounts:
 
 ```env
 AUTH_HMAC_SECRET=<unique random secret of at least 32 bytes>
@@ -76,6 +78,21 @@ commit their values. For Vercel, add them under **Project → Settings → Envir
 Variables** for the Production environment, then redeploy. For Docker Compose,
 put them in the root `.env` copied from `docker-compose.env.example`; Compose passes
 them to the frontend container at runtime.
+
+The legacy password-reset OTP routes also require the database objects in
+`supabase/reflex-schema-v24.sql`. Run that migration in the Supabase SQL Editor
+after the earlier reflex schema migrations. If Supabase reports that an
+`email_*` function is missing from its schema cache, run the migration and then
+refresh the cache with:
+
+```sql
+NOTIFY pgrst, 'reload schema';
+```
+
+Enable Firebase Email/Password sign-in with the **Email link (passwordless sign-in)**
+option and add the production hostname under **Authentication → Settings → Authorized
+domains**. No Resend configuration or OTP database RPC is needed for signup or email
+verification.
 
 ### Development Without Docker
 

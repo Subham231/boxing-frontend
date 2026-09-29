@@ -28,8 +28,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Server not configured.' }, { status: 500 });
   }
 
-  // requireVerifiedFirebaseUid, not the plain uid check — an email/password
-  // account whose email isn't verified yet gets a 403 EMAIL_NOT_VERIFIED here
+  // requireVerifiedFirebaseUid, not the plain uid check — an email account
+  // whose email isn't verified yet gets a 403 EMAIL_NOT_VERIFIED here
   // and never gets a profile row. Phone accounts are grandfathered through
   // untouched — see the helper's doc comment.
   const authResult = await requireVerifiedFirebaseUid(req);
@@ -41,7 +41,9 @@ export async function POST(req: NextRequest) {
   // never anything the client body could claim.
   const email = typeof decoded.email === 'string' ? decoded.email.trim().toLowerCase() : '';
   const emailVerified = decoded.email_verified === true;
-  const authMethod: 'phone' | 'email' = (decoded.firebase?.sign_in_provider === 'password' || decoded.firebase?.sign_in_provider === 'google.com') ? 'email' : 'phone';
+  const provider = decoded.firebase?.sign_in_provider;
+  const authMethod: 'phone' | 'email' =
+    provider === 'password' || provider === 'emailLink' || provider === 'google.com' ? 'email' : 'phone';
 
   const body = await req.json().catch(() => ({}));
   const referredBy = typeof body.referredBy === 'string' ? body.referredBy.trim().toUpperCase() : null;
@@ -60,9 +62,9 @@ export async function POST(req: NextRequest) {
     // Covers: a phone user linking an email later, or a re-login after finally
     // verifying. auth_method flips to 'both' rather than overwriting 'phone'.
     const identity: Record<string, unknown> = {};
-    if (email && email !== (existing.email || '').toLowerCase()) identity.email = email;
-    if (email && emailVerified !== existing.email_verified) identity.email_verified = emailVerified;
-    if (email && existing.auth_method === 'phone') identity.auth_method = 'both';
+    if (email && emailVerified && email !== (existing.email || '').toLowerCase()) identity.email = email;
+    if (email && emailVerified && existing.email_verified !== true) identity.email_verified = true;
+    if (email && emailVerified && existing.auth_method === 'phone') identity.auth_method = 'both';
     else if (!existing.auth_method) identity.auth_method = authMethod;
 
     let merged: Record<string, unknown> = { ...existing, current_session_token: sessionToken };
@@ -107,7 +109,7 @@ export async function POST(req: NextRequest) {
   // Same guard for email — belt-and-suspenders alongside Firebase's own
   // "email already in use" check. (If the email column doesn't exist yet the
   // query errors; we ignore that and let the insert path decide.)
-  if (email) {
+  if (email && emailVerified) {
     const { data: byEmail, error: byEmailError } = await supabaseAdmin
       .from('reflex_profiles')
       .select('*')
@@ -134,9 +136,9 @@ export async function POST(req: NextRequest) {
       current_session_token: sessionToken,
     };
     if (includeEmailColumns) {
-      row.email = email || null;
+      row.email = emailVerified ? email : null;
       row.email_verified = emailVerified;
-      row.auth_method = authMethod;
+      row.auth_method = emailVerified && authMethod === 'phone' ? 'both' : authMethod;
     }
 
     const { data, error } = await supabaseAdmin.from('reflex_profiles').insert(row).select('*').single();

@@ -2,16 +2,24 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, ShieldCheck, Eye, EyeOff } from 'lucide-react';
-import { signUpWithEmail, sendEmailVerificationOtp, formatEmailAuthError } from '@/lib/firebase-auth';
+import { ArrowRight, MailCheck, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { sendPasswordlessSignInLink, formatEmailAuthError } from '@/lib/firebase-auth';
+
+const RESEND_COOLDOWN_SECONDS = 30;
 
 export default function SignupPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sentLink, setSentLink] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+
+  React.useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setInterval(() => setCooldown((seconds) => Math.max(0, seconds - 1)), 1000);
+    return () => clearInterval(timer);
+  }, [cooldown]);
 
   const handleSignup = async () => {
     setError(null);
@@ -20,27 +28,23 @@ export default function SignupPage() {
       setError('Enter a valid email address.');
       return;
     }
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
-      return;
-    }
 
     setLoading(true);
     try {
-      const user = await signUpWithEmail(trimmedEmail, password);
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem('sparai_pending_email', trimmedEmail);
-      }
-      // Account exists either way at this point — if the first send fails
-      // (rare), the /verify-email page has its own resend button, so we
-      // still move the fighter forward instead of stranding them here.
-      await sendEmailVerificationOtp(user);
-      router.replace('/verify-email');
+      await sendPasswordlessSignInLink(trimmedEmail, '/onboarding');
+      setEmail(trimmedEmail);
+      setSentLink(true);
+      setCooldown(RESEND_COOLDOWN_SECONDS);
     } catch (signupError) {
       setError(formatEmailAuthError(signupError));
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleResend = async () => {
+    if (cooldown > 0 || loading) return;
+    await handleSignup();
   };
 
   return (
@@ -56,10 +60,46 @@ export default function SignupPage() {
             Become a <span className="text-primary">fighter.</span>
           </h1>
           <p className="mt-4 text-sm font-semibold leading-relaxed text-white/55">
-            Sign up with your email — we&apos;ll send a verification link before you can enter the ring.
+            {sentLink
+              ? 'Your secure, one-click signup link is on its way. Open it to verify your email and continue.'
+              : 'Enter your email and we&apos;ll send a secure one-click signup link. No password needed.'}
           </p>
         </div>
 
+        {sentLink ? (
+          <section className="flex flex-col items-center gap-6">
+            <div className="flex h-24 w-24 items-center justify-center rounded-full border border-primary/30 bg-primary/10 shadow-[0_0_30px_rgba(226,255,59,0.2)]">
+              <MailCheck className="h-10 w-10 animate-pulse text-primary" />
+            </div>
+            <div className="text-center">
+              <span className="mb-1 block text-xs font-black uppercase tracking-widest text-white/40">Link sent to</span>
+              <p className="break-all text-xl font-bold tracking-tight text-white">{email}</p>
+              <p className="mx-auto mt-2 max-w-xs text-xs leading-relaxed text-white/50">
+                Open the email and tap the link. Your account and fighter profile are created only after verification.
+              </p>
+            </div>
+            <div className="flex max-w-xs items-start gap-2 rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-2.5">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-yellow-400" />
+              <p className="text-left text-[10px] font-semibold leading-relaxed text-yellow-300/80">
+                If it doesn&apos;t arrive, check your Spam or Promotions folder.
+              </p>
+            </div>
+            {error && <p className="text-center text-[11px] font-bold text-red-400">{error}</p>}
+            <button
+              onClick={handleResend}
+              disabled={loading || cooldown > 0}
+              className="flex h-12 w-full items-center justify-center rounded-2xl border border-white/10 text-[11px] font-black uppercase tracking-widest text-white/70 hover:border-primary hover:text-primary disabled:opacity-40"
+            >
+              {loading ? 'SENDING...' : cooldown > 0 ? `RESEND LINK (${cooldown}s)` : 'RESEND SIGNUP LINK'}
+            </button>
+            <button
+              onClick={() => { setSentLink(false); setError(null); }}
+              className="text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white"
+            >
+              Change email
+            </button>
+          </section>
+        ) : (
         <section className="flex flex-col gap-4">
           <div className="flex flex-col gap-1">
             <span className="text-[9px] font-bold text-white/40 uppercase">Email</span>
@@ -75,24 +115,6 @@ export default function SignupPage() {
             />
           </div>
 
-          <div className="flex flex-col gap-1">
-            <span className="text-[9px] font-bold text-white/40 uppercase">Password</span>
-            <div className="flex items-center border-b border-white/20 focus-within:border-primary">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                autoComplete="new-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                onKeyDown={(event) => event.key === 'Enter' && handleSignup()}
-                placeholder="At least 6 characters"
-                className="w-full bg-transparent px-1 py-3 text-2xl font-bold tracking-tight outline-none"
-              />
-              <button type="button" onClick={() => setShowPassword((v) => !v)} className="px-1 text-white/40 hover:text-white">
-                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-              </button>
-            </div>
-          </div>
-
           {error && <p className="text-center text-[11px] font-bold leading-relaxed text-red-400">{error}</p>}
 
           <button
@@ -100,7 +122,7 @@ export default function SignupPage() {
             disabled={loading}
             className="btn-primary flex h-14 w-full items-center justify-center gap-2 disabled:opacity-50"
           >
-            {loading ? 'CREATING ACCOUNT...' : 'SEND VERIFICATION EMAIL'}
+            {loading ? 'SENDING LINK...' : 'SEND ONE-CLICK SIGNUP LINK'}
             <ArrowRight className="h-4 w-4" />
           </button>
 
@@ -108,6 +130,7 @@ export default function SignupPage() {
             Already a fighter? Log in
           </button>
         </section>
+        )}
       </div>
     </main>
   );

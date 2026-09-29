@@ -61,8 +61,8 @@ export default function ProtectedLayout({
           }
         }
       } catch (err) {
-        // An email/password account that hasn't clicked the verification
-        // link yet gets 403 EMAIL_NOT_VERIFIED from ensure-profile (see
+        // An email account that hasn't completed its verification link
+        // gets 403 EMAIL_NOT_VERIFIED from ensure-profile (see
         // requireVerifiedFirebaseUid) — send them to finish that step
         // instead of falling through to the generic "any uid = onboarded"
         // fallback below, which would otherwise let them straight into the
@@ -172,4 +172,3 @@ export default function ProtectedLayout({
 
   return <AppShell>{children}</AppShell>;
 }
-

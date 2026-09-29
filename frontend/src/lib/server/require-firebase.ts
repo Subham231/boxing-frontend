@@ -12,13 +12,21 @@ export async function requireFirebaseUid(req: NextRequest): Promise<
   try {
     const token = await verifyFirebaseIdToken(idToken);
     return { uid: token.uid, token };
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.name === 'EMAIL_NOT_VERIFIED') {
+      return {
+        error: NextResponse.json(
+          { error: 'Please verify your email before continuing.', code: 'EMAIL_NOT_VERIFIED' },
+          { status: 403 },
+        ),
+      };
+    }
     return { error: NextResponse.json({ error: 'Invalid or expired token.' }, { status: 401 }) };
   }
 }
 
 /**
- * Same as requireFirebaseUid, but additionally rejects an email/password
+ * Same as requireFirebaseUid, but additionally rejects an email
  * account whose email has not been verified. This is the ONLY server-side
  * source of truth for "is this fighter verified" — never trust a
  * client-supplied emailVerified flag, only the decoded ID token, which
@@ -27,7 +35,7 @@ export async function requireFirebaseUid(req: NextRequest): Promise<
  * Phone-auth accounts (sign_in_provider === 'phone') are grandfathered
  * through untouched — phone verification already happened via the SMS
  * code, so there is nothing new to require here. This only blocks a
- * password account that skipped/ignored the verification email.
+ * account that skipped/ignored the verification email.
  */
 export async function requireVerifiedFirebaseUid(req: NextRequest): Promise<
   { uid: string; token: any } | { error: NextResponse }
@@ -37,14 +45,14 @@ export async function requireVerifiedFirebaseUid(req: NextRequest): Promise<
 
   const { token } = result;
   const provider = token.firebase?.sign_in_provider;
-  // Only email/password accounts require explicit email verification.
+  // Email-link and legacy email/password accounts require verified claims.
   // Phone accounts are verified via SMS code. Google accounts are
   // auto-verified by Google (email_verified is always true). Any other
   // federated provider (GitHub, Apple, etc.) is also trusted.
-  const isPasswordAccount = provider === 'password';
+  const isEmailAccount = provider === 'password' || provider === 'emailLink';
   const hasVerifiedEmail = token.email_verified === true;
 
-  if (isPasswordAccount && !hasVerifiedEmail) {
+  if (isEmailAccount && !hasVerifiedEmail) {
     return {
       error: NextResponse.json(
         { error: 'Please verify your email before continuing.', code: 'EMAIL_NOT_VERIFIED' },

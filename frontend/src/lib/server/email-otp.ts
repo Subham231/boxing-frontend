@@ -1,5 +1,5 @@
 // SERVER-ONLY. Never import this from a 'use client' component. This is
-// the single place in the codebase that sends the OTP email — swap the
+// the single place in the codebase that sends password-reset OTP email — swap the
 // implementation here if you use a different provider than Resend, nothing
 // else in the app needs to change (same isolation pattern as hanuotp.ts).
 //
@@ -20,12 +20,9 @@ export interface EmailSendResult {
   errorMessage?: string;
 }
 
-function otpEmailHtml(otp: string, purpose: 'verify' | 'reset'): string {
-  const heading = purpose === 'reset' ? 'Reset your password' : 'Verify your email';
-  const body =
-    purpose === 'reset'
-      ? 'Use this code to reset your SPARAI password. It expires in 10 minutes.'
-      : 'Use this code to verify your email and finish creating your SPARAI account. It expires in 10 minutes.';
+function otpEmailHtml(otp: string): string {
+  const heading = 'Reset your password';
+  const body = 'Use this code to reset your SPARAI password. It expires in 10 minutes.';
   return `
     <div style="font-family: -apple-system, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
       <h2 style="margin: 0 0 8px;">${heading}</h2>
@@ -39,7 +36,6 @@ function otpEmailHtml(otp: string, purpose: 'verify' | 'reset'): string {
 export async function sendOtpEmail(
   toEmail: string,
   otp: string,
-  purpose: 'verify' | 'reset',
 ): Promise<EmailSendResult> {
   const apiKey = process.env.RESEND_API_KEY;
   const fromEmail = process.env.RESEND_FROM_EMAIL;
@@ -60,8 +56,8 @@ export async function sendOtpEmail(
       body: JSON.stringify({
         from: fromEmail,
         to: [toEmail],
-        subject: purpose === 'reset' ? 'Your SPARAI password reset code' : 'Your SPARAI verification code',
-        html: otpEmailHtml(otp, purpose),
+        subject: 'Your SPARAI password reset code',
+        html: otpEmailHtml(otp),
       }),
       signal: controller.signal,
     });

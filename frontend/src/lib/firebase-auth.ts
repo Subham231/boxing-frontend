@@ -3,19 +3,17 @@ import {
   signInWithPhoneNumber,
   onAuthStateChanged,
   signOut as firebaseSignOut,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
   fetchSignInMethodsForEmail,
   sendSignInLinkToEmail,
   isSignInWithEmailLink,
   signInWithEmailLink,
-  linkWithCredential,
-  EmailAuthProvider,
   GoogleAuthProvider,
   signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
   reload,
+  sendEmailVerification,
+  updateEmail,
   type ActionCodeSettings,
   type ConfirmationResult,
   type User,
@@ -25,7 +23,7 @@ import { firebaseAuth } from './firebase';
 export interface UserProfile {
   uid: string;
   phone: string;
-  // Added by reflex-schema-v21.sql (email/password auth). Optional because
+  // Added by reflex-schema-v21.sql (email auth). Optional because
   // rows created before the migration ran may not have them yet.
   email?: string | null;
   email_verified?: boolean;
@@ -279,15 +277,15 @@ export async function applyReferralCode(user: User, code: string): Promise<void>
 }
 
 // ---------------------------------------------------------------------------
-// Email / Password authentication
+// Email authentication
 //
 // Architecture mirrors phone auth above: Firebase Auth owns the credential
 // and the verification email; Supabase (via /api/reflex/*) only stores the
 // profile row keyed by the same Firebase uid. A phone-auth user who later
-// adds an email keeps their existing uid — see linkEmailPasswordToUser.
+// adds an email keeps their existing uid — see setEmailOnCurrentAccount.
 // ---------------------------------------------------------------------------
 
-/** Map Firebase email/password auth errors to something a fighter can act on. */
+/** Map Firebase email-link auth errors to something a fighter can act on. */
 export function formatEmailAuthError(error: unknown): string {
   const code =
     error && typeof error === 'object' && 'code' in error
@@ -329,11 +327,15 @@ export async function emailAccountExists(email: string): Promise<boolean> {
   return methods.length > 0;
 }
 
-/** True when the account is phone-authenticated without an email/password provider. */
+/** True when the account is phone-authenticated without an email provider. */
 export function isPhoneOnlyUser(user: User | null | undefined): user is User {
   if (!user) return false;
   const providers = user.providerData.map((provider) => provider.providerId);
-  return (providers.includes('phone') || !!user.phoneNumber) && !providers.includes('password');
+  return (
+    (providers.includes('phone') || !!user.phoneNumber) &&
+    !providers.includes('password') &&
+    !providers.includes('emailLink')
+  );
 }
 
 /** Build the Firebase action URL for an existing passwordless sign-in flow. */
@@ -343,6 +345,19 @@ export function getEmailLinkActionSettings(email: string, continuePath = '/dashb
     url: `${origin}/auth/finish?email=${encodeURIComponent(email.trim().toLowerCase())}&continue=${encodeURIComponent(continuePath)}`,
     handleCodeInApp: true,
   };
+}
+
+export async function sendFirebaseEmailVerification(user: User, continuePath = '/onboarding'): Promise<void> {
+  if (!user.email) throw new Error('This account has no email address to verify.');
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://sparai.in';
+  await sendEmailVerification(user, {
+    url: `${origin}/verify-email?continue=${encodeURIComponent(continuePath)}`,
+    handleCodeInApp: true,
+  });
+}
+
+export async function setEmailOnCurrentAccount(user: User, email: string): Promise<void> {
+  await updateEmail(user, email.trim().toLowerCase());
 }
 
 export async function sendPasswordlessSignInLink(email: string, continuePath = '/dashboard'): Promise<void> {
@@ -424,66 +439,6 @@ export function formatGoogleAuthError(error: unknown): string {
   }
 }
 
-/**
- * New-user signup with email + password. Creates the Firebase account and
- * returns the (unverified) user. Does NOT send a verification email itself
- * and does NOT create the Supabase profile row yet — that only happens
- * once the email is verified (see ensureUserProfile / the /verify-email
- * page). Callers should follow this with sendEmailVerificationOtp(user).
- *
- * Verification is a 6-digit code sent via our own /api/email-auth/send-otp
- * (real transactional email API), not Firebase's built-in
- * sendEmailVerification() — Firebase's own mailer is what was causing
- * verification emails to never arrive in Gmail inboxes, and its link-based
- * flow doesn't return cleanly into an installed PWA. See
- * lib/server/email-otp.ts for details.
- */
-export async function signUpWithEmail(email: string, password: string): Promise<User> {
-  const cred = await createUserWithEmailAndPassword(firebaseAuth, email.trim(), password);
-  return cred.user;
-}
-
-/** Sends a 6-digit email-verification code to the signed-in user's own email. */
-export async function sendEmailVerificationOtp(user: User): Promise<{ ok: boolean; message?: string }> {
-  const idToken = await user.getIdToken();
-  const res = await fetch('/api/email-auth/send-otp', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-    body: JSON.stringify({ purpose: 'verify' }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) return { ok: false, message: data?.message || data?.error || 'Could not send the code.' };
-  return { ok: true };
-}
-
-/**
- * Submits the 6-digit code the fighter received by email. On success,
- * flips emailVerified=true server-side (Firebase Admin) and force-refreshes
- * this client's ID token so `token.email_verified` shows true on the very
- * next protected API call (e.g. ensureUserProfile).
- */
-export async function verifyEmailVerificationOtp(user: User, otp: string): Promise<{ ok: boolean; message?: string }> {
-  const idToken = await user.getIdToken();
-  const res = await fetch('/api/email-auth/verify-otp', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-    body: JSON.stringify({ purpose: 'verify', otp }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || !data.verified) {
-    const messages: Record<string, string> = {
-      incorrect_code: 'That code is incorrect.',
-      too_many_attempts: 'Too many incorrect attempts. Request a new code.',
-      no_active_otp: 'That code has expired. Request a new one.',
-      invalid_input: 'Enter the 6-digit code.',
-    };
-    return { ok: false, message: messages[data?.reason] || 'Could not verify that code.' };
-  }
-  await reload(user);
-  await user.getIdToken(true);
-  return { ok: true };
-}
-
 /** Step 1 of the forgot-password flow — sends a 6-digit reset code by email. */
 export async function sendPasswordResetOtp(email: string): Promise<{ ok: boolean; message?: string }> {
   const res = await fetch('/api/email-auth/send-otp', {
@@ -522,18 +477,6 @@ export async function verifyPasswordResetOtp(
 }
 
 /**
- * Login with email + password. Throws the raw Firebase error on bad
- * credentials — callers should run it through formatEmailAuthError. Does
- * NOT check emailVerified itself; callers decide what to do with an
- * unverified user (normally: send them to /verify-email). The backend
- * enforces verification independently on any protected route.
- */
-export async function loginWithEmail(email: string, password: string): Promise<User> {
-  const cred = await signInWithEmailAndPassword(firebaseAuth, email.trim(), password);
-  return cred.user;
-}
-
-/**
  * Forces a fresh token fetch from Firebase and returns whether the email
  * is verified now. Firebase's local `user.emailVerified` is a snapshot from
  * sign-in time — it does NOT update on its own after the user clicks the
@@ -545,19 +488,4 @@ export async function refreshEmailVerified(user: User): Promise<boolean> {
   // Force a fresh token before protected profile APIs inspect email_verified.
   await user.getIdToken(true);
   return user.emailVerified;
-}
-
-/**
- * Migration path for existing phone-auth users: links an email/password
- * credential onto the CURRENT Firebase user without creating a new account
- * or a new uid. All existing Supabase data (keyed by uid) is untouched —
- * ensureUserProfile just adds the email onto the same profile row after
- * this succeeds. Firebase itself rejects the link if the email is already
- * used by a different account (auth/credential-already-in-use — see
- * formatEmailAuthError above). Does not send a verification code itself —
- * call sendEmailVerificationOtp(user) right after this succeeds.
- */
-export async function linkEmailPasswordToUser(user: User, email: string, password: string): Promise<void> {
-  const credential = EmailAuthProvider.credential(email.trim(), password);
-  await linkWithCredential(user, credential);
 }

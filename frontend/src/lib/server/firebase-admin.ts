@@ -27,21 +27,15 @@ export function getFirebaseAdminApp(): App {
 // phone_number. Throws if the token is invalid/expired/tampered with.
 export async function verifyFirebaseIdToken(idToken: string) {
   const auth = getAuth(getFirebaseAdminApp());
-  return auth.verifyIdToken(idToken);
-}
-
-// ---------------------------------------------------------------------------
-// Used by /api/email-auth/* once our own OTP check (Supabase, not Firebase)
-// has succeeded. Firebase's `email_verified` claim only changes when we flip
-// it here — the client must then force-refresh its ID token
-// (getIdToken(true)) before that claim shows up, same as any other custom
-// claim change.
-// ---------------------------------------------------------------------------
-
-/** Marks a Firebase user's email as verified after a successful email-OTP check. */
-export async function markFirebaseEmailVerified(uid: string): Promise<void> {
-  const auth = getAuth(getFirebaseAdminApp());
-  await auth.updateUser(uid, { emailVerified: true });
+  const token = await auth.verifyIdToken(idToken);
+  const provider = token.firebase?.sign_in_provider;
+  // Never let an unverified email identity reach any API that can persist data.
+  if ((provider === 'emailLink' || provider === 'password') && token.email_verified !== true) {
+    const error = new Error('EMAIL_NOT_VERIFIED');
+    error.name = 'EMAIL_NOT_VERIFIED';
+    throw error;
+  }
+  return token;
 }
 
 /** Looks up a Firebase user by email. Returns null if none exists (never throws on not-found). */
