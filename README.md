@@ -57,6 +57,26 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
+Email verification and password-reset OTP routes also require these **server-only**
+variables in the frontend runtime environment:
+
+```env
+AUTH_HMAC_SECRET=<unique random secret of at least 32 bytes>
+FIREBASE_SERVICE_ACCOUNT_KEY=<base64-encoded Firebase service-account JSON>
+RESEND_API_KEY=<Resend API key>
+RESEND_FROM_EMAIL=<sender address on a verified Resend domain>
+SUPABASE_SERVICE_ROLE_KEY=<Supabase service-role key>
+```
+
+Generate a secret locally with
+`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
+Use the same stable value across all instances of one deployment, and a different
+value for each environment. Never prefix these variables with `NEXT_PUBLIC_` or
+commit their values. For Vercel, add them under **Project → Settings → Environment
+Variables** for the Production environment, then redeploy. For Docker Compose,
+put them in the root `.env` copied from `docker-compose.env.example`; Compose passes
+them to the frontend container at runtime.
+
 ### Development Without Docker
 
 For local development outside of Docker:

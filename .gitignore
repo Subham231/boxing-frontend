@@ -10,6 +10,8 @@ dist/
 .env.*.local
 .env.example
 docker-compose.env.example
+!frontend/.env.example
+!docker-compose.env.example
 
 # IDE
 .vscode/
