@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { ShieldAlert, ArrowRight, KeyRound } from 'lucide-react';
+import { ShieldAlert, ArrowRight, MailCheck } from 'lucide-react';
 import { useFirebaseUser } from '@/lib/useFirebaseUser';
 import { useMyProfile } from '@/lib/profile-client';
 import { isPhoneOnlyUser } from '@/lib/firebase-auth';
@@ -47,7 +47,7 @@ export function PhoneUserMigrationBanner({ className = '' }: PhoneUserMigrationB
           </h3>
 
           <p className="mt-1 text-[11px] font-medium leading-relaxed text-white/70">
-            SMS verification is not available on this web app. Connect your email to log in seamlessly without passwords, keeping all your streaks and scores safe.
+            Add a verified email for one-click sign-in and account recovery. Your phone number, streaks, and scores stay on this account.
           </p>
 
           <div className="mt-3">
@@ -55,8 +55,8 @@ export function PhoneUserMigrationBanner({ className = '' }: PhoneUserMigrationB
               href="/account/link-email"
               className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-[10px] font-black uppercase tracking-widest text-[#10130a] shadow-[0_0_15px_rgba(226,255,59,0.4)] transition-all hover:bg-[#d4f52e] hover:shadow-[0_0_20px_rgba(226,255,59,0.6)] active:scale-95"
             >
-              <KeyRound className="h-3.5 w-3.5" />
-              Connect Email Login
+              <MailCheck className="h-3.5 w-3.5" />
+              Add Email Link
               <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </div>

@@ -263,7 +263,7 @@ export default function DashboardPage() {
           </Link>
         </header>
 
-        {/* Phone-only user migration banner — prompts them to add email+password */}
+        {/* Phone-only user migration banner — lets them add a verified email */}
         <PhoneUserMigrationBanner />
 
         <div className="rounded-2xl border border-primary/25 bg-primary/[0.04] px-4 py-3">

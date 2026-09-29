@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, Suspense } from 'react';
+import React, { useEffect, useRef, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ShieldCheck, ArrowRight, RefreshCw, AlertCircle, Sparkles } from 'lucide-react';
 import {
@@ -20,9 +20,9 @@ function FinishAuthContent() {
   const [emailInput, setEmailInput] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const autoSignInStarted = useRef(false);
 
   const continueParam = searchParams?.get('continue') || '';
-  const urlEmail = searchParams?.get('email') || '';
 
   const finishVerifiedUser = async (user: import('firebase/auth').User) => {
     if (!(await refreshEmailVerified(user))) {
@@ -53,7 +53,7 @@ function FinishAuthContent() {
     setErrorMsg(null);
     setLoading(true);
     try {
-      const user = await completePasswordlessSignIn(emailOverride || urlEmail);
+      const user = await completePasswordlessSignIn(emailOverride);
       setStatus('success');
       await finishVerifiedUser(user);
     } catch (err: any) {
@@ -77,6 +77,8 @@ function FinishAuthContent() {
       return;
     }
 
+    if (autoSignInStarted.current) return;
+    autoSignInStarted.current = true;
     void processSignIn();
   }, []);
 

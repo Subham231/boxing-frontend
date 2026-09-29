@@ -8,10 +8,13 @@ import { useFirebaseUser } from '@/lib/useFirebaseUser';
 import StepBadge from './StepBadge';
 import {
   sendPasswordlessSignInLink,
+  sendFirebaseEmailVerification,
   refreshEmailVerified,
   ensureUserProfile,
   saveProfileDetails,
   formatEmailAuthError,
+  isPhoneOnlyUser,
+  setEmailOnCurrentAccount,
 } from '@/lib/firebase-auth';
 
 const PENDING_SIGNUP_EMAIL_KEY = 'sparai_pending_signup_email';
@@ -103,7 +106,12 @@ const EmailVerification: React.FC = () => {
 
     setLoading(true);
     try {
-      await sendPasswordlessSignInLink(trimmedEmail, '/onboarding');
+      if (isPhoneOnlyUser(user)) {
+        await setEmailOnCurrentAccount(user, trimmedEmail);
+        await sendFirebaseEmailVerification(user, '/onboarding');
+      } else {
+        await sendPasswordlessSignInLink(trimmedEmail, '/onboarding');
+      }
       updateData({ email: trimmedEmail });
       localStorage.setItem(PENDING_SIGNUP_EMAIL_KEY, trimmedEmail);
       setEmail(trimmedEmail);
@@ -122,7 +130,11 @@ const EmailVerification: React.FC = () => {
     setInfo(null);
     setLoading(true);
     try {
-      await sendPasswordlessSignInLink(email, '/onboarding');
+      if (isPhoneOnlyUser(user)) {
+        await sendFirebaseEmailVerification(user, '/onboarding');
+      } else {
+        await sendPasswordlessSignInLink(email, '/onboarding');
+      }
       setInfo('A new secure link is on its way. Check your inbox.');
       setCooldown(RESEND_COOLDOWN_SECONDS);
     } catch (sendError) {

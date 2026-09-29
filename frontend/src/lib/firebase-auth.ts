@@ -333,16 +333,15 @@ export function isPhoneOnlyUser(user: User | null | undefined): user is User {
   const providers = user.providerData.map((provider) => provider.providerId);
   return (
     (providers.includes('phone') || !!user.phoneNumber) &&
-    !providers.includes('password') &&
-    !providers.includes('emailLink')
+    providers.every((providerId) => providerId === 'phone')
   );
 }
 
-/** Build the Firebase action URL for an existing passwordless sign-in flow. */
-export function getEmailLinkActionSettings(email: string, continuePath = '/dashboard'): ActionCodeSettings {
+/** Build the Firebase action URL for a passwordless sign-in flow. */
+export function getEmailLinkActionSettings(continuePath = '/dashboard'): ActionCodeSettings {
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://sparai.in';
   return {
-    url: `${origin}/auth/finish?email=${encodeURIComponent(email.trim().toLowerCase())}&continue=${encodeURIComponent(continuePath)}`,
+    url: `${origin}/auth/finish?continue=${encodeURIComponent(continuePath)}`,
     handleCodeInApp: true,
   };
 }
@@ -362,7 +361,7 @@ export async function setEmailOnCurrentAccount(user: User, email: string): Promi
 
 export async function sendPasswordlessSignInLink(email: string, continuePath = '/dashboard'): Promise<void> {
   const cleanEmail = email.trim().toLowerCase();
-  await sendSignInLinkToEmail(firebaseAuth, cleanEmail, getEmailLinkActionSettings(cleanEmail, continuePath));
+  await sendSignInLinkToEmail(firebaseAuth, cleanEmail, getEmailLinkActionSettings(continuePath));
   if (typeof window !== 'undefined') {
     window.localStorage.setItem('sparai_email_for_signin', cleanEmail);
     window.localStorage.setItem('sparai_email_signin_ts', Date.now().toString());
@@ -383,9 +382,6 @@ export async function completePasswordlessSignIn(emailFallback?: string, url?: s
   let email = (emailFallback || '').trim().toLowerCase();
   if (!email && typeof window !== 'undefined') {
     email = window.localStorage.getItem('sparai_email_for_signin') || '';
-  }
-  if (!email && typeof window !== 'undefined') {
-    email = (new URLSearchParams(window.location.search).get('email') || '').trim().toLowerCase();
   }
   if (!email) throw new Error('NO_EMAIL_FOUND');
 
