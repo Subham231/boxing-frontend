@@ -631,7 +631,8 @@ export default function VisionPage() {
 
   // --- Upgraded vision pipeline ------------------------------------------
   const poseEngineRef = useRef<PoseEngine | null>(null);
-  // Warm the MediaPipe bundle while the page opens, before the camera starts.
+  // Start fetching the MediaPipe script, wasm and model as soon as the page
+  // opens, so the "loading AI model" step after the camera starts is short.
   useEffect(() => {
     PoseEngine.preload();
   }, []);

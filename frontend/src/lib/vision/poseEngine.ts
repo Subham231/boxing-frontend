@@ -31,9 +31,9 @@ import {
   PoseModelVariant,
   TierProfile,
   detectDeviceTier,
-  downshift,
   profileFor,
 } from './deviceTier';
+import { VISION_CONFIG } from './visionConfig';
 
 
 // ---------------------------------------------------------------------------
@@ -175,21 +175,87 @@ export interface PoseEngineOptions {
   disableHands?: boolean;
 }
 
-const TASKS_VISION_CDN =
-  'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/vision_bundle.mjs';
+/**
+ * Where the tasks-vision ES module comes from, in order. The self-hosted copy
+ * (public/mediapipe/vision_bundle.mjs — see README note) is tried first
+ * because jsDelivr is slow or blocked on some networks, and a hung CDN import
+ * used to stall the whole "loading AI model" step.
+ */
+const TASKS_VISION_SOURCES = [
+  '/mediapipe/vision_bundle.mjs',
+  'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/vision_bundle.mjs',
+];
 
-let tasksVisionModulePromise: Promise<TasksVisionModule> | null = null;
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); }
+    );
+  });
+}
 
-function loadTasksVisionModule(): Promise<TasksVisionModule> {
-  if (!tasksVisionModulePromise) {
-    tasksVisionModulePromise = import(/* webpackIgnore: true */ TASKS_VISION_CDN)
-      .then((module) => module as TasksVisionModule)
-      .catch((error: unknown) => {
-        tasksVisionModulePromise = null;
-        throw error;
-      });
+// Module-level caches: the script and wasm fileset only need loading once per
+// page, and can start loading before the camera is even ready (preload()).
+let visionModulePromise: Promise<TasksVisionModule | null> | null = null;
+let filesetPromise: Promise<VisionFileset | null> | null = null;
+
+function loadVisionModule(): Promise<TasksVisionModule | null> {
+  if (!visionModulePromise) {
+    visionModulePromise = (async () => {
+      for (const url of TASKS_VISION_SOURCES) {
+        try {
+          // Runtime import (not bundled) so a failure degrades instead of
+          // breaking the build. Each source gets its own timeout.
+          const mod = await withTimeout(
+            import(/* webpackIgnore: true */ url) as Promise<TasksVisionModule>,
+            VISION_CONFIG.engine.assetTimeoutMs,
+            `tasks-vision bundle ${url}`
+          );
+          if (mod) return mod;
+        } catch (err) {
+          console.warn('[poseEngine] failed to load tasks-vision bundle from', url, err);
+        }
+      }
+      return null;
+    })().then((m) => {
+      if (!m) visionModulePromise = null; // allow a later retry
+      return m;
+    });
   }
-  return tasksVisionModulePromise;
+  return visionModulePromise;
+}
+
+function loadFileset(
+  resolver: NonNullable<TasksVisionModule['FilesetResolver']>
+): Promise<VisionFileset | null> {
+  if (!filesetPromise) {
+    filesetPromise = (async () => {
+      for (const wasmPath of WASM_SOURCES) {
+        try {
+          return await withTimeout(
+            resolver.forVisionTasks(wasmPath),
+            VISION_CONFIG.engine.assetTimeoutMs,
+            `wasm fileset ${wasmPath}`
+          );
+        } catch (err) {
+          console.warn(`[poseEngine] wasm fileset failed at ${wasmPath}:`, err);
+        }
+      }
+      return null;
+    })().then((f) => {
+      if (!f) filesetPromise = null;
+      return f;
+    });
+  }
+  return filesetPromise;
+}
+
+const MODEL_RANK: Record<PoseModelVariant, number> = { lite: 0, full: 1, heavy: 2 };
+function capProfile(profile: TierProfile): TierProfile {
+  const max = VISION_CONFIG.engine.maxModel as PoseModelVariant;
+  return MODEL_RANK[profile.model] > MODEL_RANK[max] ? { ...profile, model: max } : profile;
 }
 
 /**
@@ -253,6 +319,10 @@ export class PoseEngine {
   private disposed = false;
 
   private lastInferenceAt = 0;
+  private lastFrameAt = 0;
+  private errorStreak = 0;
+  private recovering = false;
+  private forceCpu = false;
   private lastVideoTime = -1;
 
   private inferenceTimes: number[] = [];
@@ -269,19 +339,27 @@ export class PoseEngine {
   private legacyPending: { resolve: () => void } | null = null;
   private legacyLatest: EngineFrame | null = null;
 
-  static preload(): void {
-    if (typeof window === 'undefined') return;
-    void loadTasksVisionModule().catch((error: unknown) => {
-      console.info('[poseEngine] model bundle preload failed; initialization will retry:', error);
-    });
-  }
-
   constructor(options: PoseEngineOptions) {
     this.opts = options;
     this.profile = options.forceTier
       ? profileFor(options.forceTier, 'forced by caller')
       : detectDeviceTier();
     if (options.disableHands) this.profile = { ...this.profile, enableHands: false };
+    this.profile = capProfile(this.profile);
+  }
+
+  /**
+   * Start fetching the script, wasm and the model this device will use, before
+   * the camera is ready. Safe to call more than once; failures are ignored
+   * here and surface (with fallbacks) in initialize().
+   */
+  static preload(): void {
+    if (typeof window === 'undefined') return;
+    void loadVisionModule().then((mod) => {
+      if (mod?.FilesetResolver) void loadFileset(mod.FilesetResolver);
+    });
+    const profile = capProfile(detectDeviceTier());
+    fetch(MODEL_SOURCES[profile.model][0]).catch(() => undefined);
   }
 
   get status(): EngineStatus {
@@ -335,29 +413,13 @@ export class PoseEngine {
   }
 
   private async initTasksVision(): Promise<boolean> {
-    let visionModule: TasksVisionModule | null = null;
-    try {
-      // Dynamic import of a remote ESM bundle. Kept as a runtime import
-      // rather than a static one so a CDN failure degrades to the legacy
-      // path instead of breaking the page build/bundle.
-      visionModule = await loadTasksVisionModule();
-    } catch (err) {
-      console.warn('[poseEngine] failed to load tasks-vision bundle:', err);
-      return false;
-    }
+    const visionModule = await loadVisionModule();
+    if (!visionModule) return false;
 
-    const { FilesetResolver, PoseLandmarker, HandLandmarker } = visionModule ?? {};
+    const { FilesetResolver, PoseLandmarker, HandLandmarker } = visionModule;
     if (!FilesetResolver || !PoseLandmarker) return false;
 
-    // Resolve the wasm fileset, preferring the self-hosted copy.
-    for (const wasmPath of WASM_SOURCES) {
-      try {
-        this.visionFileset = await FilesetResolver.forVisionTasks(wasmPath);
-        break;
-      } catch (err) {
-        console.warn(`[poseEngine] wasm fileset failed at ${wasmPath}:`, err);
-      }
-    }
+    this.visionFileset = await loadFileset(FilesetResolver);
     if (!this.visionFileset) return false;
 
     // Try the requested model, then progressively lighter ones. A missing
@@ -371,9 +433,10 @@ export class PoseEngine {
 
     for (const variant of variants) {
       for (const modelPath of MODEL_SOURCES[variant]) {
-        for (const delegate of ['GPU', 'CPU'] as const) {
+        const delegates: ('GPU' | 'CPU')[] = this.forceCpu ? ['CPU'] : ['GPU', 'CPU'];
+        for (const delegate of delegates) {
           try {
-            this.poseLandmarker = await PoseLandmarker.createFromOptions(this.visionFileset, {
+            this.poseLandmarker = await withTimeout(PoseLandmarker.createFromOptions(this.visionFileset, {
               baseOptions: { modelAssetPath: modelPath, delegate },
               runningMode: 'VIDEO',
               numPoses: 1,
@@ -381,7 +444,7 @@ export class PoseEngine {
               minPosePresenceConfidence: 0.5,
               minTrackingConfidence: 0.5,
               outputSegmentationMasks: false,
-            });
+            }), VISION_CONFIG.engine.assetTimeoutMs, `pose ${variant}/${delegate}`);
             this.delegate = delegate;
             if (variant !== this.profile.model) {
               console.warn(
@@ -403,26 +466,43 @@ export class PoseEngine {
 
     if (!this.poseLandmarker) return false;
 
-    // Hands are optional and must never block pose coming up.
-    if (this.profile.enableHands && HandLandmarker) {
-      for (const modelPath of HAND_MODEL_SOURCES) {
-        try {
-          this.handLandmarker = await HandLandmarker.createFromOptions(this.visionFileset, {
+    // Hands are optional and must never block pose coming up, so they load
+    // in the background and attach when ready.
+    if (this.profile.enableHands && HandLandmarker && !this.handLandmarker) {
+      void this.initHands(HandLandmarker);
+    }
+
+    return true;
+  }
+
+  private async initHands(
+    HandLandmarker: NonNullable<TasksVisionModule['HandLandmarker']>
+  ): Promise<void> {
+    for (const modelPath of HAND_MODEL_SOURCES) {
+      try {
+        const landmarker = await withTimeout(
+          HandLandmarker.createFromOptions(this.visionFileset, {
             baseOptions: { modelAssetPath: modelPath, delegate: this.delegate },
             runningMode: 'VIDEO',
             numHands: 2,
             minHandDetectionConfidence: 0.5,
             minHandPresenceConfidence: 0.5,
             minTrackingConfidence: 0.5,
-          });
-          break;
-        } catch (err) {
-          console.warn('[poseEngine] hand landmarker init failed:', err);
+          }),
+          VISION_CONFIG.engine.assetTimeoutMs,
+          `hand model ${modelPath}`
+        );
+        if (this.disposed || !this.profile.enableHands) {
+          try { landmarker.close?.(); } catch { /* best effort */ }
+          return;
         }
+        this.handLandmarker = landmarker;
+        this.emitStatus();
+        return;
+      } catch (err) {
+        console.warn('[poseEngine] hand landmarker init failed:', err);
       }
     }
-
-    return true;
   }
 
   private async initLegacy(): Promise<boolean> {
@@ -494,6 +574,7 @@ export class PoseEngine {
     this.video = video;
     this.running = true;
     this.rateWindowStart = performance.now();
+    this.lastFrameAt = performance.now();
     this.renderFrames = 0;
     this.inferenceFrames = 0;
     this.loop();
@@ -501,6 +582,8 @@ export class PoseEngine {
 
   setPaused(paused: boolean): void {
     this.paused = paused;
+    // Resuming must not look like a stall.
+    this.lastFrameAt = performance.now();
   }
 
   private loop = (): void => {
@@ -529,7 +612,17 @@ export class PoseEngine {
       this.emitStatus();
     }
 
-    if (this.paused || this.inflight) return;
+    if (this.paused || this.recovering) return;
+
+    // Watchdog: a session must never silently stop analysing. If nothing has
+    // completed for stallMs, un-pause the video and/or rebuild the model.
+    if (now - this.lastFrameAt > VISION_CONFIG.engine.stallMs) {
+      this.lastFrameAt = now;
+      void this.recover();
+      return;
+    }
+
+    if (this.inflight) return;
 
     const minInterval = 1000 / this.profile.inferenceFps;
     if (now - this.lastInferenceAt < minInterval) return;
@@ -575,6 +668,8 @@ export class PoseEngine {
         }
 
         const inferenceMs = performance.now() - started;
+        this.lastFrameAt = performance.now();
+        this.errorStreak = 0;
         this.recordInference(inferenceMs);
         this.opts.onFrame({
           landmarks,
@@ -603,6 +698,7 @@ export class PoseEngine {
         });
 
         const inferenceMs = performance.now() - started;
+        this.lastFrameAt = performance.now();
         this.recordInference(inferenceMs);
         if (this.legacyLatest) {
           this.opts.onFrame({ ...this.legacyLatest, inferenceMs, timestampMs: now });
@@ -610,6 +706,7 @@ export class PoseEngine {
         }
       }
     } catch (err) {
+      this.errorStreak++;
       console.warn('[poseEngine] inference failed:', err);
     } finally {
       this.inflight = false;
@@ -670,8 +767,8 @@ export class PoseEngine {
 
     // Second: drop the inference rate before dropping model quality —
     // fewer good landmarks beats more bad ones for biomechanics.
-    if (this.profile.inferenceFps > 15) {
-      const next = Math.max(15, Math.round(this.profile.inferenceFps * 0.75));
+    if (this.profile.inferenceFps > 12) {
+      const next = Math.max(12, Math.round(this.profile.inferenceFps * 0.75));
       console.warn(`[poseEngine] reducing inference rate ${this.profile.inferenceFps} -> ${next}fps`);
       this.profile = { ...this.profile, inferenceFps: next };
       this.inferenceTimes = [];
@@ -680,37 +777,46 @@ export class PoseEngine {
       return;
     }
 
-    // Last: swap to a lighter model. Requires a reload, so it's the final
-    // resort.
-    const nextTier = downshift(this.profile.tier);
-    if (nextTier) {
-      console.warn(`[poseEngine] downshifting tier ${this.profile.tier} -> ${nextTier}`);
-      this.lastDownshiftAt = now;
-      this.inferenceTimes = [];
-      void this.reloadAtTier(nextTier);
-    }
+    // Deliberately NO model reload here. Reloading mid-session used to blank
+    // the grid for seconds (or forever, if the reload failed) exactly when a
+    // slow device was already struggling. At the floor rate we just keep going.
   }
 
-  private async reloadAtTier(tier: DeviceTier): Promise<void> {
-    const next = profileFor(tier, 'runtime performance downshift');
-    // Preserve the already-reduced inference rate rather than resetting it
-    // back up to the new tier's nominal value.
-    this.profile = { ...next, inferenceFps: Math.min(next.inferenceFps, this.profile.inferenceFps) };
-
+  /**
+   * Recover from a stall: resume a paused video first (cheap), otherwise
+   * rebuild the pose model on the CPU delegate, which is immune to GPU
+   * context loss.
+   */
+  private async recover(): Promise<void> {
+    if (this.recovering || this.disposed) return;
+    this.recovering = true;
     try {
-      this.poseLandmarker?.close?.();
-    } catch {
-      /* best effort */
-    }
-    this.poseLandmarker = null;
+      const video = this.video;
+      // A paused, not-ready or frozen camera is not a model problem — don't
+      // tear the model down for it.
+      if (video && (video.paused || video.ended || video.readyState < 2 || video.currentTime === this.lastVideoTime)) {
+        console.warn('[poseEngine] video stalled/paused — resuming');
+        try { await video.play(); } catch { /* autoplay policy; nothing more to do */ }
+        this.lastFrameAt = performance.now();
+        return;
+      }
+      if (this.backend !== 'tasks-vision') return;
 
-    const ok = await this.initTasksVision();
-    if (!ok) {
-      console.warn('[poseEngine] reload after downshift failed; attempting legacy backend');
-      const legacyOk = await this.initLegacy();
-      this.backend = legacyOk ? 'legacy' : this.backend;
+      console.warn('[poseEngine] no inference results — rebuilding pose model on CPU');
+      this.forceCpu = true;
+      try { this.poseLandmarker?.close?.(); } catch { /* best effort */ }
+      this.poseLandmarker = null;
+      const ok = await this.initTasksVision();
+      if (!ok) {
+        const legacyOk = await this.initLegacy();
+        if (legacyOk) this.backend = 'legacy';
+      }
+      this.errorStreak = 0;
+      this.lastFrameAt = performance.now();
+      this.emitStatus();
+    } finally {
+      this.recovering = false;
     }
-    this.emitStatus();
   }
 
   private emitStatus(): void {
