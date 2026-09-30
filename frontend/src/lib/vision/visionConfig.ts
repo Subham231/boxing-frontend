@@ -59,6 +59,21 @@ export const VISION_CONFIG = {
     maxExtrapolateMs: 120,
   },
 
+  // ── Pose engine: startup speed and mid-session resilience ────────────────
+  engine: {
+    /**
+     * Heaviest model the engine will start with. 'heavy' is ~3x the download
+     * and GPU-compile time of 'full' and is the model most likely to be
+     * throttled mid-round, which used to trigger a model reload and a blank
+     * grid. Raise to 'heavy' only if you have profiled it on your devices.
+     */
+    maxModel: 'full',
+    /** Give up on a single asset (script, wasm, model) after this long (ms). */
+    assetTimeoutMs: 12000,
+    /** No completed inference for this long (ms) while running = stalled. */
+    stallMs: 2500,
+  },
+
   // ── Overlay drawing ───────────────────────────────────────────────────────
   overlay: {
     /** Landmarks below this confidence are not drawn. */

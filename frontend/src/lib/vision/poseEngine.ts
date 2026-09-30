@@ -178,6 +178,20 @@ export interface PoseEngineOptions {
 const TASKS_VISION_CDN =
   'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/vision_bundle.mjs';
 
+let tasksVisionModulePromise: Promise<TasksVisionModule> | null = null;
+
+function loadTasksVisionModule(): Promise<TasksVisionModule> {
+  if (!tasksVisionModulePromise) {
+    tasksVisionModulePromise = import(/* webpackIgnore: true */ TASKS_VISION_CDN)
+      .then((module) => module as TasksVisionModule)
+      .catch((error: unknown) => {
+        tasksVisionModulePromise = null;
+        throw error;
+      });
+  }
+  return tasksVisionModulePromise;
+}
+
 /**
  * Model asset resolution. Lite is self-hosted (it already ships in
  * /public/models). Full and Heavy fall back to Google's CDN unless they've
@@ -255,6 +269,13 @@ export class PoseEngine {
   private legacyPending: { resolve: () => void } | null = null;
   private legacyLatest: EngineFrame | null = null;
 
+  static preload(): void {
+    if (typeof window === 'undefined') return;
+    void loadTasksVisionModule().catch((error: unknown) => {
+      console.info('[poseEngine] model bundle preload failed; initialization will retry:', error);
+    });
+  }
+
   constructor(options: PoseEngineOptions) {
     this.opts = options;
     this.profile = options.forceTier
@@ -319,7 +340,7 @@ export class PoseEngine {
       // Dynamic import of a remote ESM bundle. Kept as a runtime import
       // rather than a static one so a CDN failure degrades to the legacy
       // path instead of breaking the page build/bundle.
-      visionModule = (await import(/* webpackIgnore: true */ TASKS_VISION_CDN)) as TasksVisionModule;
+      visionModule = await loadTasksVisionModule();
     } catch (err) {
       console.warn('[poseEngine] failed to load tasks-vision bundle:', err);
       return false;

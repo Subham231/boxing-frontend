@@ -49,6 +49,13 @@ import {
 import { GuardTracker, measureWristAlignment, matchHandToWrist, HAND_LM } from '@/lib/vision/guardTracker';
 import { syncCanvasToVideo, buildDrawablePose, drawOverlay } from '@/lib/vision/overlayRenderer';
 import { VISION_CONFIG } from '@/lib/vision/visionConfig';
+import {
+  isVerified,
+  isLateReaction,
+  trajectoryVerdict as gradeTrajectory,
+  overallRepScore,
+  TrajectoryVerdict,
+} from '@/lib/vision/repVerdict';
 
 // ---------------------------------------------------------------------------
 // Landmark indices we care about (MediaPipe Pose / BlazePose 33-point model)
@@ -303,6 +310,13 @@ interface RepLogEntry {
   armDominant?: boolean;          // arm peaked before the hips
   peakAcceleration?: number;      // deg/s^2 at the elbow
   timeToPeakMs?: number | null;   // initiation -> peak velocity
+  /** False when tracking was too poor to judge this rep. Unverified reps are
+   *  shown as such and excluded from scoring — never marked wrong. */
+  verified?: boolean;
+  /** 'unknown' when the shape can't be told apart reliably (straight vs hook). */
+  trajectoryVerdict?: TrajectoryVerdict;
+  peakElbowDeg?: number;          // peak elbow angle during the strike
+  overallRepScore?: number | null; // weighted, tolerance-band score 0-100
 }
 
 // Reference angular velocity (deg/sec) used to normalize speed into a 0-100
@@ -564,6 +578,15 @@ export default function VisionPage() {
 
   // Live Reactive Metrics & Controls
   const [liveVelocity, setLiveVelocity] = useState<number>(0);
+  // Live punch feedback: last thrown punch label and a running count that
+  // updates for EVERY validated punch, prompted or not.
+  const [livePunchLabel, setLivePunchLabel] = useState<string | null>(null);
+  const [livePunchTotal, setLivePunchTotal] = useState<number>(0);
+  const livePunchTotalRef = useRef(0);
+  // Prompted commands that couldn't be verified (tracking lost) — never counted as misses.
+  const [unverifiedCount, setUnverifiedCount] = useState<number>(0);
+  const unverifiedCountRef = useRef(0);
+  const trackingLostDuringCommandRef = useRef(false);
   const [isVelocityFlashing, setIsVelocityFlashing] = useState<boolean>(false);
   // Setter-only: the index is advanced for cadence variety but never read
   // in render.
@@ -608,6 +631,10 @@ export default function VisionPage() {
 
   // --- Upgraded vision pipeline ------------------------------------------
   const poseEngineRef = useRef<PoseEngine | null>(null);
+  // Warm the MediaPipe bundle while the page opens, before the camera starts.
+  useEffect(() => {
+    PoseEngine.preload();
+  }, []);
   const landmarkFilterRef = useRef<LandmarkFilter>(new LandmarkFilter(TRACKED_LANDMARK_INDICES));
   const guardTrackerRef = useRef<GuardTracker>(new GuardTracker());
   const [engineInfo, setEngineInfo] = useState<EngineStatus | null>(null);
@@ -1060,6 +1087,12 @@ export default function VisionPage() {
     awaitingUserStartRef.current = false;
     setHitCount(0);
     setMissCount(0);
+    livePunchTotalRef.current = 0;
+    setLivePunchTotal(0);
+    setLivePunchLabel(null);
+    unverifiedCountRef.current = 0;
+    setUnverifiedCount(0);
+    trackingLostDuringCommandRef.current = false;
     setTimerDisplay('00:00');
     elapsedSecondsRef.current = 0;
     hitCountRef.current = 0;
@@ -1406,6 +1439,8 @@ export default function VisionPage() {
     if (badHoldMsRef.current >= TRACKING_LOSS_GRACE_MS && !isTrackingInadequateRef.current) {
       isTrackingInadequateRef.current = true;
       setIsTrackingInadequate(true);
+      // Any command pending right now can no longer be judged fairly.
+      if (awaitingRef.current) trackingLostDuringCommandRef.current = true;
     }
   };
 
@@ -1884,6 +1919,8 @@ export default function VisionPage() {
     // flickering right across the hysteresis band from double-counting.
     // This path is for punches that genuinely extend the arm (jab, cross,
     let punchValidated = false;
+    let punchSide: 'L' | 'R' = lAngleThisFrame >= rAngleThisFrame ? 'L' : 'R';
+    let punchShape: 'straight' | 'hook' | 'uppercut' = 'straight';
     const motionDetected = now - lastPunchMotionAtRef.current <= MOTION_MEMORY_MS;
 
     // Dual-arm isolated punch check (prevents 1-2 combination swallowing)
@@ -1897,6 +1934,7 @@ export default function VisionPage() {
           arm.state = 'strike';
           elbowStateRef.current = 'strike';
           punchValidated = true;
+          punchSide = side;
         }
       } else if (arm.state === 'strike' && arm.smoothedAngle < ELBOW_RETRACT_THRESHOLD) {
         arm.state = 'guard';
@@ -1928,6 +1966,8 @@ export default function VisionPage() {
       ) {
         hookValidatedThisBurstRef.current = true;
         punchValidated = true;
+        punchShape = 'hook';
+        punchSide = activeSideForHook;
       }
     }
 
@@ -1951,7 +1991,29 @@ export default function VisionPage() {
       ) {
         uppercutValidatedThisBurstRef.current = true;
         punchValidated = true;
+        punchShape = 'uppercut';
+        punchSide = activeSideForUpper;
       }
+    }
+
+    // Live punch feedback — fires for every validated punch, whether or not a
+    // command is pending. Straight punches are named jab/cross from the
+    // detected stance (lead hand = jab); before a stance is known, show the arm.
+    if (punchValidated) {
+      const votes = stanceVotesRef.current;
+      const stanceKnown = votes.orthodox + votes.southpaw > 0;
+      const leadSide: 'L' | 'R' = votes.southpaw > votes.orthodox ? 'R' : 'L';
+      let label: string;
+      if (punchShape === 'hook') label = 'HOOK';
+      else if (punchShape === 'uppercut') label = 'UPPERCUT';
+      else label = stanceKnown ? (punchSide === leadSide ? 'JAB' : 'CROSS') : `${punchSide === 'L' ? 'LEFT' : 'RIGHT'} STRAIGHT`;
+      livePunchTotalRef.current += 1;
+      const total = livePunchTotalRef.current;
+      setLivePunchTotal(total);
+      setLivePunchLabel(label);
+      window.setTimeout(() => {
+        if (livePunchTotalRef.current === total) setLivePunchLabel(null);
+      }, 900);
     }
 
     let noseOffset = 0;
@@ -2163,8 +2225,11 @@ export default function VisionPage() {
       trajectory = classifyTrajectory(dx, dy, shoulderW, elbowAtPeak);
       trajectoryConfident = mag / shoulderW >= MIN_TRAJECTORY_CONFIDENCE;
     }
-    const trajectoryMatch =
-      kind === 'punch' ? (!trajectoryConfident || trajectory === expectedTrajectoryFor(command)) : true;
+    // Three-state: straight<->hook can't be separated reliably from one
+    // webcam, so only a clear, confident difference is called a mismatch.
+    const verdict: TrajectoryVerdict =
+      kind === 'punch' ? gradeTrajectory(trajectory, expectedTrajectoryFor(command), trajectoryConfident) : 'unknown';
+    const trajectoryMatch = verdict !== 'mismatch';
 
     const strikeMetrics = collectStrikeMetrics(now, kind || 'punch');
 
@@ -2186,6 +2251,15 @@ export default function VisionPage() {
       headDropScore,
       trajectory,
       trajectoryMatch,
+      trajectoryVerdict: verdict,
+      verified: isVerified(strikeMetrics.trackingConfidence),
+      peakElbowDeg: Math.round(maxElbowSinceMotionRef.current),
+      overallRepScore: overallRepScore({
+        peakElbowDeg: maxElbowSinceMotionRef.current > 0 ? maxElbowSinceMotionRef.current : undefined,
+        speedScore: estimatePower(peakVelocity),
+        recoveryScore: strikeMetrics.guardRecoveryScore,
+        trajectory: verdict,
+      }),
       ...strikeMetrics,
     });
 
@@ -2231,10 +2305,55 @@ export default function VisionPage() {
       headDropScore: 0,
       trajectory,
       trajectoryMatch: true, // no called shape to compare against in freestyle
-      ...collectStrikeMetrics(now, 'punch'),
+      trajectoryVerdict: 'unknown',
+      peakElbowDeg: Math.round(maxElbowSinceMotionRef.current),
+      ...(() => { const m = collectStrikeMetrics(now, 'punch'); return { ...m, verified: isVerified(m.trackingConfidence) }; })(),
     });
 
     currentRepPeakVelocityRef.current = 0;
+    repConfidenceSamplesRef.current = [];
+  };
+
+  /**
+   * Log a command that got no validated punch. If tracking was lost during
+   * the window (or the rep's landmarks were too poor to trust) it is logged
+   * as UNVERIFIED and not counted as a miss — a camera problem is not a
+   * boxing error.
+   */
+  const logUnansweredCommand = (kind: 'punch' | 'defense', command: string, forceUnverified: boolean) => {
+    const peakVelocity = Math.round(currentRepPeakVelocityRef.current);
+    const verifiable =
+      !forceUnverified &&
+      !trackingLostDuringCommandRef.current &&
+      isVerified(currentRepConfidence());
+    if (verifiable) {
+      missCountRef.current += 1;
+      setMissCount(missCountRef.current);
+    } else {
+      unverifiedCountRef.current += 1;
+      setUnverifiedCount(unverifiedCountRef.current);
+    }
+    repLogRef.current.push({
+      index: repLogRef.current.length + 1,
+      command,
+      kind,
+      hit: false,
+      verified: verifiable,
+      reactionMs: null,
+      peakVelocity,
+      estimatedPower: estimatePower(peakVelocity),
+      rotationScore: 0,
+      torsoRotationScore: 0,
+      hipRotationScore: 0,
+      kneeDriveScore: 0,
+      weightTransferScore: 0,
+      footPivotScore: 0,
+      headLateralScore: 0,
+      headDropScore: 0,
+      trajectory: 'straight',
+      trajectoryMatch: true,
+      trajectoryVerdict: 'unknown',
+    });
     repConfidenceSamplesRef.current = [];
   };
 
@@ -2268,30 +2387,9 @@ export default function VisionPage() {
       if (awaitingRef.current) {
         const missedKind = awaitingKindRef.current || 'punch';
         const missedCommand = activeCommandTextRef.current;
-        const peakVelocity = Math.round(currentRepPeakVelocityRef.current);
         awaitingRef.current = false;
         awaitingKindRef.current = null;
-        missCountRef.current += 1;
-        setMissCount(missCountRef.current);
-        repLogRef.current.push({
-          index: repLogRef.current.length + 1,
-          command: missedCommand,
-          kind: missedKind,
-          hit: false,
-          reactionMs: null,
-          peakVelocity,
-          estimatedPower: estimatePower(peakVelocity),
-          rotationScore: 0,
-          torsoRotationScore: 0,
-          hipRotationScore: 0,
-          kneeDriveScore: 0,
-          weightTransferScore: 0,
-          footPivotScore: 0,
-          headLateralScore: 0,
-          headDropScore: 0,
-          trajectory: 'straight',
-          trajectoryMatch: false,
-        });
+        logUnansweredCommand(missedKind, missedCommand, false);
       }
 
       if (attemptedRef.current >= punchTargetRef.current) {
@@ -2308,6 +2406,8 @@ export default function VisionPage() {
       setTacticalCue(tacticalCueForCommand(cmd.text, cmd.kind));
       awaitingRef.current = true;
       awaitingKindRef.current = cmd.kind;
+      trackingLostDuringCommandRef.current = false;
+      repConfidenceSamplesRef.current = [];
       currentRepPeakVelocityRef.current = 0;
       peakHeadLateralRef.current = 0;
       peakHeadDropRef.current = 0;
@@ -2393,30 +2493,9 @@ export default function VisionPage() {
     // complete and honest. Freestyle has no called commands, so this never
     // applies there (awaitingRef stays true for the whole round by design).
     if (awaitingRef.current && modeRef.current !== 'freestyle') {
-      const missedKind = awaitingKindRef.current || 'punch';
-      const missedCommand = activeCommandTextRef.current;
-      const peakVelocity = Math.round(currentRepPeakVelocityRef.current);
-      missCountRef.current += 1;
-      setMissCount(missCountRef.current);
-      repLogRef.current.push({
-        index: repLogRef.current.length + 1,
-        command: missedCommand,
-        kind: missedKind,
-        hit: false,
-        reactionMs: null,
-        peakVelocity,
-        estimatedPower: estimatePower(peakVelocity),
-        rotationScore: 0,
-        torsoRotationScore: 0,
-        hipRotationScore: 0,
-        kneeDriveScore: 0,
-        weightTransferScore: 0,
-        footPivotScore: 0,
-        headLateralScore: 0,
-        headDropScore: 0,
-        trajectory: 'straight',
-        trajectoryMatch: false,
-      });
+      // Stopped mid-command: the fighter never had the full window, so this
+      // is logged as unverified rather than a miss.
+      logUnansweredCommand(awaitingKindRef.current || 'punch', activeCommandTextRef.current, true);
     }
     awaitingRef.current = false;
     cleanupSession();
@@ -2510,7 +2589,7 @@ export default function VisionPage() {
 
     // Build mistakes breakdown from actual rep log
     const missesByCommand: Record<string, number> = {};
-    log.filter((r) => !r.hit).forEach((r) => {
+    log.filter((r) => !r.hit && r.verified !== false).forEach((r) => {
       missesByCommand[r.command] = (missesByCommand[r.command] || 0) + 1;
     });
     const mistakes: string[] = Object.entries(missesByCommand)
@@ -2519,8 +2598,8 @@ export default function VisionPage() {
 
     if (hitsOnly.length > 0) {
       const slowest = hitsOnly.reduce((a, b) => ((a.reactionMs ?? 0) > (b.reactionMs ?? 0) ? a : b));
-      if ((slowest.reactionMs ?? 0) > 700) {
-        mistakes.push(`Slowest reaction was on ${slowest.command} at ${slowest.reactionMs}ms — noticeably behind your average.`);
+      if (isLateReaction(slowest.reactionMs ?? null, !isFreestyle)) {
+        mistakes.push(`Slowest reaction was on ${slowest.command} at ${slowest.reactionMs}ms — a little behind your average.`);
       }
     }
 
@@ -2529,6 +2608,7 @@ export default function VisionPage() {
     // through), so they're computed over punchHits, not all hits.
     let avgKneeDrive = 0, avgWeightTransfer = 0, avgFootPivot = 0, avgRotation = 0, trajectoryAccuracy = 0;
     let avgHipRotation = 0, avgTorsoRotation = 0;
+    let shapeJudged: RepLogEntry[] = [];
     if (punchHits.length > 0) {
       const weakestStrike = punchHits.reduce((a, b) => (a.peakVelocity < b.peakVelocity ? a : b));
       if (weakestStrike.peakVelocity < POWER_REFERENCE_VELOCITY * 0.35) {
@@ -2541,8 +2621,13 @@ export default function VisionPage() {
       avgKneeDrive = punchHits.reduce((sum, r) => sum + r.kneeDriveScore, 0) / punchHits.length;
       avgWeightTransfer = punchHits.reduce((sum, r) => sum + r.weightTransferScore, 0) / punchHits.length;
       avgFootPivot = punchHits.reduce((sum, r) => sum + r.footPivotScore, 0) / punchHits.length;
-      trajectoryAccuracy = isFreestyle ? 100 : Math.round(
-        (punchHits.filter((r) => r.trajectoryMatch).length / punchHits.length) * 100
+      // Only reps whose shape could be judged with confidence count; with
+      // fewer than 3 such reps there isn't enough evidence to say anything.
+      shapeJudged = punchHits.filter(
+        (r) => r.verified !== false && (r.trajectoryVerdict ?? (r.trajectoryMatch ? 'match' : 'mismatch')) !== 'unknown'
+      );
+      trajectoryAccuracy = isFreestyle || shapeJudged.length < 3 ? 100 : Math.round(
+        (shapeJudged.filter((r) => r.trajectoryMatch).length / shapeJudged.length) * 100
       );
 
       if (avgRotation < 40) {
@@ -2557,8 +2642,8 @@ export default function VisionPage() {
       if (avgFootPivot < 30) {
         mistakes.push('Rear foot barely pivoted — let your back heel rotate so your hips can fully turn into the punch.');
       }
-      if (!isFreestyle && trajectoryAccuracy < 60) {
-        const mismatched = punchHits.filter((r) => !r.trajectoryMatch);
+      if (!isFreestyle && shapeJudged.length >= 3 && trajectoryAccuracy < 50) {
+        const mismatched = shapeJudged.filter((r) => !r.trajectoryMatch);
         const commonCmd = mismatched.length
           ? Object.entries(
               mismatched.reduce((acc: Record<string, number>, r) => {
@@ -2569,8 +2654,8 @@ export default function VisionPage() {
           : null;
         mistakes.push(
           commonCmd
-            ? `${commonCmd} was often thrown with the wrong shape — check your trajectory (straight vs looping vs rising) for that punch.`
-            : 'Several punches didn\'t match the expected trajectory shape for the call — focus on clean punch-specific paths.'
+            ? `${commonCmd} looked different from the call on several reps — worth a quick check of the path (straight vs looping vs rising).`
+            : 'A few punches looked different from the call — focus on clean punch-specific paths.'
         );
       }
 
@@ -2631,6 +2716,8 @@ export default function VisionPage() {
       headDropScore: r.headDropScore ?? 0,
       trajectory: r.trajectory,
       trajectoryMatch: r.trajectoryMatch,
+      trajectoryVerdict: r.trajectoryVerdict,
+      verified: r.verified,
       // Forwarded as-is, INCLUDING undefined. The engine distinguishes
       // "not measured" from "measured as zero", so defaulting these to 0
       // here would fabricate a perfect-failure reading for every signal a
@@ -2757,7 +2844,7 @@ export default function VisionPage() {
             velocity_rating: r.peakVelocity > POWER_REFERENCE_VELOCITY * 0.7 ? 'Explosive' : r.peakVelocity > POWER_REFERENCE_VELOCITY * 0.4 ? 'Snappy' : 'Slow',
             reflex_time_ms: r.reactionMs ?? 0,
             extension_speed_ms: r.reactionMs ?? 0,
-            form_notes: r.hit ? 'Clean strike, on time.' : 'Missed — no clean strike detected within the window.',
+            form_notes: r.hit ? 'Clean strike, on time.' : r.verified === false ? 'Not verified — tracking was too poor to judge this rep.' : 'Missed — no clean strike detected within the window.',
           })),
           reps: resultsData.log,
         },
@@ -3230,7 +3317,14 @@ export default function VisionPage() {
                   <div className="bg-black/60 border border-white/10 rounded-full px-2 py-0.5">
                     <span className="text-[8px] font-black tracking-widest">
                       <span className="text-white/50">ACCURACY: </span>
-                      <span className="text-primary">{attemptedCount > 0 ? `${Math.round((hitCount / attemptedCount) * 100)}%` : '—'}</span>
+                      <span className="text-primary">{attemptedCount - unverifiedCount > 0 ? `${Math.round((hitCount / (attemptedCount - unverifiedCount)) * 100)}%` : '—'}</span>
+                    </span>
+                  </div>
+                  <div className="bg-black/60 border border-white/10 rounded-full px-2 py-0.5">
+                    <span className="text-[8px] font-black tracking-widest">
+                      <span className="text-white/50">PUNCHES: </span>
+                      <span className="text-primary">{livePunchTotal}</span>
+                      {livePunchLabel && <span className="text-[#E2FF3B] ml-1">{livePunchLabel}</span>}
                     </span>
                   </div>
                 </div>
@@ -3934,17 +4028,21 @@ export default function VisionPage() {
                         <span className="text-white/30 font-mono w-5">{r.index}.</span>
                         <span className="text-white/80 uppercase tracking-wide">{r.command}</span>
                         <span
-                          className={`px-1.5 py-0.5 rounded-full text-[7px] uppercase tracking-widest ${r.hit ? 'bg-primary/15 text-primary' : 'bg-red-500/15 text-red-400'
+                          className={`px-1.5 py-0.5 rounded-full text-[7px] uppercase tracking-widest ${r.hit
+                            ? 'bg-primary/15 text-primary'
+                            : r.verified === false
+                              ? 'bg-white/10 text-white/50'
+                              : 'bg-red-500/15 text-red-400'
                             }`}
                         >
-                          {r.hit ? 'HIT' : 'MISS'}
+                          {r.hit ? 'HIT' : r.verified === false ? 'UNVERIFIED' : 'MISS'}
                         </span>
-                        {r.hit && r.kind === 'punch' && !r.trajectoryMatch && (
+                        {r.hit && r.kind === 'punch' && r.verified !== false && (r.trajectoryVerdict ?? (r.trajectoryMatch ? 'match' : 'mismatch')) === 'mismatch' && (
                           <span
                             title={`Thrown as a ${r.trajectory} path`}
                             className="px-1.5 py-0.5 rounded-full text-[7px] uppercase tracking-widest bg-orange-500/15 text-orange-400"
                           >
-                            WRONG PATH
+                            CHECK PATH
                           </span>
                         )}
                       </div>

@@ -29,6 +29,9 @@ export interface VisionRepRecord {
   headDropScore: number;
   trajectory: 'straight' | 'hook' | 'uppercut';
   trajectoryMatch: boolean;
+  /** Optional so saved history still loads. */
+  verified?: boolean;
+  trajectoryVerdict?: 'match' | 'mismatch' | 'unknown';
 }
 
 export interface VisionFlawRecord {

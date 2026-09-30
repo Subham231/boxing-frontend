@@ -54,6 +54,10 @@ export interface FlawEngineRep {
   headDropScore: number;
   trajectory: 'straight' | 'hook' | 'uppercut';
   trajectoryMatch: boolean;
+  /** 'unknown' = shape couldn't be judged reliably; excluded from the shape metric. */
+  trajectoryVerdict?: 'match' | 'mismatch' | 'unknown';
+  /** False = tracking too poor to judge; the rep is excluded from diagnosis. */
+  verified?: boolean;
 
   // --- Optional: present once the upgraded capture path is in use. -------
   // All optional so an older/partial rep object still type-checks and is
@@ -131,6 +135,9 @@ const DEFAULT_ACCEPTABLE_RANGE = 25;
 function metricValue(rep: FlawEngineRep, metric: FlawMetric): number | null {
   switch (metric) {
     case 'trajectoryMatchRate':
+      if (rep.trajectoryVerdict === 'unknown') return null;
+      if (rep.trajectoryVerdict === 'match') return 100;
+      if (rep.trajectoryVerdict === 'mismatch') return 0;
       return rep.trajectoryMatch ? 100 : 0;
     case 'guardRecoveryScore':
       return rep.guardRecoveryScore ?? null;
@@ -227,7 +234,7 @@ function rankScore(flaw: DetectedFlaw): number {
  * made every diagnosis look like it rested on a single measurement.
  */
 function collectFlawCandidates(reps: FlawEngineRep[]): DetectedFlaw[] {
-  const landedReps = reps.filter((r) => r.hit);
+  const landedReps = reps.filter((r) => r.hit && r.verified !== false);
   if (landedReps.length === 0) return [];
 
   const byTechnique = groupReps(landedReps);
@@ -432,7 +439,7 @@ export interface TechniqueSummary {
  * toward zero.
  */
 export function summarizeTechniques(reps: FlawEngineRep[]): TechniqueSummary[] {
-  const landedReps = reps.filter((r) => r.hit);
+  const landedReps = reps.filter((r) => r.hit && r.verified !== false);
   const byTechnique = groupReps(landedReps);
   const summaries: TechniqueSummary[] = [];
 
