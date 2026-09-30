@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await supabaseAdmin
     .from('reflex_profiles')
-    .select('uid, display_name, referral_code, referral_count, referral_bonus_5_claimed, plan, plan_expires_at, avatar_url')
+    .select('uid, display_name, referral_code, referred_by, has_claimed_referral_bonus, referral_count, referral_bonus_5_claimed, plan, plan_expires_at, avatar_url')
     .eq('uid', decoded.uid)
     .maybeSingle();
 

@@ -76,43 +76,87 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Referral code "${code}" not found.` }, { status: 404 });
   }
 
-  // Record referral attribution in reflex_profiles
-  const { error: updateError } = await supabaseAdmin
+  // Record attribution atomically: the update only matches while no code has
+  // been recorded yet, so two quick taps (or two tabs) can't both apply.
+  const { data: attributed, error: updateError } = await supabaseAdmin
     .from('reflex_profiles')
-    .update({ 
-      referred_by: code,
-      has_claimed_referral_bonus: true,
-      updated_at: new Date().toISOString()
-    })
-    .eq('uid', decoded.uid);
+    .update({ referred_by: code, updated_at: new Date().toISOString() })
+    .eq('uid', decoded.uid)
+    .is('referred_by', null)
+    .select('uid')
+    .maybeSingle();
 
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 500 });
   }
+  if (!attributed) {
+    return NextResponse.json({ error: 'You already used a referral code.' }, { status: 400 });
+  }
 
-  // Attempt RPC or direct bonus grant
-  try {
+  // Credit the referrer (count + their own 5-referral reward). This only
+  // applies to codes that belong to a user; collaborator codes have no
+  // referrer row to credit. claim_referral also marks this account as
+  // has_claimed_referral_bonus on success.
+  //
+  // NOTE: has_claimed_referral_bonus must NOT be set before this call —
+  // claim_referral returns "nothing to claim" when it is already true, which
+  // used to skip crediting the referrer entirely.
+  let referrerCredited = false;
+  if (referrerUser) {
     const { data: claimData, error: claimError } = await supabaseAdmin.rpc('claim_referral', {
       p_uid: decoded.uid,
     });
-    if (!claimError) {
-      return NextResponse.json({ ok: true, claim: claimData });
+    if (claimError) {
+      console.error('claim_referral failed:', claimError.message);
+    } else {
+      referrerCredited = !!(claimData as { claimed?: boolean } | null)?.claimed;
     }
-  } catch (rpcErr) {
-    console.warn('claim_referral RPC fallback:', rpcErr);
+  }
+  if (!referrerUser) {
+    // Collaborator code: nothing to credit, just mark the bonus as used.
+    await supabaseAdmin
+      .from('reflex_profiles')
+      .update({ has_claimed_referral_bonus: true, updated_at: new Date().toISOString() })
+      .eq('uid', decoded.uid);
   }
 
-  // Fallback: grant 30-day reward directly
-  const thirtyDaysLater = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-  await supabaseAdmin
+  // Grant the new user's own 30-day trial. Never overwrite an active paid
+  // plan; stack on top of an already-running referral reward.
+  const { data: current } = await supabaseAdmin
     .from('reflex_profiles')
-    .update({
-      plan: 'referral_reward',
-      plan_expires_at: thirtyDaysLater,
-      has_claimed_referral_bonus: true,
-      updated_at: new Date().toISOString()
-    })
-    .eq('uid', decoded.uid);
+    .select('plan, plan_expires_at')
+    .eq('uid', decoded.uid)
+    .maybeSingle();
 
-  return NextResponse.json({ ok: true, message: '30-day referral trial unlocked!' });
+  const nowMs = Date.now();
+  const expiresMs = current?.plan_expires_at ? new Date(current.plan_expires_at).getTime() : 0;
+  const planActive = expiresMs > nowMs;
+  const paidPlanActive =
+    planActive && !!current?.plan && current.plan !== 'free' && current.plan !== 'referral_reward';
+
+  let trialGranted = false;
+  if (!paidPlanActive) {
+    const startMs = planActive ? expiresMs : nowMs;
+    const { error: grantError } = await supabaseAdmin
+      .from('reflex_profiles')
+      .update({
+        plan: 'referral_reward',
+        ...(planActive ? {} : { plan_started_at: new Date(nowMs).toISOString() }),
+        plan_expires_at: new Date(startMs + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('uid', decoded.uid);
+    if (grantError) {
+      console.error('referral trial grant failed:', grantError.message);
+    } else {
+      trialGranted = true;
+    }
+  }
+
+  return NextResponse.json({
+    ok: true,
+    trialGranted,
+    referrerCredited,
+    message: trialGranted ? '30-day referral trial unlocked!' : 'Referral code applied.',
+  });
 }
