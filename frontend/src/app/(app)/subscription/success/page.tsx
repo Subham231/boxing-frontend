@@ -18,10 +18,12 @@ function SuccessContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const planId = searchParams.get('planId');
+  const checkoutId = searchParams.get('checkout_id');
 
   const [phase, setPhase] = useState<'confirming' | 'active' | 'timeout'>('confirming');
   const [statusData, setStatusData] = useState<any>(null);
   const cancelledRef = useRef(false);
+  const confirmedRef = useRef(false);
 
   useEffect(() => {
     let attempt = 0;
@@ -42,6 +44,22 @@ function SuccessContent() {
       }
       try {
         const token = await user.getIdToken();
+        // Ask the server to confirm this checkout with Polar directly, so a
+        // paying customer is activated even if the webhook is late or not
+        // configured. Safe to repeat — the sync is idempotent.
+        if (checkoutId && !confirmedRef.current) {
+          try {
+            const confirmRes = await fetch('/api/polar/confirm', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify({ checkoutId }),
+            });
+            const confirmData = await confirmRes.json().catch(() => ({}));
+            if (confirmData?.synced) confirmedRef.current = true;
+          } catch (e) {
+            console.error('[subscription/success] confirm failed', e);
+          }
+        }
         const res = await fetch('/api/subscription/status', {
           headers: { Authorization: `Bearer ${token}` },
         });

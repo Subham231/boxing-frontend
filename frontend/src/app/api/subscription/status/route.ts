@@ -4,7 +4,7 @@ import { supabaseAdmin } from '@/lib/server/supabase-admin';
 import { getEntitlement } from '@/lib/server/entitlements';
 import { fetchRazorpaySubscription } from '@/lib/server/razorpay';
 import { syncSubscriptionFromRazorpay } from '@/lib/server/sync-subscription';
-import { getPolarSubscription } from '@/lib/server/polar';
+import { getPolarSubscription, findPolarSubscriptionForUser } from '@/lib/server/polar';
 import { syncSubscriptionFromPolar } from '@/lib/server/sync-subscription-polar';
 
 export const runtime = 'nodejs';
@@ -23,6 +23,18 @@ async function maybeLiveSync(uid: string): Promise<void> {
   const endMs = row?.current_period_end ? new Date(row.current_period_end).getTime() : 0;
   const now = Date.now();
   const nearOrPastEnd = !endMs || Math.abs(endMs - now) <= LIVE_CHECK_WINDOW_MS || endMs <= now;
+
+  // Paid on Polar but the webhook hasn't (or never) linked the subscription:
+  // look it up by our Firebase uid so a missed webhook can't leave a paying
+  // customer without access.
+  if (row?.payment_provider === 'polar' && !row.polar_subscription_id) {
+    const found = await findPolarSubscriptionForUser(uid);
+    if (found?.id) {
+      const live = await getPolarSubscription(found.id);
+      if (live?.id) await syncSubscriptionFromPolar({ uid, polarSub: live as any, eventType: 'status.reconcile' });
+    }
+    return;
+  }
 
   if (row?.payment_provider === 'polar' && row.polar_subscription_id) {
     const unsettled = ['incomplete', 'trialing', 'past_due'].includes(status);

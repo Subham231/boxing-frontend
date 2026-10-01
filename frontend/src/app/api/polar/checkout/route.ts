@@ -2,7 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyFirebaseIdToken } from '@/lib/server/firebase-admin';
 import { supabaseAdmin } from '@/lib/server/supabase-admin';
 import { PLANS, PlanId } from '@/lib/server/entitlements';
-import { createPolarCheckout, polarConfigured } from '@/lib/server/polar';
+import {
+  createPolarCheckout,
+  polarCheckoutConfigured,
+  polarEnvironment,
+  describePolarError,
+  customerFacingPolarError,
+} from '@/lib/server/polar';
+import { resolvePlanPricing } from '@/lib/server/polar-pricing';
 import {
   resolvePaymentProvider,
   resolveCountryConfig,
@@ -60,24 +67,34 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (!polarConfigured()) {
-    return NextResponse.json({ error: 'Payment system is not configured. Cannot create a checkout.' }, { status: 500 });
+  // Only the access token is needed to CREATE a checkout; the webhook secret
+  // is for receiving webhooks. Requiring both blocked checkout for no reason.
+  if (!polarCheckoutConfigured()) {
+    console.error('[polar checkout] POLAR_ACCESS_TOKEN is not set on the server.');
+    return NextResponse.json({ error: 'Payments are temporarily unavailable. Please contact support.' }, { status: 500 });
   }
   if (!plan.polarProductId) {
     return NextResponse.json({ error: `Polar product id for '${plan.name}' is not configured on the server.` }, { status: 500 });
   }
 
   const countryConfig = resolveCountryConfig(effectiveCountry);
-  const origin = req.headers.get('origin') || req.nextUrl.origin;
+  // Behind a proxy nextUrl.origin can be the internal host, so prefer the
+  // browser's Origin, then the forwarded host, then nextUrl.
+  const fwdHost = req.headers.get('x-forwarded-host');
+  const fwdProto = req.headers.get('x-forwarded-proto') || 'https';
+  const origin = req.headers.get('origin') || (fwdHost ? `${fwdProto}://${fwdHost}` : req.nextUrl.origin);
   const successUrl = `${origin}/subscription/success?checkout_id={CHECKOUT_ID}&planId=${planId}`;
 
   try {
+    // Present the checkout in the same currency the pricing endpoint showed.
+    const pricing = await resolvePlanPricing(planId, countryConfig);
     const checkout = await createPolarCheckout({
       productId: plan.polarProductId,
       uid,
       planId,
       successUrl,
       customerEmail: decoded.email || undefined,
+      currency: pricing.source === 'polar' ? pricing.currency.toLowerCase() : undefined,
     });
 
     if (supabaseAdmin) {
@@ -87,14 +104,15 @@ export async function POST(req: NextRequest) {
           polar_checkout_id: checkout.id,
           payment_provider: 'polar',
           country_code: countryConfig.code,
-          currency_code: countryConfig.currency,
+          currency_code: pricing.currency,
         })
         .eq('uid', uid);
     }
 
     return NextResponse.json({ checkoutUrl: checkout.url, checkoutId: checkout.id, planId, provider: 'polar' });
   } catch (error) {
-    console.error('Create Polar Checkout Error:', error);
-    return NextResponse.json({ error: 'Could not create Polar checkout. Please try again.' }, { status: 500 });
+    const { status, detail } = describePolarError(error);
+    console.error(`[polar checkout] failed (env=${polarEnvironment()}, product=${plan.polarProductId}, status=${status}): ${detail}`);
+    return NextResponse.json({ error: customerFacingPolarError(error) }, { status: 502 });
   }
 }

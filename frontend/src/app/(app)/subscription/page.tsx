@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, Suspense } from 'react';
+import React, { useEffect, useRef, useState, Suspense } from 'react';
 import Script from 'next/script';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -18,20 +18,31 @@ const COUNTRY_OPTIONS = [
   { code: 'IN', label: '🇮🇳 India' },
   { code: 'US', label: '🇺🇸 United States' },
   { code: 'GB', label: '🇬🇧 United Kingdom' },
-  { code: 'DE', label: '🇩🇪 Germany' },
-  { code: 'FR', label: '🇫🇷 France' },
   { code: 'CA', label: '🇨🇦 Canada' },
   { code: 'AU', label: '🇦🇺 Australia' },
+  { code: 'NZ', label: '🇳🇿 New Zealand' },
+  { code: 'DE', label: '🇩🇪 Germany' },
+  { code: 'FR', label: '🇫🇷 France' },
+  { code: 'ES', label: '🇪🇸 Spain' },
+  { code: 'IT', label: '🇮🇹 Italy' },
+  { code: 'NL', label: '🇳🇱 Netherlands' },
+  { code: 'IE', label: '🇮🇪 Ireland' },
+  { code: 'CH', label: '🇨🇭 Switzerland' },
+  { code: 'SE', label: '🇸🇪 Sweden' },
+  { code: 'JP', label: '🇯🇵 Japan' },
+  { code: 'SG', label: '🇸🇬 Singapore' },
+  { code: 'AE', label: '🇦🇪 United Arab Emirates' },
+  { code: 'BR', label: '🇧🇷 Brazil' },
+  { code: 'MX', label: '🇲🇽 Mexico' },
 ];
+const COUNTRY_STORAGE_KEY = 'sparai_country';
+const isKnownCountry = (code: string) => COUNTRY_OPTIONS.some((c) => c.code === code);
 
 function detectBrowserCountryGuess(): string {
   if (typeof navigator === 'undefined') return 'IN';
   const locale = navigator.language || (navigator.languages && navigator.languages[0]) || '';
-  const region = locale.split('-')[1];
-  if (region && COUNTRY_OPTIONS.some((c) => c.code === region.toUpperCase())) {
-    return region.toUpperCase();
-  }
-  return 'IN';
+  const region = (locale.split('-')[1] || '').toUpperCase();
+  return isKnownCountry(region) ? region : 'IN';
 }
 
 interface PlanCard {
@@ -106,11 +117,38 @@ function SubscriptionContent() {
   const [showSparPopup, setShowSparPopup] = useState(false);
   const [livePrices, setLivePrices] = useState<Record<string, string>>({});
   const [country, setCountry] = useState<string>('IN');
-  const [provider, setProvider] = useState<'razorpay' | 'polar'>('razorpay');
+  // Country whose prices are currently on screen. Subscribe stays disabled
+  // until this matches the selector, so nobody can start a checkout against
+  // stale prices or the wrong payment provider while a new country loads.
+  const [pricedCountry, setPricedCountry] = useState<string | null>(null);
+  const [priceNotes, setPriceNotes] = useState<Record<string, string>>({});
+  const [pricingError, setPricingError] = useState(false);
+  const countryChosenRef = useRef(false);
+  // Display-only mirror of the server rule (India = Razorpay, everyone else =
+  // Polar); the server re-checks it on every checkout request.
+  const provider: 'razorpay' | 'polar' = country === 'IN' ? 'razorpay' : 'polar';
   const [footerText, setFooterText] = useState<string>('Secure payment with 256-bit SSL encryption by Razorpay');
 
   useEffect(() => {
+    // 1) a country the user picked before, 2) browser locale, 3) server geo.
+    try {
+      const saved = localStorage.getItem(COUNTRY_STORAGE_KEY);
+      if (saved && isKnownCountry(saved)) {
+        countryChosenRef.current = true;
+        setCountry(saved);
+        return;
+      }
+    } catch {
+      /* storage unavailable */
+    }
     setCountry(detectBrowserCountryGuess());
+    fetch('/api/public-pricing', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((data) => {
+        const geo = String(data?.geoCountry || '').toUpperCase();
+        if (!countryChosenRef.current && geo && isKnownCountry(geo)) setCountry(geo);
+      })
+      .catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -126,14 +164,28 @@ function SubscriptionContent() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false; // ignore responses that arrive after the country changed
+    setPricedCountry(null);
+    setLivePrices({});
+    setPriceNotes({});
+    setPricingError(false);
     fetch(`/api/public-pricing?country=${encodeURIComponent(country)}`, { cache: 'no-store' })
       .then((response) => response.json())
       .then((data) => {
-        setLivePrices(Object.fromEntries((data.plans || []).map((plan: { id: string; price: string }) => [plan.id, plan.price])));
-        if (data.provider === 'polar' || data.provider === 'razorpay') setProvider(data.provider);
+        if (cancelled) return;
+        const plans: { id: string; price: string; note?: string | null }[] = data.plans || [];
+        setLivePrices(Object.fromEntries(plans.map((plan) => [plan.id, plan.price])));
+        setPriceNotes(Object.fromEntries(plans.filter((plan) => plan.note).map((plan) => [plan.id, plan.note as string])));
         if (data.footerText) setFooterText(`${data.footerText} — 256-bit SSL encryption`);
+        if (plans.length > 0) setPricedCountry(country);
+        else setPricingError(true);
       })
-      .catch(() => setLivePrices({}));
+      .catch(() => {
+        if (!cancelled) setPricingError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [country]);
 
   const fetchStatus = async () => {
@@ -167,6 +219,10 @@ function SubscriptionContent() {
     const user = firebaseAuth.currentUser;
     if (!user) {
       setError('Please log in to subscribe.');
+      return;
+    }
+    if (pricedCountry !== country) {
+      setError('Prices are still loading for your country — try again in a moment.');
       return;
     }
     setProcessingPlan(planId);
@@ -386,7 +442,15 @@ function SubscriptionContent() {
             <select
               id="country-selector"
               value={country}
-              onChange={(e) => setCountry(e.target.value)}
+              onChange={(e) => {
+                countryChosenRef.current = true;
+                try {
+                  localStorage.setItem(COUNTRY_STORAGE_KEY, e.target.value);
+                } catch {
+                  /* storage unavailable */
+                }
+                setCountry(e.target.value);
+              }}
               className="bg-transparent text-[10px] font-black uppercase tracking-wide text-white outline-none cursor-pointer pr-1"
             >
               {COUNTRY_OPTIONS.map((c) => (
@@ -568,6 +632,13 @@ function SubscriptionContent() {
         </div>
       </div>
 
+      {pricingError && (
+        <div role="alert" className="mb-4 flex items-center gap-2 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-[11px] font-bold text-red-300">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          Couldn&apos;t load prices. Check your connection and re-select your country to retry.
+        </div>
+      )}
+
       <div className="flex flex-col gap-4">
         {PLAN_CARDS.map((plan) => (
           <GlassCard
@@ -581,7 +652,7 @@ function SubscriptionContent() {
                 {plan.highlight && <Crown className="w-4 h-4 text-primary" />}
                 <div>
                   <span className="text-sm font-black uppercase text-white tracking-wider block">{plan.name}</span>
-                  {plan.discountTag && (
+                  {plan.discountTag && provider === 'razorpay' && (
                     <span className="text-[8px] font-black text-black bg-primary px-2 py-0.5 rounded-full uppercase tracking-wider inline-block mt-0.5">
                       {plan.discountTag}
                     </span>
@@ -596,6 +667,9 @@ function SubscriptionContent() {
                 )}
                 <span className="text-xl font-black text-white">{livePrices[plan.id] || '••••'}</span>
                 <span className="text-[9px] text-white/40 font-bold block">{plan.period}</span>
+                {priceNotes[plan.id] && (
+                  <span className="text-[8px] text-white/30 font-bold block mt-0.5">{priceNotes[plan.id]}</span>
+                )}
               </div>
             </div>
 
@@ -610,7 +684,11 @@ function SubscriptionContent() {
 
             <NeonButton
               onClick={() => handleSubscribe(plan.id)}
-              disabled={processingPlan !== null || (provider === 'razorpay' && !scriptLoaded && !DEV_SKIP_ENABLED)}
+              disabled={
+                processingPlan !== null ||
+                pricedCountry !== country ||
+                (provider === 'razorpay' && !scriptLoaded && !DEV_SKIP_ENABLED)
+              }
               className="w-full h-12 text-[11px] flex items-center justify-center gap-2"
             >
               {processingPlan === plan.id ? <Loader2 className="w-4 h-4 animate-spin" /> : status?.plan === plan.id ? 'RENEW' : 'SUBSCRIBE'}
