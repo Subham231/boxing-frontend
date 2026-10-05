@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { FitnessBaseline } from '@/types';
+import { trackOnboardingCompleted } from '@/lib/gtm';
 
 export interface OnboardingConstraints {
     equipment?: string[];
@@ -280,6 +281,11 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         localStorage.removeItem('boxing_onboarding_screen_order');
         localStorage.removeItem('boxing_onboarding_step'); // clear saved step so re-entry starts fresh
         updateData({ hasCompletedOnboarding: true });
+        try {
+            trackOnboardingCompleted(payload);
+        } catch (err) {
+            console.warn('GTM onboarding complete tracking error:', err);
+        }
     };
 
     return (

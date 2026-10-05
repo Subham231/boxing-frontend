@@ -8,6 +8,29 @@ import { Loader2 } from 'lucide-react';
 import { useFirebaseUser } from '@/lib/useFirebaseUser';
 import { ensureUserProfile } from '@/lib/firebase-auth';
 import { cacheProfileLocally } from '@/lib/profile-client';
+import { trackOnboardingStep } from '@/lib/gtm';
+
+const ONBOARDING_STEP_NAMES = [
+    'welcome',
+    'freestyle_analysis',
+    'motivation',
+    'future_self',
+    'boxing_mindset',
+    'superpower',
+    'obstacle',
+    'experience_level',
+    'schedule_preference',
+    'gear_check',
+    'favorite_fighter',
+    'commitment_level',
+    'commitment',
+    'identity_problem',
+    'promise',
+    'email_verification',
+    'analysis_merits_reveal',
+    'subscription_offer',
+    'final_promise',
+];
 
 import Welcome from './components/Welcome';
 import FreestyleAnalysis from './components/FreestyleAnalysis';
@@ -54,6 +77,14 @@ const OnboardingFlow: React.FC = () => {
             scrollContainerRef.current.scrollTop = 0;
         }
     }, [currentStep]);
+
+    // Track GTM onboarding step event on every step change
+    useEffect(() => {
+        if (!isLoaded || currentStep < 1 || currentStep > totalSteps) return;
+        const stepName = ONBOARDING_STEP_NAMES[currentStep - 1] || `step_${currentStep}`;
+        const stepPercent = Math.min(100, Math.round((currentStep / totalSteps) * 100));
+        trackOnboardingStep(currentStep, stepName, stepPercent);
+    }, [currentStep, isLoaded, totalSteps]);
 
     useEffect(() => {
         if (!isLoaded) return;

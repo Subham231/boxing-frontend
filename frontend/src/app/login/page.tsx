@@ -12,6 +12,7 @@ import {
   checkGoogleRedirectResult,
 } from '@/lib/firebase-auth';
 import { cacheProfileLocally } from '@/lib/profile-client';
+import { trackAuthEvent } from '@/lib/gtm';
 
 const RESEND_COOLDOWN = 30;
 
@@ -82,6 +83,9 @@ export default function LoginPage() {
         !!onboardingData.ring_name ||
         localStorage.getItem('boxing_onboarding_done') === 'true';
       if (isCompleted) localStorage.setItem('boxing_onboarding_done', 'true');
+      try {
+        trackAuthEvent('google_login_success', { is_completed_onboarding: isCompleted });
+      } catch {}
       router.replace(isCompleted ? '/dashboard' : '/onboarding');
     } catch (err: any) {
       if (err?.message === 'REDIRECT_STARTED') return; // page is navigating away
@@ -105,6 +109,9 @@ export default function LoginPage() {
       await sendPasswordlessSignInLink(trimmedEmail, '/dashboard');
       setSentLink(true);
       setCooldown(RESEND_COOLDOWN);
+      try {
+        trackAuthEvent('login_link_sent', { email_domain: trimmedEmail.split('@')[1] });
+      } catch {}
     } catch (err: any) {
       setError(formatEmailAuthError(err));
     } finally {

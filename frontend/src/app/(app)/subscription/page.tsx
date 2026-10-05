@@ -8,6 +8,7 @@ import { ArrowLeft, Check, Crown, Loader2, ShieldCheck, AlertCircle, XCircle, Sw
 import { firebaseAuth } from '@/lib/firebase';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
+import { trackSubscriptionEvent } from '@/lib/gtm';
 
 const DEV_SKIP_ENABLED = process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_ENABLE_DEV_SKIP === 'true';
 
@@ -209,6 +210,9 @@ function SubscriptionContent() {
   };
 
   useEffect(() => {
+    try {
+      trackSubscriptionEvent('view_subscription_plans');
+    } catch {}
     const unsub = firebaseAuth.onAuthStateChanged(() => fetchStatus());
     return () => unsub();
   }, []);
@@ -226,6 +230,9 @@ function SubscriptionContent() {
       return;
     }
     setProcessingPlan(planId);
+    try {
+      trackSubscriptionEvent('begin_checkout', { planId, provider, country });
+    } catch {}
     try {
       const token = await user.getIdToken();
 
@@ -275,6 +282,9 @@ function SubscriptionContent() {
             });
             const verifyData = await verifyRes.json();
             if (!verifyRes.ok) throw new Error(verifyData.error || 'Verification failed');
+            try {
+              trackSubscriptionEvent('checkout_completed', { planId, provider, country });
+            } catch {}
             await fetchStatus();
             setMessage('Subscription activated successfully!');
           } catch (err: any) {

@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, MailCheck, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { sendPasswordlessSignInLink, formatEmailAuthError } from '@/lib/firebase-auth';
+import { trackAuthEvent } from '@/lib/gtm';
 
 const RESEND_COOLDOWN_SECONDS = 30;
 
@@ -35,6 +36,11 @@ export default function SignupPage() {
       setEmail(trimmedEmail);
       setSentLink(true);
       setCooldown(RESEND_COOLDOWN_SECONDS);
+      try {
+        trackAuthEvent('signup_link_sent', { email_domain: trimmedEmail.split('@')[1] });
+      } catch (gtmErr) {
+        console.warn('GTM tracking error:', gtmErr);
+      }
     } catch (signupError) {
       setError(formatEmailAuthError(signupError));
     } finally {

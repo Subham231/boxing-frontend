@@ -16,6 +16,7 @@ import {
   isPhoneOnlyUser,
   setEmailOnCurrentAccount,
 } from '@/lib/firebase-auth';
+import { trackOnboardingEmailSubmitted, trackOnboardingEmailVerified } from '@/lib/gtm';
 
 const PENDING_SIGNUP_EMAIL_KEY = 'sparai_pending_signup_email';
 const RESEND_COOLDOWN_SECONDS = 30;
@@ -75,6 +76,11 @@ const EmailVerification: React.FC = () => {
       }
 
       localStorage.removeItem(PENDING_SIGNUP_EMAIL_KEY);
+      try {
+        trackOnboardingEmailVerified();
+      } catch (err) {
+        console.warn('GTM tracking error:', err);
+      }
       nextStep();
     } catch (finishError) {
       setError(formatEmailAuthError(finishError));
@@ -93,6 +99,9 @@ const EmailVerification: React.FC = () => {
     if (!isLoaded || authLoading || step !== 'details' || !user?.emailVerified || advanceVerifiedRef.current) return;
     advanceVerifiedRef.current = true;
     updateData({ email: user.email || data.email });
+    try {
+      trackOnboardingEmailVerified();
+    } catch {}
     nextStep();
   }, [isLoaded, authLoading, step, user, data.email, nextStep, updateData]);
 
@@ -117,6 +126,11 @@ const EmailVerification: React.FC = () => {
       setEmail(trimmedEmail);
       setStep('pending');
       setCooldown(RESEND_COOLDOWN_SECONDS);
+      try {
+        trackOnboardingEmailSubmitted(trimmedEmail.split('@')[1]);
+      } catch (err) {
+        console.warn('GTM tracking error:', err);
+      }
     } catch (sendError) {
       setError(formatEmailAuthError(sendError));
     } finally {
