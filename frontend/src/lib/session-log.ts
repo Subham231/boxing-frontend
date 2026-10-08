@@ -29,9 +29,6 @@ export interface VisionRepRecord {
   headDropScore: number;
   trajectory: 'straight' | 'hook' | 'uppercut';
   trajectoryMatch: boolean;
-  /** Optional so saved history still loads. */
-  verified?: boolean;
-  trajectoryVerdict?: 'match' | 'mismatch' | 'unknown';
 }
 
 export interface VisionFlawRecord {
@@ -70,8 +67,6 @@ export interface VisionSessionRecord {
   power_score?: number;
   tracking_score?: number;
   reflex_score?: number;
-  stability_score?: number;
-  swiftness_score?: number;
   rotation_score?: number;
   hip_rotation_score?: number;
   torso_rotation_score?: number;
@@ -81,6 +76,8 @@ export interface VisionSessionRecord {
   head_lateral_score?: number;
   head_drop_score?: number;
   trajectory_accuracy?: number;
+  stability_score?: number | null;
+  swiftness_score?: number | null;
   flaw: string;
   advice: string;
   detailed_flaws?: VisionFlawRecord[];

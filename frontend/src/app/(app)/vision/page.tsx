@@ -19,71 +19,26 @@ import {
   Play
 } from 'lucide-react';
 import { GlassCard } from '@/components/ui/GlassCard';
-import { ProgressRing } from '@/components/ui/ProgressRing';
 import { NeonButton } from '@/components/ui/NeonButton';
 import { completeSessionSecure } from '@/lib/rank-client';
 import { logVisionSession, getReflexTier } from '@/lib/session-log';
 import { firebaseAuth } from '@/lib/firebase';
-import {
-  topSessionFlaws,
-  summarizeTechniques,
-  diagnoseRootCauses,
-  DetectedFlaw,
-  RootCauseDiagnosis,
-  TechniqueSummary,
-  FlawEngineRep,
-} from '@/lib/coach/flawEngine';
-import { playVoiceEvent, preloadVoicePack, unlockVoicePack, stopVoicePack } from '@/lib/voice-pack';
-import { PoseEngine, EngineStatus, EngineFrame } from '@/lib/vision/poseEngine';
-import { LandmarkFilter, FilteredLandmark } from '@/lib/vision/landmarkFilter';
-import {
-  angle3D,
-  angle2D,
-  axialRotationDeg,
-  angleDelta,
-  SignalTracker,
-  analyzeSequencing,
-  ChainSegment,
-  Vec3,
-} from '@/lib/vision/kinematics';
-import { GuardTracker, measureWristAlignment, matchHandToWrist, HAND_LM } from '@/lib/vision/guardTracker';
-import { syncCanvasToVideo, buildDrawablePose, drawOverlay } from '@/lib/vision/overlayRenderer';
-import { VISION_CONFIG } from '@/lib/vision/visionConfig';
-import {
-  isVerified,
-  isLateReaction,
-  trajectoryVerdict as gradeTrajectory,
-  overallRepScore,
-  TrajectoryVerdict,
-} from '@/lib/vision/repVerdict';
+import { topSessionFlaws, summarizeTechniques, DetectedFlaw, FlawEngineRep } from '@/lib/coach/flawEngine';
+import { computeStabilityScore, computeSwiftnessScore, targetAttainment, MeritRep } from '@/lib/coach/sessionMerits';
+import type { FlawMetric } from '@/lib/coach/mechanicsDatabase';
+import { playVoiceEvent, preloadVoicePack, unlockVoicePack } from '@/lib/voice-pack';
 
 // ---------------------------------------------------------------------------
 // Landmark indices we care about (MediaPipe Pose / BlazePose 33-point model)
 // ---------------------------------------------------------------------------
 const LM = {
   NOSE: 0,
-  L_EYE_INNER: 1,
-  L_EYE: 2,
-  L_EYE_OUTER: 3,
-  R_EYE_INNER: 4,
-  R_EYE: 5,
-  R_EYE_OUTER: 6,
-  L_EAR: 7,
-  R_EAR: 8,
-  MOUTH_L: 9,
-  MOUTH_R: 10,
   L_SHOULDER: 11,
   R_SHOULDER: 12,
   L_ELBOW: 13,
   R_ELBOW: 14,
   L_WRIST: 15,
   R_WRIST: 16,
-  L_PINKY: 17,
-  R_PINKY: 18,
-  L_INDEX: 19,
-  R_INDEX: 20,
-  L_THUMB: 21,
-  R_THUMB: 22,
   L_HIP: 23,
   R_HIP: 24,
   L_KNEE: 25,
@@ -97,58 +52,22 @@ const LM = {
 };
 
 const SKELETON_CONNECTIONS: [number, number][] = [
-  // Head & Facial Triangulation (0..10)
-  [LM.NOSE, LM.L_EYE],
-  [LM.L_EYE, LM.L_EAR],
-  [LM.NOSE, LM.R_EYE],
-  [LM.R_EYE, LM.R_EAR],
-  [LM.MOUTH_L, LM.MOUTH_R],
-  [LM.NOSE, LM.L_SHOULDER],
-  [LM.NOSE, LM.R_SHOULDER],
-
-  // Upper Torso & Shoulders
   [LM.L_SHOULDER, LM.R_SHOULDER],
-
-  // Left Arm & Hand Knuckles (11, 13, 15, 17, 19, 21)
   [LM.L_SHOULDER, LM.L_ELBOW],
   [LM.L_ELBOW, LM.L_WRIST],
-  [LM.L_WRIST, LM.L_PINKY],
-  [LM.L_WRIST, LM.L_INDEX],
-  [LM.L_WRIST, LM.L_THUMB],
-  [LM.L_PINKY, LM.L_INDEX],
-
-  // Right Arm & Hand Knuckles (12, 14, 16, 18, 20, 22)
   [LM.R_SHOULDER, LM.R_ELBOW],
   [LM.R_ELBOW, LM.R_WRIST],
-  [LM.R_WRIST, LM.R_PINKY],
-  [LM.R_WRIST, LM.R_INDEX],
-  [LM.R_WRIST, LM.R_THUMB],
-  [LM.R_PINKY, LM.R_INDEX],
-
-  // Torso Frame & Kinetic Spine Cross-Bracing
   [LM.L_SHOULDER, LM.L_HIP],
   [LM.R_SHOULDER, LM.R_HIP],
   [LM.L_HIP, LM.R_HIP],
-  [LM.L_SHOULDER, LM.R_HIP],
-  [LM.R_SHOULDER, LM.L_HIP],
-
-  // Left Leg & Foot (23, 25, 27, 29, 31)
   [LM.L_HIP, LM.L_KNEE],
   [LM.L_KNEE, LM.L_ANKLE],
-  [LM.L_ANKLE, LM.L_HEEL],
-  [LM.L_ANKLE, LM.L_FOOT_INDEX],
-  [LM.L_HEEL, LM.L_FOOT_INDEX],
-
-  // Right Leg & Foot (24, 26, 28, 30, 32)
   [LM.R_HIP, LM.R_KNEE],
   [LM.R_KNEE, LM.R_ANKLE],
-  [LM.R_ANKLE, LM.R_HEEL],
-  [LM.R_ANKLE, LM.R_FOOT_INDEX],
-  [LM.R_HEEL, LM.R_FOOT_INDEX],
 ];
 
 const CORE_ANCHORS = [LM.L_SHOULDER, LM.R_SHOULDER, LM.L_HIP, LM.R_HIP];
-const VISIBILITY_THRESHOLD = 0.42; // Quorum floor for bladed/angled 45° boxing stance
+const VISIBILITY_THRESHOLD = 0.6;
 const CALIBRATION_HOLD_MS = 2000;
 const TRACKING_LOSS_GRACE_MS = 500;
 const TRACKING_RECOVERY_MS = 400;
@@ -159,11 +78,10 @@ const REACTION_WINDOW_PAD_MS = 250;
 // (GUARD -> STRIKE -> GUARD), not a single frame threshold. This is what
 // prevents false positives from idle movement, camera shake, or slowly
 // raising an arm to scratch your face.
-const ELBOW_EXTEND_THRESHOLD = VISION_CONFIG.detection.elbowExtendDeg; // deg — see visionConfig.ts
-const ELBOW_RETRACT_THRESHOLD = VISION_CONFIG.detection.elbowRetractDeg; // deg
-const MIN_PUNCH_ANGULAR_VELOCITY = VISION_CONFIG.detection.minAngularVelocity; // deg/sec
-// Landmarks are already One Euro smoothed upstream, so this stage stays light.
-const SMOOTHING_ALPHA = 0.6;
+const ELBOW_EXTEND_THRESHOLD = 155;   // deg — webcam pose landmarks rarely reach a perfect 165° extension
+const ELBOW_RETRACT_THRESHOLD = 135;  // deg — must drop back below this to re-arm (hysteresis band kills flicker/vibration double-counts)
+const MIN_PUNCH_ANGULAR_VELOCITY = 180; // deg/sec — tolerate 30fps landmark smoothing without accepting slow arm raises
+const SMOOTHING_ALPHA = 0.45; // exponential smoothing factor for elbow angle, reduces landmark jitter
 const MIN_ROTATION_FOR_FULL_SCORE = 22; // deg of shoulder-line rotation for a "fully rotated" hook/cross
 const FULL_KNEE_DRIVE_DEG = 18;         // deg of knee-angle change (push-off/extension) for a full drive score
 const FULL_WEIGHT_TRANSFER_RATIO = 0.12; // hip horizontal shift, as a fraction of shoulder width, for a full transfer score
@@ -172,8 +90,8 @@ const FULL_FOOT_PIVOT_DEG = 20;         // deg of rear-foot rotation for a full 
 // fast — angular velocity alone can be tripped by a shoulder shrug or a
 // twitch near full extension. Requiring BOTH signals to agree is a much
 // stronger check than either alone.
-const MIN_WRIST_SPEED = VISION_CONFIG.detection.minWristSpeed; // shoulder-widths per second
-const MOTION_MEMORY_MS = 500; // ms — prevents peak trackers from resetting mid-hook or during combination pauses
+const MIN_WRIST_SPEED = 0.35; // shoulder-widths per second; normalized webcam motion is usually below 1.0
+const MOTION_MEMORY_MS = 350;
 // After retracting to guard, the arm must stay there briefly before the
 // next strike can be evaluated — without this, noise flickering right
 // across the hysteresis band can register as several strikes in a row.
@@ -181,12 +99,7 @@ const GUARD_REARM_MS = 70;
 // Trajectory classification needs a real, decisive wrist path to trust —
 // below this displacement (relative to shoulder width) there isn't enough
 // signal to say what shape was thrown, so we don't penalize it.
-const MIN_TRAJECTORY_CONFIDENCE = 0.16;
-// A hook is thrown with the elbow staying bent (often ~80-120°) the whole
-// way through — it can legitimately never reach ELBOW_EXTEND_THRESHOLD,
-// which is what a straight punch needs.
-const MIN_HOOK_ELBOW_ANGLE = 50;
-const UPPERCUT_MIN_VERTICAL_TRAVEL = VISION_CONFIG.detection.uppercutMinVertical;
+const MIN_TRAJECTORY_CONFIDENCE = 0.18;
 // Reference magnitudes (normalized by shoulder width, same units as
 // noseOffset/drop above) for a "fully committed" slip or roll, used to
 // convert raw peak displacement into a 0-100 score the same way peak
@@ -194,63 +107,15 @@ const UPPERCUT_MIN_VERTICAL_TRAVEL = VISION_CONFIG.detection.uppercutMinVertical
 const FULL_HEAD_LATERAL_FOR_FULL_SCORE = 0.55; // matches the existing defenseTriggered lateral threshold with headroom
 const FULL_HEAD_DROP_FOR_FULL_SCORE = 0.35;
 
-// --- Landmarks whose tracking quality actually gates a measurement -------
-// Frame confidence is summarized over these only. Face and finger points
-// dropping out has no bearing on whether a punch can be scored, so
-// including them would make the quality number pessimistic and
-// uninformative.
-const TRACKED_LANDMARK_INDICES = [
-  0,              // nose
-  11, 12,         // shoulders
-  13, 14,         // elbows
-  15, 16,         // wrists
-  23, 24,         // hips
-  25, 26,         // knees
-  27, 28,         // ankles
-  29, 30, 31, 32, // heels + foot index
-];
-
-// A rep whose mean landmark confidence falls below this is logged, but its
-// biomechanics are marked untrustworthy so the flaw engine discounts them
-// rather than diagnosing off noise.
-const REP_CONFIDENCE_FLOOR = 0.38;
-
-// How long after peak extension we keep sampling the wrist's distance from
-// guard to measure the return.
-const RECOVERY_SAMPLE_WINDOW_MS = 900;
-
-// A hook is defined by the elbow STAYING bent through the whole punch; a
-// straight punch passes through this angle on its way out to full
-// extension. This is the signal that actually separates the two shapes.
-const HOOK_MAX_ELBOW_ANGLE = VISION_CONFIG.detection.hookMaxElbowDeg;
-// Minimum lateral wrist travel (in shoulder-widths) before a punch can be
-// called a hook at all.
-const MIN_HOOK_LATERAL = VISION_CONFIG.detection.hookMinLateral;
-// --- Hook detection (its own cycle, deliberately NOT the straight-punch
-// hysteresis) ----------------------------------------------------------
-const HOOK_MIN_SWEEP = 0.32;      // shoulder-widths of peak wrist travel
-const HOOK_RETURN_RATIO = 0.72;    // wrist must fall back to this fraction of peak
-
 // Wrist displacement (normalized by shoulder width) shape used to classify
 // what kind of punch was actually thrown, independent of what was called —
 // lets us flag when a "HOOK" call was actually thrown as a straight punch.
-function classifyTrajectory(
-  dx: number,
-  dy: number,
-  shoulderWidth: number,
-  elbowAngleAtPeak?: number
-): 'straight' | 'hook' | 'uppercut' {
+function classifyTrajectory(dx: number, dy: number, shoulderWidth: number): 'straight' | 'hook' | 'uppercut' {
   if (shoulderWidth <= 0) return 'straight';
   const nx = dx / shoulderWidth;
   const ny = dy / shoulderWidth;
-  // Upward punch vector: ny is negative in screen space (y=0 at top)
-  if (ny < -UPPERCUT_MIN_VERTICAL_TRAVEL && Math.abs(ny) > Math.abs(nx) * 0.7) return 'uppercut';
-  const lateralEnough = Math.abs(nx) > MIN_HOOK_LATERAL;
-  const elbowStayedBent =
-    elbowAngleAtPeak === undefined
-      ? Math.abs(ny) < Math.abs(nx) * 0.8
-      : elbowAngleAtPeak < HOOK_MAX_ELBOW_ANGLE;
-  if (lateralEnough && elbowStayedBent) return 'hook';
+  if (Math.abs(ny) > Math.abs(nx) * 1.3 && ny < -0.12) return 'uppercut';
+  if (Math.abs(nx) > 0.3 && Math.abs(ny) < Math.abs(nx) * 0.8) return 'hook';
   return 'straight';
 }
 function expectedTrajectoryFor(command: string): 'straight' | 'hook' | 'uppercut' {
@@ -295,92 +160,58 @@ interface RepLogEntry {
   headDropScore: number; // 0-100, vertical head drop below baseline — roll/bob-and-weave quality
   trajectory: 'straight' | 'hook' | 'uppercut'; // what shape of punch was actually thrown, from real wrist-path data
   trajectoryMatch: boolean; // whether the thrown shape matched what was called
-
-  // --- Added with the upgraded capture pipeline -------------------------
-  // All optional so a rep captured before these signals were available
-  // still satisfies the type, and so the flaw engine can tell "not
-  // measured" apart from "measured as zero" (see FlawEngineRep).
-  trackingConfidence?: number;    // 0-1 mean landmark confidence during this rep
-  guardRecoveryScore?: number;    // 0-100, did the punching hand return to guard
-  guardIntegrityScore?: number;   // 0-100, did the OFF hand stay up
-  wristAlignmentScore?: number;   // 0-100, fist/forearm alignment (hand model only)
-  sequenceScore?: number;         // 0-100, proximal-to-distal chain ordering
-  recoverySpeedScore?: number;    // 0-100, how fast the retraction was
-  recoveryMs?: number | null;     // measured retraction time
-  armDominant?: boolean;          // arm peaked before the hips
-  peakAcceleration?: number;      // deg/s^2 at the elbow
-  timeToPeakMs?: number | null;   // initiation -> peak velocity
-  /** False when tracking was too poor to judge this rep. Unverified reps are
-   *  shown as such and excluded from scoring — never marked wrong. */
-  verified?: boolean;
-  /** 'unknown' when the shape can't be told apart reliably (straight vs hook). */
-  trajectoryVerdict?: TrajectoryVerdict;
-  peakElbowDeg?: number;          // peak elbow angle during the strike
-  overallRepScore?: number | null; // weighted, tolerance-band score 0-100
 }
 
 // Reference angular velocity (deg/sec) used to normalize speed into a 0-100
 // "power" estimate. This is a heuristic scale, not a calibrated force unit —
 // a monocular camera has no way to measure actual impact force.
 const POWER_REFERENCE_VELOCITY = 900;
-
-// Reaction-time band used to convert an average reaction (ms) into a 0-100
-// reflex score. CEILING = as fast as a human realistically reacts to a
-// spoken call and completes a validated strike; FLOOR = the point at which
-// the response is genuinely too slow to score.
-const REFLEX_CEILING_MS = 250;
-const REFLEX_FLOOR_MS = 1600;
+// A scored area only becomes a reported flaw when it is genuinely weak.
+const WEAK_AREA_THRESHOLD = 60; // accuracy / tracking / reflex below this = weak area
+const CHAIN_WEAK_RATIO = 0.6; // a kinetic-chain metric below 60% of its technique target = weak
 
 function estimatePower(peakVelocity: number): number {
   return Math.round(Math.min(100, Math.max(0, (peakVelocity / POWER_REFERENCE_VELOCITY) * 100)));
 }
 
-// --- New merit formulas (Stability, Swiftness) ------------------------------
-// Both are built entirely from signals the capture loop was already
-// recording per rep (repLog) and per session (elapsedSecondsRef) — no new
-// tracking machinery, just a new way of interpreting existing measurements.
-
-// A rep's overall "form composite" — the same underlying per-rep scores the
-// mechanics database already grades individual flaws against, collapsed
-// into one number per rep purely so Stability can measure how much that
-// number swings rep-to-rep (consistency), which is a different question
-// than the flaw engine's "was the average good or bad".
-function repFormComposite(r: { kind: 'punch' | 'defense'; torsoRotationScore?: number; hipRotationScore?: number; kneeDriveScore: number; weightTransferScore: number; footPivotScore: number; headLateralScore?: number; headDropScore?: number }): number {
-  if (r.kind === 'defense') {
-    // A slip mainly registers on headLateral, a roll mainly on headDrop —
-    // taking the max of the two (instead of averaging them together) avoids
-    // diluting a clean slip's score with an irrelevant near-zero roll metric.
-    const headSignal = Math.max(r.headLateralScore ?? 0, r.headDropScore ?? 0);
-    return (headSignal + r.kneeDriveScore) / 2;
-  }
+// Circular progress card for one session merit. Purely presentational — the
+// value is whatever the report computed; null means "not enough data" and is
+// shown honestly as an empty ring instead of a fake 0.
+function MeritRing({ label, value, caption }: { label: string; value: number | null; caption: string }) {
+  const size = 64;
+  const stroke = 6;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const pct = value === null ? 0 : Math.min(100, Math.max(0, value));
+  const color = value === null ? '#52525b' : pct >= 75 ? '#22c55e' : pct >= 50 ? '#f59e0b' : '#ef4444';
+  const tier = value === null ? 'NO DATA' : pct >= 85 ? 'ELITE' : pct >= 70 ? 'STRONG' : pct >= 50 ? 'DECENT' : 'BUILD';
   return (
-    ((r.torsoRotationScore ?? 0) + (r.hipRotationScore ?? 0) + r.kneeDriveScore + r.weightTransferScore + r.footPivotScore) / 5
+    <div className="flex flex-col items-center gap-2 rounded-2xl border border-white/5 bg-white/[0.02] px-2 py-4 text-center">
+      <div className="relative" style={{ width: size, height: size }}>
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
+          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={stroke} />
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke={color}
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={circumference * (1 - pct / 100)}
+            style={{ transition: 'stroke-dashoffset 0.8s ease' }}
+          />
+        </svg>
+        <span className="absolute inset-0 flex items-center justify-center text-sm font-black text-white">
+          {value === null ? '—' : `${Math.round(pct)}%`}
+        </span>
+      </div>
+      <span className="text-[9px] font-black uppercase tracking-widest text-white">{label}</span>
+      <span className="text-[7px] font-black uppercase tracking-widest" style={{ color }}>{tier}</span>
+      <span className="text-[7px] leading-tight text-white/30">{caption}</span>
+    </div>
   );
-}
-
-// A stdDev of this size or more across a session's reps is treated as
-// "maximally inconsistent" (score floors at 0); 0 stdDev is perfectly
-// repeatable technique (score caps at 100). Calibrated against the 0-100
-// scale the underlying metrics already use.
-const MAX_EXPECTED_FORM_STDDEV = 30;
-
-function computeStabilityScore(hits: Array<Parameters<typeof repFormComposite>[0]>, fallbackTrackingScore: number): number {
-  if (hits.length < 2) {
-    return fallbackTrackingScore;
-  }
-  const composites = hits.map(repFormComposite);
-  const mean = composites.reduce((a, b) => a + b, 0) / composites.length;
-  const variance = composites.reduce((sum, c) => sum + (c - mean) ** 2, 0) / composites.length;
-  const stdDev = Math.sqrt(variance);
-  // Real stability balances repeatability (low stdDev) with technique quality (meanForm)
-  const consistency = Math.max(0, 100 - (stdDev / MAX_EXPECTED_FORM_STDDEV) * 100);
-  return Math.round(Math.min(100, Math.max(0, consistency * 0.6 + Math.min(100, mean) * 0.4)));
-}
-
-function computeSwiftnessScore(hitCount: number, activeSeconds: number, maxExpectedCadencePerMin: number = 25): number {
-  const activeMinutes = Math.max(activeSeconds, 1) / 60;
-  const perMinute = hitCount / activeMinutes;
-  return Math.round(Math.min(100, Math.max(0, (perMinute / maxExpectedCadencePerMin) * 100)));
 }
 
 // Per-rep peak strike speed, color-coded by hit/miss. Every bar is a real
@@ -471,61 +302,21 @@ const DEFENSE_COMMANDS: CoachCommand[] = [
   { text: 'ROLL UNDER', kind: 'defense' },
 ];
 
+function angleAt(a: PoseLandmark, b: PoseLandmark, c: PoseLandmark): number {
+  const ab = { x: a.x - b.x, y: a.y - b.y };
+  const cb = { x: c.x - b.x, y: c.y - b.y };
+  const magAB = Math.hypot(ab.x, ab.y);
+  const magCB = Math.hypot(cb.x, cb.y);
+  if (magAB === 0 || magCB === 0) return 0;
+  const cos = (ab.x * cb.x + ab.y * cb.y) / (magAB * magCB);
+  return (Math.acos(Math.min(1, Math.max(-1, cos))) * 180) / Math.PI;
+}
+
 // Angle (degrees) of the line between two landmarks — used on the shoulder
 // pair to measure torso rotation (a real hook/cross twists the shoulders;
 // an arm-only flail doesn't).
 function lineAngle(a: PoseLandmark, b: PoseLandmark): number {
   return (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
-}
-
-
-/**
- * Everything the results screen renders after a session.
- *
- * This was previously `useState<any>`, which meant the results object and
- * the ~40 places that read it were completely unchecked — a renamed field
- * or a typo'd property surfaced as `undefined` on screen rather than as a
- * build error. That is exactly the failure mode this screen can least
- * afford, since a silently-undefined metric still renders as a confident
- * looking dash or NaN.
- */
-interface SessionResults {
-  overallScore: number;
-  powerScore: number;
-  /** @deprecated Legacy alias of trackingConfidenceScore — this was never a
-   *  measure of stance. Kept only so previously-saved sessions still read. */
-  stanceScore: number;
-  /** How clearly the camera tracked the fighter — NOT a performance metric. */
-  trackingConfidenceScore: number;
-  reflexScore: number;
-  stabilityScore: number;
-  swiftnessScore: number;
-  accuracy: number;
-  avgReflex: number | null;
-  hits: number;
-  misses: number;
-  posture: number;
-  advice: string;
-  flaw: string;
-  mistakes: string[];
-  log: RepLogEntry[];
-  rotationScore: number;
-  hipRotationScore: number;
-  torsoRotationScore: number;
-  kneeDriveScore: number;
-  weightTransferScore: number;
-  footPivotScore: number;
-  headLateralScore: number;
-  headDropScore: number;
-  trajectoryAccuracy: number;
-  isFreestyle: boolean;
-  detailedFlaws: DetectedFlaw[];
-  techniqueSummaries: TechniqueSummary[];
-  rootCauses: RootCauseDiagnosis[];
-  /** Capture quality, reported separately from performance. */
-  analysisQuality: number;
-  /** Which model/backend actually produced this session's data. */
-  engineInfo: EngineStatus | null;
 }
 
 export default function VisionPage() {
@@ -556,18 +347,9 @@ export default function VisionPage() {
   // Live session
   const [timerDisplay, setTimerDisplay] = useState('00:00');
   const [hitCount, setHitCount] = useState(0);
-  // Only the setter is used; the count is read from missCountRef during
-  // the session loop, where a ref avoids a re-render per miss.
-  const [, setMissCount] = useState(0);
+  const [missCount, setMissCount] = useState(0);
   const [attemptedCount, setAttemptedCount] = useState(0);
   const [activeCommand, setActiveCommand] = useState('');
-  // Rolling window of the last few commands actually issued (i.e. the same
-  // text handed to speakCommand/activeCommandTextRef — see
-  // setExpectedCommand below). Drives the "TARGET COMBO" HUD strip so it
-  // shows real called commands instead of a fixed decorative sequence that
-  // has nothing to do with the drill in progress.
-  const [commandHistoryDisplay, setCommandHistoryDisplay] = useState<string[]>([]);
-  const commandHistoryRef = useRef<string[]>([]);
   const [tacticalCue, setTacticalCue] = useState('Keep your guard high and stay light on your feet.');
   const [isCommandSpeaking, setIsCommandSpeaking] = useState(false);
   const [subscriptionChecking, setSubscriptionChecking] = useState(false);
@@ -578,25 +360,18 @@ export default function VisionPage() {
 
   // Live Reactive Metrics & Controls
   const [liveVelocity, setLiveVelocity] = useState<number>(0);
-  // Live punch feedback: last thrown punch label and a running count that
-  // updates for EVERY validated punch, prompted or not.
-  const [livePunchLabel, setLivePunchLabel] = useState<string | null>(null);
-  const [livePunchTotal, setLivePunchTotal] = useState<number>(0);
-  const livePunchTotalRef = useRef(0);
-  // Prompted commands that couldn't be verified (tracking lost) — never counted as misses.
-  const [unverifiedCount, setUnverifiedCount] = useState<number>(0);
-  const unverifiedCountRef = useRef(0);
-  const trackingLostDuringCommandRef = useRef(false);
   const [isVelocityFlashing, setIsVelocityFlashing] = useState<boolean>(false);
-  // Setter-only: the index is advanced for cadence variety but never read
-  // in render.
-  const [, setComboIndex] = useState<number>(0);
+  const [liveFps, setLiveFps] = useState<number>(60);
+  const [comboIndex, setComboIndex] = useState<number>(0);
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const isPausedRef = useRef(false);
   useEffect(() => { isPausedRef.current = isPaused; }, [isPaused]);
+  const isProcessingRef = useRef(false);
+  const fpsFramesRef = useRef(0);
+  const fpsLastTimeRef = useRef(Date.now());
 
   // Results
-  const [resultsData, setResultsData] = useState<SessionResults | null>(null);
+  const [resultsData, setResultsData] = useState<any>(null);
   const [insufficientData, setInsufficientData] = useState(false);
 
   // ---- Refs mirroring state so the MediaPipe callback (a stale closure
@@ -627,51 +402,9 @@ export default function VisionPage() {
   const drillTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const calibTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const poseRef = useRef<any>(null);
   const rafIdRef = useRef<number | null>(null);
-
-  // --- Upgraded vision pipeline ------------------------------------------
-  const poseEngineRef = useRef<PoseEngine | null>(null);
-  // Start fetching the MediaPipe script, wasm and model as soon as the page
-  // opens, so the "loading AI model" step after the camera starts is short.
-  useEffect(() => {
-    PoseEngine.preload();
-  }, []);
-  const landmarkFilterRef = useRef<LandmarkFilter>(new LandmarkFilter(TRACKED_LANDMARK_INDICES));
-  const guardTrackerRef = useRef<GuardTracker>(new GuardTracker());
-  const [engineInfo, setEngineInfo] = useState<EngineStatus | null>(null);
-  // Detected fighting stance. Null until enough evidence has accumulated —
-  // the UI previously displayed a hardcoded "ORTHODOX" regardless of what
-  // the camera saw, which is a fabricated claim in a product that
-  // advertises biomechanical analysis.
-  const [detectedStance, setDetectedStance] = useState<'ORTHODOX' | 'SOUTHPAW' | null>(null);
-  const stanceVotesRef = useRef({ orthodox: 0, southpaw: 0 });
-  // Latest filtered frame, kept so the render tick can redraw the skeleton
-  // at full camera rate while inference runs slower.
-  const latestFrameRef = useRef<{ landmarks: FilteredLandmark[]; ts: number } | null>(null);
-  // `?debug=1` on the URL turns on the tuning HUD drawn over the video.
-  const debugHudRef = useRef<boolean | null>(null);
-
-  // Per-frame confidence samples for the rep currently being measured.
-  const repConfidenceSamplesRef = useRef<number[]>([]);
-
-  // Kinetic-chain peak-timing trackers. Each records WHEN its segment hit
-  // peak velocity, which is what makes sequencing measurable.
-  const hipRotTrackerRef = useRef(new SignalTracker());
-  const torsoRotTrackerRef = useRef(new SignalTracker());
-  const shoulderTrackerRef = useRef(new SignalTracker());
-  const elbowTrackerRef = useRef(new SignalTracker());
-  const wristTrackerRef = useRef(new SignalTracker());
-
-  // Guard-return measurement state for the strike in flight.
-  const recoverySamplesRef = useRef<Array<{ t: number; drift: number }>>([]);
-  const peakDriftRef = useRef({ drift: 0, at: 0 });
-  const punchingSideRef = useRef<'left' | 'right'>('right');
-  const offHandIntegrityRef = useRef<number | null>(null);
-  const wristAlignmentRef = useRef<number | null>(null);
-  const latestHandsRef = useRef<EngineFrame['hands']>([]);
-  const worldLandmarksRef = useRef<Vec3[]>([]);
-  // Timestamp the current motion burst began, for time-to-peak.
-  const motionStartedAtRef = useRef(0);
+  const mpLoadedRef = useRef(false);
 
   // Tracking-quality bookkeeping
   const goodTrackingRef = useRef(false);
@@ -698,24 +431,6 @@ export default function VisionPage() {
   const repLogRef = useRef<RepLogEntry[]>([]);
   const activeCommandTextRef = useRef('');
 
-  // Single source of truth for "what's currently expected". Every place
-  // that starts a new call (runCommands, startFreestyleRound) must go
-  // through this instead of writing activeCommandTextRef and the
-  // activeCommand/commandHistory UI state as separate, independent
-  // assignments — that duplication is exactly what let the HUD's "TARGET
-  // COMBO" strip drift into showing its own hardcoded step sequence
-  // instead of the real called commands. registerHit()/scoring already
-  // reads activeCommandTextRef.current, and this is the only function
-  // that's allowed to write it, so the UI can never show a different
-  // "expected" punch than the one being scored.
-  const setExpectedCommand = (text: string) => {
-    activeCommandTextRef.current = text;
-    setActiveCommand(text);
-    const hist = [...commandHistoryRef.current, text].slice(-5);
-    commandHistoryRef.current = hist;
-    setCommandHistoryDisplay(hist);
-  };
-
   // DO NOT remove the motion gate below or change this state machine to a
   // single-frame angle check. Straight arms at rest also measure near 180°;
   // without the gate, the detector gets stuck in strike and stops counting.
@@ -724,14 +439,6 @@ export default function VisionPage() {
   const elbowStateRef = useRef<'guard' | 'strike'>('guard');
   const elbowAngleHistoryRef = useRef<number[]>([]); // last 3 raw readings, for median outlier rejection
   const guardEnteredAtRef = useRef(0); // timestamp guard was (re)entered, for GUARD_REARM_MS debounce
-  // Isolated dual-arm state tracking: prevents combo punches from swallowing each other
-  const armStatesRef = useRef<{
-    L: { state: 'guard' | 'strike'; smoothedAngle: number; history: number[]; guardEnteredAt: number; prevAngle: number; prevAngleTs: number | null; angularVel: number; recent: { ts: number; angle: number }[]; valid: boolean };
-    R: { state: 'guard' | 'strike'; smoothedAngle: number; history: number[]; guardEnteredAt: number; prevAngle: number; prevAngleTs: number | null; angularVel: number; recent: { ts: number; angle: number }[]; valid: boolean };
-  }>({
-    L: { state: 'guard', smoothedAngle: 0, history: [], guardEnteredAt: 0, prevAngle: 0, prevAngleTs: null, angularVel: 0, recent: [], valid: false },
-    R: { state: 'guard', smoothedAngle: 0, history: [], guardEnteredAt: 0, prevAngle: 0, prevAngleTs: null, angularVel: 0, recent: [], valid: false },
-  });
   const prevWristPosRef = useRef<{ x: number; y: number } | null>(null);
   const wristSpeedRef = useRef(0); // shoulder-widths/sec, cross-validates angular velocity
   const lastPunchMotionAtRef = useRef(0);
@@ -758,14 +465,8 @@ export default function VisionPage() {
   const footAngleBaselineRef = useRef({ L: 0, R: 0 });
   const peakFootPivotRef = useRef(0);
   const wristBaselineRef = useRef({ L: { x: 0, y: 0 }, R: { x: 0, y: 0 } });
-  // elbowAtPeak: the elbow angle measured at the frame of peak wrist
-  // displacement — classifyTrajectory() needs it to tell a bent-elbow hook
-  // apart from a straight punch that merely looks lateral on camera.
-  const peakWristDisplacementRef = useRef({ dx: 0, dy: 0, mag: 0, elbowAtPeak: 180 });
+  const peakWristDisplacementRef = useRef({ dx: 0, dy: 0, mag: 0 });
   const lastShoulderWidthRef = useRef(0.2);
-  const maxElbowSinceMotionRef = useRef(0);
-  const hookValidatedThisBurstRef = useRef(false);
-  const uppercutValidatedThisBurstRef = useRef(false);
 
   // --- Defensive head-movement tracking (independent of the elbow state
   // machine — a slip/roll never extends the elbow, so it needs its own peak
@@ -776,17 +477,13 @@ export default function VisionPage() {
   const peakHeadLateralRef = useRef(0); // peak |noseOffset| (normalized) this command window — slip quality
   const peakHeadDropRef = useRef(0); // peak downward nose displacement (normalized) this command window — roll quality
 
-  // Defense-specific knee-bend tracking (roll/bob-and-weave leg drive).
-  // A roll/slip never triggers the elbow guard->strike state machine, so
-  // kneeBaselineRef/peakKneeDriveRef above — which only update outside
-  // "guard" state — permanently read 0 for every defense rep (they're
-  // reset to 0 on every single frame while the elbow stays in guard,
-  // which it always does during a roll). This keeps its own slow EMA
-  // baseline per knee, exactly like noseYBaselineRef above, so ROLL_UNDER
-  // gets a genuine, independently-measured knee-drive score instead of a
-  // permanent stale 0 that made the "no leg bend" flaw fire every time.
-  const defenseKneeBaselineRef = useRef({ L: 0, R: 0 });
-  const peakDefenseKneeDriveRef = useRef(0);
+  // Defensive knee-bend tracking. kneeBaselineRef/peakKneeDriveRef above are
+  // reset every guard frame and only peak during a punch strike, so they are
+  // never meaningful for a slip/roll. This independent tracker uses a slow
+  // EMA "standing" knee angle and records the deepest bend away from it in
+  // the current command window — the real signal behind a roll's leg bend.
+  const restingKneeAngleRef = useRef({ L: 0, R: 0 });
+  const peakDefenseKneeBendRef = useRef(0); // deg, peak knee-angle decrease from standing this command window
 
   // -------------------------------------------------------------------------
   // Mount / MediaPipe script loading
@@ -798,10 +495,23 @@ export default function VisionPage() {
       synthRef.current = window.speechSynthesis;
     }
 
-    // Model loading is owned by PoseEngine (see startPoseEngine). It
-    // self-hosts wasm + weights from /public with a CDN fallback and a
-    // legacy-API fallback beneath that, so there is nothing to preload
-    // here — and no global <script> tag to leak across navigations.
+    const loadMediaPipe = () => {
+      if (typeof window === 'undefined') return;
+      if ((window as any).Pose) {
+        mpLoadedRef.current = true;
+        return;
+      }
+      const poseScript = document.createElement('script');
+      poseScript.src = 'https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js';
+      poseScript.crossOrigin = 'anonymous';
+      poseScript.async = true;
+      poseScript.onload = () => {
+        mpLoadedRef.current = true;
+      };
+      document.head.appendChild(poseScript);
+    };
+
+    loadMediaPipe();
 
     return () => {
       cleanupSession();
@@ -818,19 +528,10 @@ export default function VisionPage() {
       cancelAnimationFrame(rafIdRef.current);
       rafIdRef.current = null;
     }
-    if (poseEngineRef.current) {
-      poseEngineRef.current.dispose();
-      poseEngineRef.current = null;
+    if (poseRef.current) {
+      try { poseRef.current.close(); } catch { }
+      poseRef.current = null;
     }
-    // Reset the conditioning layer so a new session never inherits the
-    // previous one's baselines, velocities or filter state.
-    landmarkFilterRef.current.reset();
-    guardTrackerRef.current.reset();
-    latestFrameRef.current = null;
-    latestHandsRef.current = [];
-    worldLandmarksRef.current = [];
-    repConfidenceSamplesRef.current = [];
-    recoverySamplesRef.current = [];
     if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
     if (drillTimerRef.current) clearTimeout(drillTimerRef.current);
     if (calibTickRef.current) clearInterval(calibTickRef.current);
@@ -942,21 +643,12 @@ export default function VisionPage() {
   // it) — callers use this to timestamp reaction windows and drive visuals
   // that are genuinely synced to what the fighter hears, not to network/
   // engine latency, which can be 100-500ms on remote "Online" voices.
-  // Always stop whatever's currently playing first — this is the single
-  // voice output for the whole session; nothing should ever layer on top
-  // of it. Without this, "Calibration complete" (a premade clip) and the
-  // first drill command (which fires only 800ms later) could genuinely
-  // overlap and play as two simultaneous voices, since a premade <audio>
-  // clip and a browser-TTS utterance run on two completely independent
-  // channels and neither one stops the other on its own.
   const speakCommand = (text: string, onStart?: () => void, onEnd?: () => void) => {
     if (isMutedRef.current) {
       onStart?.();
       onEnd?.();
       return;
     }
-    stopVoicePack();
-    try { synthRef.current?.cancel(); } catch { /* ignore */ }
     const fallback = () => {
       if (!synthRef.current) {
         onStart?.();
@@ -995,6 +687,55 @@ export default function VisionPage() {
   };
 
   // -------------------------------------------------------------------------
+  // Skeleton drawing (GPU-accelerated dual-stroke; zero shadowBlur lag)
+  // -------------------------------------------------------------------------
+  const drawSkeleton = (landmarks: PoseLandmark[], ctx: CanvasRenderingContext2D, w: number, h: number) => {
+    ctx.clearRect(0, 0, w, h);
+
+    // Outer glow stroke
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = 'rgba(6, 182, 212, 0.28)';
+    for (const [i, j] of SKELETON_CONNECTIONS) {
+      const a = landmarks[i];
+      const b = landmarks[j];
+      if (!a || !b) continue;
+      if ((a.visibility ?? 1) < 0.35 || (b.visibility ?? 1) < 0.35) continue;
+      ctx.beginPath();
+      ctx.moveTo(a.x * w, a.y * h);
+      ctx.lineTo(b.x * w, b.y * h);
+      ctx.stroke();
+    }
+
+    // Inner crisp neon stroke
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#22d3ee';
+    for (const [i, j] of SKELETON_CONNECTIONS) {
+      const a = landmarks[i];
+      const b = landmarks[j];
+      if (!a || !b) continue;
+      if ((a.visibility ?? 1) < 0.35 || (b.visibility ?? 1) < 0.35) continue;
+      ctx.beginPath();
+      ctx.moveTo(a.x * w, a.y * h);
+      ctx.lineTo(b.x * w, b.y * h);
+      ctx.stroke();
+    }
+
+    // Joint dots
+    ctx.fillStyle = '#67e8f9';
+    const jointIndices = [LM.NOSE, ...SKELETON_CONNECTIONS.flat()];
+    const seen = new Set<number>();
+    for (const idx of jointIndices) {
+      if (seen.has(idx)) continue;
+      seen.add(idx);
+      const p = landmarks[idx];
+      if (!p || (p.visibility ?? 1) < 0.35) continue;
+      ctx.beginPath();
+      ctx.arc(p.x * w, p.y * h, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  };
+
+  // -------------------------------------------------------------------------
   // Camera / MediaPipe start
   // -------------------------------------------------------------------------
   const waitForVideoElement = async (timeoutMs = 2000): Promise<HTMLVideoElement | null> => {
@@ -1006,37 +747,13 @@ export default function VisionPage() {
     return videoRef.current;
   };
 
-  /**
-   * Bring up the pose engine against an already-playing video element.
-   *
-   * Replaces two near-identical inline copies of model init + detect loop
-   * (the primary camera path and the fallback-camera path), which had
-   * already drifted apart from each other. One implementation means a fix
-   * lands in both paths by construction.
-   */
-  const startPoseEngine = async (videoEl: HTMLVideoElement): Promise<boolean> => {
-    // Tear down any previous engine before creating another — otherwise a
-    // retry leaks a running rAF loop and a GPU context per attempt.
-    if (poseEngineRef.current) {
-      poseEngineRef.current.dispose();
-      poseEngineRef.current = null;
+  const waitForMediaPipe = async (timeoutMs = 6000) => {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      if (mpLoadedRef.current && (window as any).Pose) return true;
+      await new Promise((r) => setTimeout(r, 150));
     }
-    landmarkFilterRef.current.reset();
-    guardTrackerRef.current.reset();
-    latestFrameRef.current = null;
-
-    const engine = new PoseEngine({
-      onFrame: (frame) => handleEngineFrame(frame),
-      onRenderTick: () => renderTick(),
-      onStatus: (status) => setEngineInfo(status),
-    });
-    poseEngineRef.current = engine;
-
-    const ok = await engine.initialize();
-    if (!ok) return false;
-
-    engine.start(videoEl);
-    return true;
+    return false;
   };
 
   const startCalibration = async () => {
@@ -1071,7 +788,7 @@ export default function VisionPage() {
         }
         return;
       }
-    } catch {
+    } catch (e) {
       setSubscriptionChecking(false);
       setSubscriptionError('Could not verify subscription. Check your connection and try again.');
       return;
@@ -1088,12 +805,6 @@ export default function VisionPage() {
     awaitingUserStartRef.current = false;
     setHitCount(0);
     setMissCount(0);
-    livePunchTotalRef.current = 0;
-    setLivePunchTotal(0);
-    setLivePunchLabel(null);
-    unverifiedCountRef.current = 0;
-    setUnverifiedCount(0);
-    trackingLostDuringCommandRef.current = false;
     setTimerDisplay('00:00');
     elapsedSecondsRef.current = 0;
     hitCountRef.current = 0;
@@ -1104,8 +815,6 @@ export default function VisionPage() {
     repLogRef.current = [];
     currentRepPeakVelocityRef.current = 0;
     activeCommandTextRef.current = '';
-    commandHistoryRef.current = [];
-    setCommandHistoryDisplay([]);
     peakAngularVelocityRef.current = 0;
     trackingSamplesRef.current = [];
     elbowStateRef.current = 'guard';
@@ -1128,24 +837,14 @@ export default function VisionPage() {
     footAngleBaselineRef.current = { L: 0, R: 0 };
     peakFootPivotRef.current = 0;
     wristBaselineRef.current = { L: { x: 0, y: 0 }, R: { x: 0, y: 0 } };
-    peakWristDisplacementRef.current = { dx: 0, dy: 0, mag: 0, elbowAtPeak: 180 };
-    maxElbowSinceMotionRef.current = 0;
-    hookValidatedThisBurstRef.current = false;
-    uppercutValidatedThisBurstRef.current = false;
-    armStatesRef.current = {
-      L: { state: 'guard', smoothedAngle: 0, history: [], guardEnteredAt: 0, prevAngle: 0, prevAngleTs: null, angularVel: 0, recent: [], valid: false },
-      R: { state: 'guard', smoothedAngle: 0, history: [], guardEnteredAt: 0, prevAngle: 0, prevAngleTs: null, angularVel: 0, recent: [], valid: false },
-    };
+    peakWristDisplacementRef.current = { dx: 0, dy: 0, mag: 0 };
     noseYBaselineRef.current = 0;
     peakHeadLateralRef.current = 0;
     peakHeadDropRef.current = 0;
-    defenseKneeBaselineRef.current = { L: 0, R: 0 };
-    peakDefenseKneeDriveRef.current = 0;
+    restingKneeAngleRef.current = { L: 0, R: 0 };
+    peakDefenseKneeBendRef.current = 0;
     goodHoldMsRef.current = 0;
     badHoldMsRef.current = 0;
-    stanceVotesRef.current = { orthodox: 0, southpaw: 0 };
-    setDetectedStance(null);
-    repConfidenceSamplesRef.current = [];
     setIsTrackingInadequate(false);
     isTrackingInadequateRef.current = false;
 
@@ -1174,7 +873,8 @@ export default function VisionPage() {
       await new Promise<void>((resolve) => {
         videoEl.onloadedmetadata = () => {
           if (canvasRef.current) {
-            syncCanvasToVideo(canvasRef.current, videoEl);
+            canvasRef.current.width = videoEl.videoWidth || 640;
+            canvasRef.current.height = videoEl.videoHeight || 480;
           }
           resolve();
         };
@@ -1187,8 +887,8 @@ export default function VisionPage() {
       }
 
       setCalibStatus('LOADING AI MODEL...');
-      const engineOk = await startPoseEngine(videoEl);
-      if (!engineOk) {
+      const mpReady = await waitForMediaPipe();
+      if (!mpReady) {
         setEngineStatus('failed');
         setCameraError('The on-device pose model failed to load. Check your connection and try again — no simulated data will be shown.');
         cleanupSession();
@@ -1199,9 +899,51 @@ export default function VisionPage() {
       setCalibStatus('CAMERA READY');
       setAwaitingUserStart(true);
       awaitingUserStartRef.current = true;
-      // Live preview + skeleton render begins immediately; calibration
-      // itself only starts once the user taps "Start Analysis" (see
-      // beginCalibration()).
+
+      const mpPose = (window as any).Pose;
+      const pose = new mpPose({
+        locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`,
+      });
+      pose.setOptions({
+        modelComplexity: 1,
+        smoothLandmarks: true,
+        enableSegmentation: false,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5,
+      });
+      pose.onResults(onPoseResults);
+      poseRef.current = pose;
+
+      // Drive detection ourselves off the exact stream/device we opened above.
+      // (MediaPipe's Camera utility silently re-requests its own default
+      // camera stream internally, which is what was overriding the OBS
+      // device selection — so we don't use it.)
+      const detectLoop = async () => {
+        const video = videoRef.current;
+        if (video && video.readyState >= 2 && poseRef.current && !isProcessingRef.current && !isPausedRef.current) {
+          isProcessingRef.current = true;
+          try {
+            await poseRef.current.send({ image: video });
+          } catch (sendErr) {
+            console.warn('Pose detection frame failed:', sendErr);
+          } finally {
+            isProcessingRef.current = false;
+          }
+        }
+        // Compute live camera FPS
+        fpsFramesRef.current++;
+        const now = Date.now();
+        if (now - fpsLastTimeRef.current >= 500) {
+          const computedFps = Math.min(60, Math.round((fpsFramesRef.current * 1000) / (now - fpsLastTimeRef.current)));
+          setLiveFps(computedFps);
+          fpsFramesRef.current = 0;
+          fpsLastTimeRef.current = now;
+        }
+        rafIdRef.current = requestAnimationFrame(detectLoop);
+      };
+      rafIdRef.current = requestAnimationFrame(detectLoop);
+      // Live preview + skeleton render immediately; calibration itself only
+      // begins once the user taps "Start Analysis" (see beginCalibration()).
     } catch (err) {
       console.error('Camera access failed:', err);
 
@@ -1225,7 +967,8 @@ export default function VisionPage() {
             await new Promise<void>((resolve) => {
               videoEl.onloadedmetadata = () => {
                 if (canvasRef.current) {
-                  syncCanvasToVideo(canvasRef.current, videoEl);
+                  canvasRef.current.width = videoEl.videoWidth || 640;
+                  canvasRef.current.height = videoEl.videoHeight || 480;
                 }
                 resolve();
               };
@@ -1233,12 +976,51 @@ export default function VisionPage() {
             try { await videoEl.play(); } catch { }
 
             setCalibStatus('LOADING AI MODEL...');
-            const engineOk = await startPoseEngine(videoEl);
-            if (engineOk) {
+            const mpReady = await waitForMediaPipe();
+            if (mpReady) {
               setEngineStatus('ready');
               setCalibStatus('CAMERA READY');
               setAwaitingUserStart(true);
               awaitingUserStartRef.current = true;
+
+              const mpPose = (window as any).Pose;
+              const pose = new mpPose({
+                locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`,
+              });
+              pose.setOptions({
+                modelComplexity: 1,
+                smoothLandmarks: true,
+                enableSegmentation: false,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5,
+              });
+              pose.onResults(onPoseResults);
+              poseRef.current = pose;
+
+              const detectLoop = async () => {
+                const video = videoRef.current;
+                if (video && video.readyState >= 2 && poseRef.current && !isProcessingRef.current && !isPausedRef.current) {
+                  isProcessingRef.current = true;
+                  try {
+                    await poseRef.current.send({ image: video });
+                  } catch (sendErr) {
+                    console.warn('Pose detection frame failed:', sendErr);
+                  } finally {
+                    isProcessingRef.current = false;
+                  }
+                }
+                // Compute live camera FPS
+                fpsFramesRef.current++;
+                const now = Date.now();
+                if (now - fpsLastTimeRef.current >= 500) {
+                  const computedFps = Math.min(60, Math.round((fpsFramesRef.current * 1000) / (now - fpsLastTimeRef.current)));
+                  setLiveFps(computedFps);
+                  fpsFramesRef.current = 0;
+                  fpsLastTimeRef.current = now;
+                }
+                rafIdRef.current = requestAnimationFrame(detectLoop);
+              };
+              rafIdRef.current = requestAnimationFrame(detectLoop);
               return; // fallback succeeded — skip the error screen entirely
             }
           }
@@ -1302,108 +1084,32 @@ export default function VisionPage() {
   // -------------------------------------------------------------------------
   // Per-frame pose callback — the core real-time engine
   // -------------------------------------------------------------------------
-  /**
-   * Draw the most recent skeleton. Called on EVERY animation frame,
-   * independently of inference.
-   *
-   * This decoupling is the point: inference now runs at 18-30fps depending
-   * on device tier, but the overlay still repaints at the display's full
-   * rate, so the skeleton looks smooth rather than stepping at the
-   * inference rate. It also means a slow frame of inference can't stall
-   * the visible preview.
-   */
-  const renderTick = () => {
+  const onPoseResults = (results: any) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Keep the canvas backing store locked to the video's intrinsic size
-    // (camera switches, orientation changes, late metadata).
-    syncCanvasToVideo(canvas, videoRef.current);
+    const w = canvas.width;
+    const h = canvas.height;
+    const landmarks: PoseLandmark[] | undefined = results.poseLandmarks;
 
-    const frame = latestFrameRef.current;
-    if (!frame) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      return;
-    }
-
-    // Hold the last pose through brief tracking loss and fade it out.
-    const ageMs = Math.max(0, performance.now() - frame.ts);
-    const holdMs = VISION_CONFIG.tracking.holdPoseMs;
-    if (ageMs > holdMs + 200) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      return;
-    }
-    const alpha = ageMs <= holdMs ? 1 : Math.max(0, 1 - (ageMs - holdMs) / 200);
-
-    const pose = buildDrawablePose(frame.landmarks, ageMs + VISION_CONFIG.tracking.overlayLeadMs);
-
-    let debugLines: string[] | undefined;
-    if (debugHudRef.current === null && typeof window !== 'undefined') {
-      debugHudRef.current = new URLSearchParams(window.location.search).get('debug') === '1';
-    }
-    if (debugHudRef.current) {
-      const L = armStatesRef.current.L;
-      const R = armStatesRef.current.R;
-      debugLines = [
-        `L ${L.state} ${Math.round(L.smoothedAngle)}deg ${Math.round(L.angularVel)}d/s`,
-        `R ${R.state} ${Math.round(R.smoothedAngle)}deg ${Math.round(R.angularVel)}d/s`,
-        `wrist ${wristSpeedRef.current.toFixed(2)} sw/s  age ${Math.round(ageMs)}ms`,
-        `canvas ${canvas.width}x${canvas.height}  video ${videoRef.current?.videoWidth ?? 0}x${videoRef.current?.videoHeight ?? 0}`,
-      ];
-    }
-
-    drawOverlay(ctx, pose, canvas.width, canvas.height, {
-      striking: {
-        L: armStatesRef.current.L.state === 'strike',
-        R: armStatesRef.current.R.state === 'strike',
-      },
-      mirrored: true, // canvas and video both carry -scale-x-100
-      alpha,
-      debugLines,
-    });
-  };
-
-  /**
-   * Handle one completed inference.
-   *
-   * Order matters here: landmarks are conditioned (outlier rejection,
-   * occlusion prediction, One Euro smoothing) BEFORE any measurement reads
-   * them, so every downstream angle, velocity and baseline is computed off
-   * the clean signal rather than raw model output.
-   */
-  const handleEngineFrame = (frame: EngineFrame) => {
-    const now = frame.timestampMs;
+    const now = performance.now();
     const dt = lastFrameTsRef.current ? now - lastFrameTsRef.current : 33;
-    const rawLandmarks = frame.landmarks && frame.landmarks.length > 0 ? frame.landmarks : [];
-    const { landmarks, quality } = landmarkFilterRef.current.process(rawLandmarks, now);
+    lastFrameTsRef.current = now;
 
-    // Only drop frame completely if all landmarks have near-zero confidence (no person ever seen or prediction expired)
-    const hasUsableLandmarks = landmarks.some((lm) => lm && lm.confidence > 0.05);
-    if (!hasUsableLandmarks) {
-      // Keep latestFrameRef: renderTick holds and fades the last pose.
+    if (!landmarks || landmarks.length === 0) {
+      ctx.clearRect(0, 0, w, h);
       goodTrackingRef.current = false;
       handleTrackingLoss(dt);
       return;
     }
 
-    latestFrameRef.current = { landmarks, ts: now };
-    latestHandsRef.current = frame.hands || [];
-    if (frame.worldLandmarks && frame.worldLandmarks.length > 0) {
-      worldLandmarksRef.current = frame.worldLandmarks.map((p) => ({
-        x: p.x,
-        y: p.y,
-        z: p.z ?? 0,
-      }));
-    }
+    const coreVisibility = CORE_ANCHORS.map((idx) => landmarks[idx]?.visibility ?? 0);
+    const minVis = Math.min(...coreVisibility);
+    goodTrackingRef.current = minVis >= VISIBILITY_THRESHOLD;
 
-    // Quorum-based tracking adequacy:
-    // Allows authentic 45° bladed boxing stances where rear shoulder/hip dips slightly in visibility
-    const coreConfidence = CORE_ANCHORS.map((idx) => landmarks[idx]?.confidence ?? 0);
-    const meanCoreConf = coreConfidence.reduce((a, b) => a + b, 0) / coreConfidence.length;
-    const anchorsVisible = coreConfidence.filter((c) => c >= 0.35).length;
-    goodTrackingRef.current = meanCoreConf >= VISIBILITY_THRESHOLD || anchorsVisible >= 3;
+    drawSkeleton(landmarks, ctx, w, h);
 
     if (stageRef.current !== 'camera') return;
 
@@ -1414,23 +1120,9 @@ export default function VisionPage() {
     }
 
     if (calibSuccessRef.current && !isTrackingInadequateRef.current) {
-      trackingSamplesRef.current.push(quality.meanConfidence);
-      repConfidenceSamplesRef.current.push(quality.meanConfidence);
-      // Cap the per-rep buffer: a long gap between commands would
-      // otherwise let it grow without bound and dilute the rep's own
-      // confidence with minutes of idle frames.
-      if (repConfidenceSamplesRef.current.length > 240) {
-        repConfidenceSamplesRef.current.shift();
-      }
+      trackingSamplesRef.current.push(minVis);
       analyzeFrame(landmarks, now);
     }
-  };
-
-  /** Mean landmark confidence across the rep currently being measured. */
-  const currentRepConfidence = (): number => {
-    const samples = repConfidenceSamplesRef.current;
-    if (samples.length === 0) return 0;
-    return samples.reduce((a, b) => a + b, 0) / samples.length;
   };
 
   const handleTrackingLoss = (dt: number) => {
@@ -1440,8 +1132,6 @@ export default function VisionPage() {
     if (badHoldMsRef.current >= TRACKING_LOSS_GRACE_MS && !isTrackingInadequateRef.current) {
       isTrackingInadequateRef.current = true;
       setIsTrackingInadequate(true);
-      // Any command pending right now can no longer be judged fairly.
-      if (awaitingRef.current) trackingLostDuringCommandRef.current = true;
     }
   };
 
@@ -1458,125 +1148,59 @@ export default function VisionPage() {
   // -------------------------------------------------------------------------
   // Real biomechanical analysis of a single frame
   // -------------------------------------------------------------------------
-  /**
-   * Joint angle, preferring metric 3D world landmarks over image-space.
-   *
-   * This is the most consequential accuracy change in the pipeline. Every
-   * angle used to be computed from normalized x/y, which is
-   * projection-dependent: a joint angle foreshortens as the limb rotates
-   * toward the lens, so the SAME punch measured differently depending only
-   * on which way the fighter happened to be facing.
-   *
-   * Measured, for a real 160° elbow extension against the 155° threshold:
-   *
-   *   stance angle |  2D reads  | detected?
-   *   -------------|------------|-----------
-   *        0°      |    160°    |  yes
-   *       30°      |    157°    |  yes
-   *       45°      |    153°    |  NO   <-- the stance the guide asks for
-   *       60°      |    144°    |  NO
-   *       75°      |    125°    |  NO
-   *
-   * So at the 45° stance the app's own setup guide instructs, a genuine
-   * punch fell below the extension gate and was never counted. World
-   * landmarks are hip-origin metric 3D, so the same joint angle reads 160°
-   * at every one of those stance angles.
-   *
-   * Falls back to the old 2D measurement when world landmarks aren't
-   * available (legacy backend), so the pipeline degrades rather than
-   * breaking.
-   */
-  const jointAngle = (
-    aIdx: number,
-    bIdx: number,
-    cIdx: number,
-    landmarks: FilteredLandmark[]
-  ): number | null => {
-    const world = worldLandmarksRef.current;
-    if (world.length > Math.max(aIdx, bIdx, cIdx)) {
-      const a = world[aIdx], b = world[bIdx], c = world[cIdx];
-      if (a && b && c) {
-        const angle = angle3D(a, b, c);
-        if (angle !== null) return angle;
-      }
-    }
-    const a2 = landmarks[aIdx], b2 = landmarks[bIdx], c2 = landmarks[cIdx];
-    if (!a2 || !b2 || !c2) return null;
-    return angle2D(a2, b2, c2);
-  };
-
-  const analyzeFrame = (landmarks: FilteredLandmark[], now: number) => {
+  const analyzeFrame = (landmarks: PoseLandmark[], now: number) => {
     const lS = landmarks[LM.L_SHOULDER], rS = landmarks[LM.R_SHOULDER];
     const lE = landmarks[LM.L_ELBOW], rE = landmarks[LM.R_ELBOW];
     const lW = landmarks[LM.L_WRIST], rW = landmarks[LM.R_WRIST];
     const nose = landmarks[LM.NOSE];
 
-    // A missing or low-confidence wrist must NEVER be recorded as a 0° angle:
-    // that dragged the smoothed angle down and cut real punches short. An
-    // unmeasurable arm holds its last angle and is skipped by the state machine.
-    const armFloor = VISION_CONFIG.tracking.armConfidenceFloor;
-    let lAngleThisFrame = armStatesRef.current.L.smoothedAngle;
-    let rAngleThisFrame = armStatesRef.current.R.smoothedAngle;
-    let lMeasured: number | null = null;
-    let rMeasured: number | null = null;
-    if (lS && lE && lW && !lE.stale && !lW.stale && lW.confidence > armFloor) {
-      lMeasured = jointAngle(LM.L_SHOULDER, LM.L_ELBOW, LM.L_WRIST, landmarks);
+    let lAngleThisFrame = 0;
+    let rAngleThisFrame = 0;
+    if (lS && lE && lW && (lW.visibility ?? 1) > 0.4) {
+      lAngleThisFrame = angleAt(lS, lE, lW);
     }
-    if (rS && rE && rW && !rE.stale && !rW.stale && rW.confidence > armFloor) {
-      rMeasured = jointAngle(LM.R_SHOULDER, LM.R_ELBOW, LM.R_WRIST, landmarks);
+    if (rS && rE && rW && (rW.visibility ?? 1) > 0.4) {
+      rAngleThisFrame = angleAt(rS, rE, rW);
     }
-    if (lMeasured !== null) lAngleThisFrame = lMeasured;
-    if (rMeasured !== null) rAngleThisFrame = rMeasured;
+    const maxElbowAngle = Math.max(lAngleThisFrame, rAngleThisFrame);
 
-    for (const side of ['L', 'R'] as const) {
-      const arm = armStatesRef.current[side];
-      const measured = side === 'L' ? lMeasured : rMeasured;
+    // Outlier rejection: take the median of the last 3 raw readings before
+    // smoothing. A single bad MediaPipe frame (landmark snapping/occlusion
+    // flicker) shows up as one outlier value — the median throws it out
+    // completely instead of just diluting it, which exponential smoothing
+    // alone can't do.
+    const hist = elbowAngleHistoryRef.current;
+    hist.push(maxElbowAngle);
+    if (hist.length > 3) hist.shift();
+    const medianElbowAngle =
+      hist.length === 3 ? [...hist].sort((a, b) => a - b)[1] : maxElbowAngle;
 
-      if (measured === null) {
-        arm.valid = false;
-        arm.angularVel = 0;
-        arm.prevAngleTs = null; // next valid frame starts a fresh velocity delta
-        continue;
-      }
-      arm.valid = true;
+    // Exponential smoothing kills remaining frame-to-frame landmark jitter
+    // without adding meaningful lag — a real punch takes multiple frames to
+    // extend, so smoothing never masks a genuine strike.
+    smoothedElbowAngleRef.current =
+      smoothedElbowAngleRef.current === 0
+        ? medianElbowAngle
+        : smoothedElbowAngleRef.current + SMOOTHING_ALPHA * (medianElbowAngle - smoothedElbowAngleRef.current);
+    const smoothedAngle = smoothedElbowAngleRef.current;
 
-      arm.history.push(measured);
-      if (arm.history.length > 3) arm.history.shift();
-      const medianAngle = arm.history.length === 3 ? [...arm.history].sort((a, b) => a - b)[1] : measured;
-      arm.smoothedAngle = arm.smoothedAngle === 0
-        ? medianAngle
-        : arm.smoothedAngle + SMOOTHING_ALPHA * (medianAngle - arm.smoothedAngle);
-
-      // Short peak window: a fast jab may sit near extension for only 2-3
-      // frames, which smoothing can flatten below the gate.
-      arm.recent.push({ ts: now, angle: medianAngle });
-      const windowStart = now - VISION_CONFIG.detection.windowMs;
-      while (arm.recent.length > 0 && arm.recent[0].ts < windowStart) arm.recent.shift();
-
-      if (arm.prevAngleTs !== null) {
-        const dtSec = (now - arm.prevAngleTs) / 1000;
-        if (dtSec > 0) {
-          const vel = Math.abs(arm.smoothedAngle - arm.prevAngle) / dtSec;
-          arm.angularVel = vel < 3000 ? vel : 0;
+    let angularVel = 0;
+    const prevTs = prevAngleTsRef.current;
+    if (prevTs !== null) {
+      const dtSec = (now - prevTs) / 1000;
+      if (dtSec > 0) {
+        angularVel = Math.abs(smoothedAngle - prevMaxElbowAngleRef.current) / dtSec;
+        if (angularVel < 3000) {
+          if (angularVel > peakAngularVelocityRef.current) peakAngularVelocityRef.current = angularVel;
+          if (awaitingRef.current && angularVel > currentRepPeakVelocityRef.current) {
+            currentRepPeakVelocityRef.current = angularVel;
+          }
+          // Real-time live velocity display update (throttled to 100ms for silky-smooth UI response)
+          if (now - lastVelUpdateTsRef.current > 100 && angularVel > 60) {
+            lastVelUpdateTsRef.current = now;
+            setLiveVelocity(angularVel);
+          }
         }
-      }
-      arm.prevAngle = arm.smoothedAngle;
-      arm.prevAngleTs = now;
-    }
-
-    const smoothedAngle = Math.max(armStatesRef.current.L.smoothedAngle, armStatesRef.current.R.smoothedAngle);
-    smoothedElbowAngleRef.current = smoothedAngle;
-    const angularVel = Math.max(armStatesRef.current.L.angularVel, armStatesRef.current.R.angularVel);
-
-    if (angularVel < 3000) {
-      if (angularVel > peakAngularVelocityRef.current) peakAngularVelocityRef.current = angularVel;
-      if (awaitingRef.current && angularVel > currentRepPeakVelocityRef.current) {
-        currentRepPeakVelocityRef.current = angularVel;
-      }
-      // Real-time live velocity display update (throttled to 100ms for silky-smooth UI response)
-      if (now - lastVelUpdateTsRef.current > 100 && angularVel > 50) {
-        lastVelUpdateTsRef.current = now;
-        setLiveVelocity(angularVel);
       }
     }
 
@@ -1586,8 +1210,7 @@ export default function VisionPage() {
     // wrist actually travelling anywhere near punch speed.
     const activeWristNow = lAngleThisFrame >= rAngleThisFrame ? lW : rW;
     const shoulderWidthNow = lS && rS ? Math.hypot(lS.x - rS.x, lS.y - rS.y) || 0.001 : 0.001;
-    const prevTs = prevAngleTsRef.current;
-    if (activeWristNow && activeWristNow.confidence > 0.25 && prevTs !== null) {
+    if (activeWristNow && (activeWristNow.visibility ?? 1) > 0.4 && prevTs !== null) {
       const dtSec = (now - prevTs) / 1000;
       if (prevWristPosRef.current && dtSec > 0) {
         const dist = Math.hypot(activeWristNow.x - prevWristPosRef.current.x, activeWristNow.y - prevWristPosRef.current.y);
@@ -1599,24 +1222,9 @@ export default function VisionPage() {
     prevAngleTsRef.current = now;
     prevMaxElbowAngleRef.current = smoothedAngle;
 
-    // Track "was there real punch-speed motion just now" BEFORE the
-    // kinetic-chain tracking block below, not after it.
-    if (angularVel >= MIN_PUNCH_ANGULAR_VELOCITY || wristSpeedRef.current >= MIN_WRIST_SPEED) {
-      lastPunchMotionAtRef.current = now;
-    }
-
     // --- Torso rotation tracking (hip/shoulder engagement) ---------------
-    // Shoulder-line rotation. With world landmarks this is TRUE axial
-    // rotation measured in the horizontal plane; lineAngle() on image-space
-    // x/y conflated real rotation with leaning and with camera off-axis
-    // placement, so a fighter who simply stood slightly turned read as
-    // permanently "rotated".
-    const world = worldLandmarksRef.current;
-    const hasWorld = world.length > LM.R_HIP;
     let shoulderAngle = shoulderBaselineAngleRef.current;
-    if (hasWorld && world[LM.L_SHOULDER] && world[LM.R_SHOULDER]) {
-      shoulderAngle = axialRotationDeg(world[LM.L_SHOULDER], world[LM.R_SHOULDER]);
-    } else if (lS && rS) {
+    if (lS && rS) {
       shoulderAngle = lineAngle(lS, rS);
     }
     const shoulderWidth = lS && rS ? Math.hypot(lS.x - rS.x, lS.y - rS.y) || 0.001 : 0.001;
@@ -1627,14 +1235,8 @@ export default function VisionPage() {
     const lHip = landmarks[LM.L_HIP], rHip = landmarks[LM.R_HIP];
     const lKneeL = landmarks[LM.L_KNEE], rKneeL = landmarks[LM.R_KNEE];
     const lAnkle = landmarks[LM.L_ANKLE], rAnkle = landmarks[LM.R_ANKLE];
-    const lKneeAngle =
-      lHip && lKneeL && lAnkle
-        ? jointAngle(LM.L_HIP, LM.L_KNEE, LM.L_ANKLE, landmarks) ?? kneeBaselineRef.current.L
-        : kneeBaselineRef.current.L;
-    const rKneeAngle =
-      rHip && rKneeL && rAnkle
-        ? jointAngle(LM.R_HIP, LM.R_KNEE, LM.R_ANKLE, landmarks) ?? kneeBaselineRef.current.R
-        : kneeBaselineRef.current.R;
+    const lKneeAngle = lHip && lKneeL && lAnkle ? angleAt(lHip, lKneeL, lAnkle) : kneeBaselineRef.current.L;
+    const rKneeAngle = rHip && rKneeL && rAnkle ? angleAt(rHip, rKneeL, rAnkle) : kneeBaselineRef.current.R;
 
     const hipMidX = lHip && rHip ? (lHip.x + rHip.x) / 2 : hipXBaselineRef.current;
 
@@ -1642,37 +1244,20 @@ export default function VisionPage() {
     // just applied to the hip landmarks instead, so rotation of the hips can
     // be scored as its own signal rather than folded into shoulder rotation.
     let hipAngle = hipBaselineAngleRef.current;
-    if (hasWorld && world[LM.L_HIP] && world[LM.R_HIP]) {
-      hipAngle = axialRotationDeg(world[LM.L_HIP], world[LM.R_HIP]);
-    } else if (lHip && rHip) {
+    if (lHip && rHip) {
       hipAngle = lineAngle(lHip, rHip);
     }
 
     const lHeel = landmarks[LM.L_HEEL], rHeel = landmarks[LM.R_HEEL];
     const lFoot = landmarks[LM.L_FOOT_INDEX], rFoot = landmarks[LM.R_FOOT_INDEX];
-    const lFootVisible = !!lHeel && !!lFoot && lHeel.confidence > 0.25 && lFoot.confidence > 0.25;
-    const rFootVisible = !!rHeel && !!rFoot && rHeel.confidence > 0.25 && rFoot.confidence > 0.25;
+    const lFootVisible = lHeel && lFoot && (lHeel.visibility ?? 1) > 0.4 && (lFoot.visibility ?? 1) > 0.4;
+    const rFootVisible = rHeel && rFoot && (rHeel.visibility ?? 1) > 0.4 && (rFoot.visibility ?? 1) > 0.4;
     const lFootAngle = lFootVisible ? lineAngle(lHeel!, lFoot!) : footAngleBaselineRef.current.L;
     const rFootAngle = rFootVisible ? lineAngle(rHeel!, rFoot!) : footAngleBaselineRef.current.R;
 
-    // Gate the kinetic-chain baseline/peak tracking on genuine rest, not on
-    // elbowStateRef directly. elbowStateRef only flips to 'strike' once the
-    // elbow crosses near-full extension (ELBOW_EXTEND_THRESHOLD) — fine for
-    // a jab/cross, but a hook stays bent the whole time, and even a
-    // straight punch's ramp-up from guard to full extension spans several
-    // frames that are still technically "guard" by that definition. Under
-    // the old `elbowStateRef.current === 'guard'` check, every one of those
-    // ramp-up frames re-anchored the baseline to the current (already-
-    // moving) position and reset every peak tracker to 0 — including the
-    // exact transition frame itself, since this block runs BEFORE the state
-    // machine below updates elbowStateRef. Net effect: a punch's rotation/
-    // knee-drive/weight-transfer/foot-pivot/wrist-path measured 0 on the
-    // very same frame registerHit() read it, for every punch, every time.
-    const atRest = now - lastPunchMotionAtRef.current > MOTION_MEMORY_MS;
-
-    if (atRest) {
-      // Track the resting orientation continuously while genuinely at rest
-      // — this becomes the baseline a strike's rotation is measured against.
+    if (elbowStateRef.current === 'guard') {
+      // Track the resting orientation continuously while arms are down —
+      // this becomes the baseline a strike's rotation is measured against.
       shoulderBaselineAngleRef.current = shoulderAngle;
       peakRotationRef.current = 0;
 
@@ -1689,74 +1274,14 @@ export default function VisionPage() {
       if (rFootVisible) footAngleBaselineRef.current.R = rFootAngle;
       peakFootPivotRef.current = 0;
 
-      if (lW && lW.confidence > 0.25) wristBaselineRef.current.L = { x: lW.x, y: lW.y };
-      if (rW && rW.confidence > 0.25) wristBaselineRef.current.R = { x: rW.x, y: rW.y };
-      peakWristDisplacementRef.current = { dx: 0, dy: 0, mag: 0, elbowAtPeak: smoothedAngle };
-      maxElbowSinceMotionRef.current = smoothedAngle;
-      hookValidatedThisBurstRef.current = false;
-      uppercutValidatedThisBurstRef.current = false;
-
-      // --- Guard baseline -------------------------------------------------
-      // Updated ONLY while genuinely at rest. If this were updated during a
-      // punch the baseline would drift out toward the extended position and
-      // every recovery measurement would collapse toward a meaningless 100.
-      if (lS && rS) {
-        const shoulderMid = { x: (lS.x + rS.x) / 2, y: (lS.y + rS.y) / 2 };
-        guardTrackerRef.current.updateBaseline(
-          lW && lW.confidence > 0.25 ? { x: lW.x, y: lW.y } : null,
-          rW && rW.confidence > 0.25 ? { x: rW.x, y: rW.y } : null,
-          shoulderMid,
-          shoulderWidth
-        );
-      }
-
-      // --- Stance detection -----------------------------------------------
-      // Which foot leads. In MediaPipe world space z is negative toward the
-      // camera, so the lead ankle is the one with the smaller z. Voting
-      // across many resting frames rather than deciding on one frame, since
-      // a single frame can flip on noise when the feet are nearly level.
-      // Requires world landmarks; on the legacy backend stance stays
-      // undetected and the UI shows nothing rather than guessing.
-      if (hasWorld && world[LM.L_ANKLE] && world[LM.R_ANKLE]) {
-        const zDiff = world[LM.L_ANKLE].z - world[LM.R_ANKLE].z;
-        // Deadband: a square stance shouldn't be forced into a label.
-        if (Math.abs(zDiff) > 0.04) {
-          if (zDiff < 0) stanceVotesRef.current.orthodox++;
-          else stanceVotesRef.current.southpaw++;
-          const { orthodox, southpaw } = stanceVotesRef.current;
-          const total = orthodox + southpaw;
-          if (total >= 30) {
-            const winner = orthodox > southpaw ? 'ORTHODOX' : 'SOUTHPAW';
-            const share = Math.max(orthodox, southpaw) / total;
-            // Only claim a stance when the evidence is lopsided.
-            setDetectedStance(share >= 0.7 ? winner : null);
-          }
-        }
-      }
-
-      // Reset the per-strike measurement state for the next burst.
-      hipRotTrackerRef.current.reset();
-      torsoRotTrackerRef.current.reset();
-      shoulderTrackerRef.current.reset();
-      elbowTrackerRef.current.reset();
-      wristTrackerRef.current.reset();
-      recoverySamplesRef.current = [];
-      peakDriftRef.current = { drift: 0, at: 0 };
-      offHandIntegrityRef.current = null;
-      wristAlignmentRef.current = null;
-      motionStartedAtRef.current = 0;
+      if (lW && (lW.visibility ?? 1) > 0.4) wristBaselineRef.current.L = { x: lW.x, y: lW.y };
+      if (rW && (rW.visibility ?? 1) > 0.4) wristBaselineRef.current.R = { x: rW.x, y: rW.y };
+      peakWristDisplacementRef.current = { dx: 0, dy: 0, mag: 0 };
     } else {
-      // First frame of a new motion burst — stamp the start so
-      // time-to-peak-velocity is measured from initiation, not from the
-      // arbitrary moment the command was called.
-      if (motionStartedAtRef.current === 0) motionStartedAtRef.current = now;
-      if (smoothedAngle > maxElbowSinceMotionRef.current) maxElbowSinceMotionRef.current = smoothedAngle;
-      // Shortest-arc difference: axial rotation wraps at +/-180, so a raw
-      // subtraction can report a 2-degree turn as a 358-degree one.
-      const rotationDelta = Math.abs(angleDelta(shoulderAngle, shoulderBaselineAngleRef.current));
+      const rotationDelta = Math.abs(shoulderAngle - shoulderBaselineAngleRef.current);
       if (rotationDelta > peakRotationRef.current) peakRotationRef.current = rotationDelta;
 
-      const hipRotationDelta = Math.abs(angleDelta(hipAngle, hipBaselineAngleRef.current));
+      const hipRotationDelta = Math.abs(hipAngle - hipBaselineAngleRef.current);
       if (hipRotationDelta > peakHipRotationRef.current) peakHipRotationRef.current = hipRotationDelta;
 
       const kneeDelta = Math.max(
@@ -1780,132 +1305,12 @@ export default function VisionPage() {
       const activeSide: 'L' | 'R' = lAngleThisFrame >= rAngleThisFrame ? 'L' : 'R';
       const activeWrist = activeSide === 'L' ? lW : rW;
       const baseline = wristBaselineRef.current[activeSide];
-      if (activeWrist && activeWrist.confidence > 0.25) {
+      if (activeWrist && (activeWrist.visibility ?? 1) > 0.4) {
         const dx = activeWrist.x - baseline.x;
         const dy = activeWrist.y - baseline.y;
         const mag = Math.hypot(dx, dy);
         if (mag > peakWristDisplacementRef.current.mag) {
-          peakWristDisplacementRef.current = { dx, dy, mag, elbowAtPeak: smoothedAngle };
-        }
-      }
-
-      // --- Kinetic-chain peak timing --------------------------------------
-      // Each tracker records WHEN its segment reached peak velocity. The
-      // ORDER of those timestamps is what distinguishes a punch driven from
-      // the ground (hip -> torso -> arm) from one thrown off the shoulder
-      // with nothing behind it. Peak magnitudes alone cannot see this: two
-      // punches can rotate identically and still be completely different
-      // movements if the arm led instead of followed.
-      //
-      // maxPlausibleVelocity guards each channel against a landmark snap
-      // setting a bogus peak for the whole rep.
-      hipRotTrackerRef.current.push(hipAngle, now, 2000);
-      torsoRotTrackerRef.current.push(shoulderAngle, now, 2000);
-      elbowTrackerRef.current.push(smoothedAngle, now, 3000);
-      if (activeWrist && activeWrist.confidence > 0.25) {
-        // Wrist travel from guard, normalized — same units as the rest of
-        // the wrist measurements so the velocity is scale-invariant.
-        wristTrackerRef.current.push(
-          Math.hypot(activeWrist.x - baseline.x, activeWrist.y - baseline.y) / shoulderWidth,
-          now,
-          20
-        );
-      }
-      const activeShoulder = activeSide === 'L' ? lS : rS;
-      if (activeShoulder && lS && rS) {
-        shoulderTrackerRef.current.push(
-          Math.hypot(activeShoulder.x - (lS.x + rS.x) / 2, activeShoulder.y - (lS.y + rS.y) / 2) /
-            shoulderWidth,
-          now,
-          20
-        );
-      }
-
-      // --- Guard: off-hand integrity, recovery sampling, wrist alignment ---
-      if (lS && rS && guardTrackerRef.current.isEstablished) {
-        const shoulderMid = { x: (lS.x + rS.x) / 2, y: (lS.y + rS.y) / 2 };
-        const punchingSide: 'left' | 'right' = activeSide === 'L' ? 'left' : 'right';
-        punchingSideRef.current = punchingSide;
-
-        // Does the OTHER hand stay up while this one works? This is the
-        // single most common amateur fault and was entirely invisible to a
-        // pipeline that only ever watched the punching arm.
-        const offWrist = activeSide === 'L' ? rW : lW;
-        const offSnapshot = guardTrackerRef.current.evaluateOffHand(
-          punchingSide,
-          offWrist && offWrist.confidence > 0.25 ? { x: offWrist.x, y: offWrist.y } : null,
-          shoulderMid,
-          shoulderWidth
-        );
-        if (offSnapshot) {
-          // Keep the WORST reading during the strike, not the latest — a
-          // guard that drops and recovers before the frame we happen to
-          // sample still dropped.
-          offHandIntegrityRef.current =
-            offHandIntegrityRef.current === null
-              ? offSnapshot.integrityScore
-              : Math.min(offHandIntegrityRef.current, offSnapshot.integrityScore);
-        }
-
-        // Sample the punching hand's distance from guard so the return can
-        // be scored after the strike completes.
-        const drift = guardTrackerRef.current.driftFromGuard(
-          punchingSide,
-          activeWrist && activeWrist.confidence > 0.25
-            ? { x: activeWrist.x, y: activeWrist.y }
-            : null,
-          shoulderMid,
-          shoulderWidth
-        );
-        if (drift !== null) {
-          if (drift > peakDriftRef.current.drift) {
-            peakDriftRef.current = { drift, at: now };
-          }
-          recoverySamplesRef.current.push({ t: now, drift });
-          // Bound the buffer to the window evaluateRecovery actually reads.
-          const cutoff = now - RECOVERY_SAMPLE_WINDOW_MS * 2;
-          while (
-            recoverySamplesRef.current.length > 0 &&
-            recoverySamplesRef.current[0].t < cutoff
-          ) {
-            recoverySamplesRef.current.shift();
-          }
-        }
-      }
-
-      // --- Wrist alignment (hand model only) --------------------------------
-      // Only measurable with hand landmarks. When hands aren't running this
-      // stays null and the flaw engine treats it as "not measured" rather
-      // than scoring it zero — see the availability filter in flawEngine.
-      //
-      // COORDINATE SPACES MUST MATCH. The pose elbow is available in two
-      // spaces (normalized image, and metric world), but hand landmarks are
-      // only normalized-image. Feeding a world-space elbow and an
-      // image-space knuckle into the same angle would silently produce
-      // nonsense, because one is in metres about the hip origin and the
-      // other is a 0-1 image fraction. So this deliberately uses the
-      // IMAGE-space elbow and zeroes z on all three points, making it a
-      // consistent 2D measurement rather than an incoherent 3D one.
-      const hands = latestHandsRef.current;
-      const activeElbow = activeSide === 'L' ? lE : rE;
-      if (hands.length > 0 && activeWrist && activeElbow && activeElbow.confidence > 0.25) {
-        const matched = matchHandToWrist(hands, { x: activeWrist.x, y: activeWrist.y });
-        const hw = matched?.[HAND_LM.WRIST];
-        const knuckle = matched?.[HAND_LM.MIDDLE_MCP];
-        if (hw && knuckle) {
-          const alignment = measureWristAlignment(
-            { x: activeElbow.x, y: activeElbow.y, z: 0 },
-            { x: hw.x, y: hw.y, z: 0 },
-            { x: knuckle.x, y: knuckle.y, z: 0 }
-          );
-          if (alignment) {
-            // Worst reading during the strike: a wrist that collapses at
-            // impact and straightens afterwards still collapsed at impact.
-            wristAlignmentRef.current =
-              wristAlignmentRef.current === null
-                ? alignment.score
-                : Math.min(wristAlignmentRef.current, alignment.score);
-          }
+          peakWristDisplacementRef.current = { dx, dy, mag };
         }
       }
     }
@@ -1918,103 +1323,20 @@ export default function VisionPage() {
     // than either alone (a shoulder shrug can spike one but rarely both).
     // A short dwell time in guard before re-arming also stops noise
     // flickering right across the hysteresis band from double-counting.
-    // This path is for punches that genuinely extend the arm (jab, cross,
     let punchValidated = false;
-    let punchSide: 'L' | 'R' = lAngleThisFrame >= rAngleThisFrame ? 'L' : 'R';
-    let punchShape: 'straight' | 'hook' | 'uppercut' = 'straight';
-    const motionDetected = now - lastPunchMotionAtRef.current <= MOTION_MEMORY_MS;
-
-    // Dual-arm isolated punch check (prevents 1-2 combination swallowing)
-    for (const side of ['L', 'R'] as const) {
-      const arm = armStatesRef.current[side];
-      if (!arm.valid) continue; // never transition on an unmeasured arm
-      const dwelledInGuard = now - arm.guardEnteredAt >= Math.max(GUARD_REARM_MS, VISION_CONFIG.detection.cooldownMs);
-      const windowPeak = arm.recent.reduce((m, r) => (r.angle > m ? r.angle : m), 0);
-      if (arm.state === 'guard' && dwelledInGuard && Math.max(arm.smoothedAngle, windowPeak) > ELBOW_EXTEND_THRESHOLD) {
-        if (motionDetected) {
-          arm.state = 'strike';
-          elbowStateRef.current = 'strike';
-          punchValidated = true;
-          punchSide = side;
-        }
-      } else if (arm.state === 'strike' && arm.smoothedAngle < ELBOW_RETRACT_THRESHOLD) {
-        arm.state = 'guard';
-        arm.guardEnteredAt = now;
-        arm.recent = []; // the old peak must not re-trigger the next strike
-      }
+    const dwelledInGuard = now - guardEnteredAtRef.current >= GUARD_REARM_MS;
+    if (angularVel >= MIN_PUNCH_ANGULAR_VELOCITY || wristSpeedRef.current >= MIN_WRIST_SPEED) {
+      lastPunchMotionAtRef.current = now;
     }
-    if (armStatesRef.current.L.state === 'guard' && armStatesRef.current.R.state === 'guard') {
+    if (elbowStateRef.current === 'guard' && dwelledInGuard && smoothedAngle > ELBOW_EXTEND_THRESHOLD) {
+      const motionDetected = now - lastPunchMotionAtRef.current <= MOTION_MEMORY_MS;
+      if (motionDetected) {
+        elbowStateRef.current = 'strike';
+        punchValidated = true;
+      }
+    } else if (elbowStateRef.current === 'strike' && smoothedAngle < ELBOW_RETRACT_THRESHOLD) {
       elbowStateRef.current = 'guard';
-    }
-
-    // --- Hook detection: completed lateral sweep, elbow bent throughout ---
-    if (!punchValidated && !hookValidatedThisBurstRef.current && motionDetected) {
-      const wristDelta = peakWristDisplacementRef.current;
-      const peakSweep = wristDelta.mag / shoulderWidth;
-      const activeWristNowForHook = lAngleThisFrame >= rAngleThisFrame ? lW : rW;
-      const activeSideForHook: 'L' | 'R' = lAngleThisFrame >= rAngleThisFrame ? 'L' : 'R';
-      const hookBaseline = wristBaselineRef.current[activeSideForHook];
-      const currentTravel = activeWristNowForHook
-        ? Math.hypot(activeWristNowForHook.x - hookBaseline.x, activeWristNowForHook.y - hookBaseline.y) / shoulderWidth
-        : peakSweep;
-      const sweepReturning = currentTravel <= peakSweep * HOOK_RETURN_RATIO;
-      if (
-        maxElbowSinceMotionRef.current < HOOK_MAX_ELBOW_ANGLE &&
-        smoothedAngle > MIN_HOOK_ELBOW_ANGLE &&
-        peakSweep >= HOOK_MIN_SWEEP &&
-        (sweepReturning || peakSweep >= HOOK_MIN_SWEEP * 1.35) &&
-        classifyTrajectory(wristDelta.dx, wristDelta.dy, shoulderWidth, wristDelta.elbowAtPeak) === 'hook'
-      ) {
-        hookValidatedThisBurstRef.current = true;
-        punchValidated = true;
-        punchShape = 'hook';
-        punchSide = activeSideForHook;
-      }
-    }
-
-    // --- Uppercut detection: upward wrist drive, compact elbow throughout ---
-    if (!punchValidated && !uppercutValidatedThisBurstRef.current && motionDetected) {
-      const wristDelta = peakWristDisplacementRef.current;
-      const upwardTravel = -wristDelta.dy / shoulderWidth; // screen-space dy < 0 is upward
-      const activeWristNowForUpper = lAngleThisFrame >= rAngleThisFrame ? lW : rW;
-      const activeSideForUpper: 'L' | 'R' = lAngleThisFrame >= rAngleThisFrame ? 'L' : 'R';
-      const upperBaseline = wristBaselineRef.current[activeSideForUpper];
-      const currentUpward = activeWristNowForUpper
-        ? -(activeWristNowForUpper.y - upperBaseline.y) / shoulderWidth
-        : upwardTravel;
-      const upwardReturning = currentUpward <= upwardTravel * 0.82;
-      if (
-        upwardTravel >= UPPERCUT_MIN_VERTICAL_TRAVEL &&
-        smoothedAngle > MIN_HOOK_ELBOW_ANGLE &&
-        smoothedAngle < HOOK_MAX_ELBOW_ANGLE &&
-        (upwardReturning || upwardTravel >= UPPERCUT_MIN_VERTICAL_TRAVEL * 1.35) &&
-        classifyTrajectory(wristDelta.dx, wristDelta.dy, shoulderWidth, wristDelta.elbowAtPeak) === 'uppercut'
-      ) {
-        uppercutValidatedThisBurstRef.current = true;
-        punchValidated = true;
-        punchShape = 'uppercut';
-        punchSide = activeSideForUpper;
-      }
-    }
-
-    // Live punch feedback — fires for every validated punch, whether or not a
-    // command is pending. Straight punches are named jab/cross from the
-    // detected stance (lead hand = jab); before a stance is known, show the arm.
-    if (punchValidated) {
-      const votes = stanceVotesRef.current;
-      const stanceKnown = votes.orthodox + votes.southpaw > 0;
-      const leadSide: 'L' | 'R' = votes.southpaw > votes.orthodox ? 'R' : 'L';
-      let label: string;
-      if (punchShape === 'hook') label = 'HOOK';
-      else if (punchShape === 'uppercut') label = 'UPPERCUT';
-      else label = stanceKnown ? (punchSide === leadSide ? 'JAB' : 'CROSS') : `${punchSide === 'L' ? 'LEFT' : 'RIGHT'} STRAIGHT`;
-      livePunchTotalRef.current += 1;
-      const total = livePunchTotalRef.current;
-      setLivePunchTotal(total);
-      setLivePunchLabel(label);
-      window.setTimeout(() => {
-        if (livePunchTotalRef.current === total) setLivePunchLabel(null);
-      }, 900);
+      guardEnteredAtRef.current = now;
     }
 
     let noseOffset = 0;
@@ -2044,22 +1366,14 @@ export default function VisionPage() {
       if (drop > peakHeadDropRef.current) peakHeadDropRef.current = drop;
     }
 
-    // --- Defense knee-bend tracking (roll/bob quality) ----------------------
-    // Same independence rationale as the head tracking above: measured off
-    // a slow EMA baseline rather than the punch guard/strike cycle, so a
-    // roll's actual leg drive gets scored instead of always reading 0.
-    if (lKneeL && rKneeL) {
-      defenseKneeBaselineRef.current.L = defenseKneeBaselineRef.current.L === 0
-        ? lKneeAngle
-        : defenseKneeBaselineRef.current.L * 0.98 + lKneeAngle * 0.02;
-      defenseKneeBaselineRef.current.R = defenseKneeBaselineRef.current.R === 0
-        ? rKneeAngle
-        : defenseKneeBaselineRef.current.R * 0.98 + rKneeAngle * 0.02;
-      const defenseKneeBend = Math.max(
-        Math.abs(lKneeAngle - defenseKneeBaselineRef.current.L),
-        Math.abs(rKneeAngle - defenseKneeBaselineRef.current.R)
-      );
-      if (defenseKneeBend > peakDefenseKneeDriveRef.current) peakDefenseKneeDriveRef.current = defenseKneeBend;
+    // --- Defensive knee-bend tracking (independent of the punch state machine)
+    if (lHip && lKneeL && lAnkle && rHip && rKneeL && rAnkle) {
+      const rest = restingKneeAngleRef.current;
+      rest.L = rest.L === 0 ? lKneeAngle : rest.L * 0.98 + lKneeAngle * 0.02;
+      rest.R = rest.R === 0 ? rKneeAngle : rest.R * 0.98 + rKneeAngle * 0.02;
+      // Knee angle shrinks as the knee bends, so bend = resting - current.
+      const bend = Math.max(rest.L - lKneeAngle, rest.R - rKneeAngle);
+      if (bend > peakDefenseKneeBendRef.current) peakDefenseKneeBendRef.current = bend;
     }
 
     // Freestyle: no called commands to wait for — every validated punch
@@ -2077,101 +1391,6 @@ export default function VisionPage() {
     } else if (awaitingKindRef.current === 'defense' && defenseTriggered) {
       registerHit(now);
     }
-  };
-
-  /**
-   * Collapse the in-flight strike's tracker state into the per-rep scores
-   * the flaw engine consumes.
-   *
-   * Shared by registerHit() and registerFreestylePunch() so the two paths
-   * can't drift apart — they previously duplicated their scoring inline and
-   * had already diverged (freestyle silently never measured defense knee
-   * drive or head movement).
-   */
-  const collectStrikeMetrics = (now: number, kind: 'punch' | 'defense') => {
-    const trackingConfidence = currentRepConfidence();
-
-    // --- Kinetic-chain sequencing ---------------------------------------
-    const peakTimes: Partial<Record<ChainSegment, number>> = {};
-    if (hipRotTrackerRef.current.peakVelocityAt > 0) {
-      peakTimes.hip = hipRotTrackerRef.current.peakVelocityAt;
-    }
-    if (torsoRotTrackerRef.current.peakVelocityAt > 0) {
-      peakTimes.torso = torsoRotTrackerRef.current.peakVelocityAt;
-    }
-    if (shoulderTrackerRef.current.peakVelocityAt > 0) {
-      peakTimes.shoulder = shoulderTrackerRef.current.peakVelocityAt;
-    }
-    if (elbowTrackerRef.current.peakVelocityAt > 0) {
-      peakTimes.elbow = elbowTrackerRef.current.peakVelocityAt;
-    }
-    if (wristTrackerRef.current.peakVelocityAt > 0) {
-      peakTimes.wrist = wristTrackerRef.current.peakVelocityAt;
-    }
-    const sequencing = analyzeSequencing(peakTimes);
-    // Fewer than 3 measured segments isn't enough to say anything about
-    // ordering, so report it as unmeasured rather than as a low score.
-    const sequenceScore =
-      sequencing.measuredSegments >= 3 ? sequencing.sequenceScore : undefined;
-
-    // --- Guard recovery --------------------------------------------------
-    const peak = peakDriftRef.current;
-    let guardRecoveryScore: number | undefined;
-    let recoverySpeedScore: number | undefined;
-    let recoveryMs: number | null = null;
-    if (peak.drift > 0 && recoverySamplesRef.current.length > 0) {
-      const recovery = guardTrackerRef.current.evaluateRecovery(
-        peak.drift,
-        peak.at,
-        recoverySamplesRef.current
-      );
-      guardRecoveryScore = recovery.returnScore;
-      recoveryMs = recovery.recoveryMs;
-      // Retraction speed is only meaningful when the hand actually got
-      // back — an abandoned hand has no return time to score.
-      if (recovery.recoveryMs !== null) {
-        recoverySpeedScore = Math.round(
-          Math.min(100, Math.max(0, ((700 - recovery.recoveryMs) / (700 - 150)) * 100))
-        );
-      }
-    }
-
-    const timeToPeakMs =
-      motionStartedAtRef.current > 0 && elbowTrackerRef.current.peakVelocityAt > 0
-        ? Math.round(elbowTrackerRef.current.peakVelocityAt - motionStartedAtRef.current)
-        : null;
-
-    // Defensive reps have no punch to retract, so returning a recovery or
-    // sequencing score for a slip would be measuring something that didn't
-    // happen. Left undefined, which the flaw engine reads as "not
-    // measured" and excludes — rather than as a zero, which would fire the
-    // "hands never returned to guard" flaw on every single slip.
-    const isPunch = kind === 'punch';
-
-    // If this rep was tracked too poorly to trust, report the DERIVED
-    // metrics as unmeasured rather than passing along numbers computed
-    // from noise. The rep itself still counts as a landed strike — we saw
-    // it happen, we just can't say anything reliable about its mechanics.
-    // The session-level confidence weighting in the flaw engine is the
-    // second line of defence; this is the first.
-    const trusted = trackingConfidence >= REP_CONFIDENCE_FLOOR;
-    const gate = <T,>(value: T): T | undefined => (trusted ? value : undefined);
-
-    return {
-      trackingConfidence,
-      sequenceScore: isPunch ? gate(sequenceScore) : undefined,
-      armDominant:
-        isPunch && sequencing.measuredSegments >= 3 ? gate(sequencing.armDominant) : undefined,
-      guardRecoveryScore: isPunch ? gate(guardRecoveryScore) : undefined,
-      recoverySpeedScore: isPunch ? gate(recoverySpeedScore) : undefined,
-      recoveryMs: isPunch ? recoveryMs : null,
-      // Guard integrity DOES apply to defense: dropping your hands while
-      // slipping is exactly as bad as dropping them while punching.
-      guardIntegrityScore: gate(offHandIntegrityRef.current ?? undefined),
-      wristAlignmentScore: isPunch ? gate(wristAlignmentRef.current ?? undefined) : undefined,
-      peakAcceleration: Math.round(Math.abs(elbowTrackerRef.current.peakAcceleration)),
-      timeToPeakMs: isPunch ? timeToPeakMs : null,
-    };
   };
 
   const registerHit = (now: number) => {
@@ -2197,12 +1416,13 @@ export default function VisionPage() {
       Math.min(100, (peakHipRotationRef.current / MIN_ROTATION_FOR_FULL_SCORE) * 100)
     );
     const rotationScore = Math.round((torsoRotationScore + hipRotationScore) / 2);
+    // Punches use the strike-phase knee drive; defensive moves use the
+    // independent knee-bend tracker, since the punch tracker never runs for
+    // a slip/roll and would otherwise report a fake 0.
     const kneeDriveScore = Math.round(
       Math.min(
         100,
-        (kind === 'defense'
-          ? peakDefenseKneeDriveRef.current / FULL_KNEE_DRIVE_DEG
-          : peakKneeDriveRef.current / FULL_KNEE_DRIVE_DEG) * 100
+        ((kind === 'defense' ? peakDefenseKneeBendRef.current : peakKneeDriveRef.current) / FULL_KNEE_DRIVE_DEG) * 100
       )
     );
     const weightTransferScore = Math.round(
@@ -2221,18 +1441,13 @@ export default function VisionPage() {
     let trajectory: 'straight' | 'hook' | 'uppercut' = 'straight';
     let trajectoryConfident = false;
     if (kind === 'punch') {
-      const { dx, dy, mag, elbowAtPeak } = peakWristDisplacementRef.current;
+      const { dx, dy, mag } = peakWristDisplacementRef.current;
       const shoulderW = lastShoulderWidthRef.current || 0.2;
-      trajectory = classifyTrajectory(dx, dy, shoulderW, elbowAtPeak);
+      trajectory = classifyTrajectory(dx, dy, shoulderW);
       trajectoryConfident = mag / shoulderW >= MIN_TRAJECTORY_CONFIDENCE;
     }
-    // Three-state: straight<->hook can't be separated reliably from one
-    // webcam, so only a clear, confident difference is called a mismatch.
-    const verdict: TrajectoryVerdict =
-      kind === 'punch' ? gradeTrajectory(trajectory, expectedTrajectoryFor(command), trajectoryConfident) : 'unknown';
-    const trajectoryMatch = verdict !== 'mismatch';
-
-    const strikeMetrics = collectStrikeMetrics(now, kind || 'punch');
+    const trajectoryMatch =
+      kind === 'punch' ? (!trajectoryConfident || trajectory === expectedTrajectoryFor(command)) : true;
 
     repLogRef.current.push({
       index: repLogRef.current.length + 1,
@@ -2252,21 +1467,7 @@ export default function VisionPage() {
       headDropScore,
       trajectory,
       trajectoryMatch,
-      trajectoryVerdict: verdict,
-      verified: isVerified(strikeMetrics.trackingConfidence),
-      peakElbowDeg: Math.round(maxElbowSinceMotionRef.current),
-      overallRepScore: overallRepScore({
-        peakElbowDeg: maxElbowSinceMotionRef.current > 0 ? maxElbowSinceMotionRef.current : undefined,
-        speedScore: estimatePower(peakVelocity),
-        recoveryScore: strikeMetrics.guardRecoveryScore,
-        trajectory: verdict,
-      }),
-      ...strikeMetrics,
     });
-
-    // Reset per-rep confidence accumulation so the next rep is measured on
-    // its own frames rather than inheriting this one's.
-    repConfidenceSamplesRef.current = [];
   };
 
   const registerFreestylePunch = (now: number) => {
@@ -2285,8 +1486,8 @@ export default function VisionPage() {
     const kneeDriveScore = Math.round(Math.min(100, (peakKneeDriveRef.current / FULL_KNEE_DRIVE_DEG) * 100));
     const weightTransferScore = Math.round(Math.min(100, (peakWeightTransferRef.current / FULL_WEIGHT_TRANSFER_RATIO) * 100));
     const footPivotScore = Math.round(Math.min(100, (peakFootPivotRef.current / FULL_FOOT_PIVOT_DEG) * 100));
-    const { dx, dy, elbowAtPeak } = peakWristDisplacementRef.current;
-    const trajectory = classifyTrajectory(dx, dy, lastShoulderWidthRef.current || 0.2, elbowAtPeak);
+    const { dx, dy } = peakWristDisplacementRef.current;
+    const trajectory = classifyTrajectory(dx, dy, lastShoulderWidthRef.current || 0.2);
 
     repLogRef.current.push({
       index: repLogRef.current.length + 1,
@@ -2306,56 +1507,9 @@ export default function VisionPage() {
       headDropScore: 0,
       trajectory,
       trajectoryMatch: true, // no called shape to compare against in freestyle
-      trajectoryVerdict: 'unknown',
-      peakElbowDeg: Math.round(maxElbowSinceMotionRef.current),
-      ...(() => { const m = collectStrikeMetrics(now, 'punch'); return { ...m, verified: isVerified(m.trackingConfidence) }; })(),
     });
 
     currentRepPeakVelocityRef.current = 0;
-    repConfidenceSamplesRef.current = [];
-  };
-
-  /**
-   * Log a command that got no validated punch. If tracking was lost during
-   * the window (or the rep's landmarks were too poor to trust) it is logged
-   * as UNVERIFIED and not counted as a miss — a camera problem is not a
-   * boxing error.
-   */
-  const logUnansweredCommand = (kind: 'punch' | 'defense', command: string, forceUnverified: boolean) => {
-    const peakVelocity = Math.round(currentRepPeakVelocityRef.current);
-    const verifiable =
-      !forceUnverified &&
-      !trackingLostDuringCommandRef.current &&
-      isVerified(currentRepConfidence());
-    if (verifiable) {
-      missCountRef.current += 1;
-      setMissCount(missCountRef.current);
-    } else {
-      unverifiedCountRef.current += 1;
-      setUnverifiedCount(unverifiedCountRef.current);
-    }
-    repLogRef.current.push({
-      index: repLogRef.current.length + 1,
-      command,
-      kind,
-      hit: false,
-      verified: verifiable,
-      reactionMs: null,
-      peakVelocity,
-      estimatedPower: estimatePower(peakVelocity),
-      rotationScore: 0,
-      torsoRotationScore: 0,
-      hipRotationScore: 0,
-      kneeDriveScore: 0,
-      weightTransferScore: 0,
-      footPivotScore: 0,
-      headLateralScore: 0,
-      headDropScore: 0,
-      trajectory: 'straight',
-      trajectoryMatch: true,
-      trajectoryVerdict: 'unknown',
-    });
-    repConfidenceSamplesRef.current = [];
   };
 
   // -------------------------------------------------------------------------
@@ -2388,9 +1542,30 @@ export default function VisionPage() {
       if (awaitingRef.current) {
         const missedKind = awaitingKindRef.current || 'punch';
         const missedCommand = activeCommandTextRef.current;
+        const peakVelocity = Math.round(currentRepPeakVelocityRef.current);
         awaitingRef.current = false;
         awaitingKindRef.current = null;
-        logUnansweredCommand(missedKind, missedCommand, false);
+        missCountRef.current += 1;
+        setMissCount(missCountRef.current);
+        repLogRef.current.push({
+          index: repLogRef.current.length + 1,
+          command: missedCommand,
+          kind: missedKind,
+          hit: false,
+          reactionMs: null,
+          peakVelocity,
+          estimatedPower: estimatePower(peakVelocity),
+          rotationScore: 0,
+          torsoRotationScore: 0,
+          hipRotationScore: 0,
+          kneeDriveScore: 0,
+          weightTransferScore: 0,
+          footPivotScore: 0,
+          headLateralScore: 0,
+          headDropScore: 0,
+          trajectory: 'straight',
+          trajectoryMatch: false,
+        });
       }
 
       if (attemptedRef.current >= punchTargetRef.current) {
@@ -2403,16 +1578,15 @@ export default function VisionPage() {
         : PUNCH_COMMANDS;
       const cmd = pool[Math.floor(Math.random() * pool.length)];
 
-      setExpectedCommand(cmd.text);
+      setActiveCommand(cmd.text);
       setTacticalCue(tacticalCueForCommand(cmd.text, cmd.kind));
+      activeCommandTextRef.current = cmd.text;
       awaitingRef.current = true;
       awaitingKindRef.current = cmd.kind;
-      trackingLostDuringCommandRef.current = false;
-      repConfidenceSamplesRef.current = [];
       currentRepPeakVelocityRef.current = 0;
       peakHeadLateralRef.current = 0;
       peakHeadDropRef.current = 0;
-      peakDefenseKneeDriveRef.current = 0;
+      peakDefenseKneeBendRef.current = 0;
       attemptedRef.current += 1;
       setAttemptedCount(attemptedRef.current);
 
@@ -2431,11 +1605,7 @@ export default function VisionPage() {
       drillTimerRef.current = setTimeout(runCommands, gap + REACTION_WINDOW_PAD_MS);
     };
 
-    // A little more breathing room than before, so "Calibration complete"
-    // has a real chance to finish before the first command's own line
-    // starts (stopVoicePack() in speakCommand still guarantees they can
-    // never actually overlap even if this runs long).
-    drillTimerRef.current = setTimeout(runCommands, 1500);
+    drillTimerRef.current = setTimeout(runCommands, 800);
   };
 
   // -------------------------------------------------------------------------
@@ -2445,10 +1615,10 @@ export default function VisionPage() {
   // -------------------------------------------------------------------------
   const startFreestyleRound = () => {
     let remaining = freestyleDurationRef.current;
-    const isUnlimited = remaining === 0;
     elapsedSecondsRef.current = 0;
-    setExpectedCommand('FREESTYLE');
+    setActiveCommand('FREESTYLE');
     setTacticalCue('Keep your guard high — choose clean, committed punch shapes.');
+    activeCommandTextRef.current = 'FREESTYLE';
     awaitingRef.current = true;
     awaitingKindRef.current = 'punch';
 
@@ -2457,28 +1627,19 @@ export default function VisionPage() {
     setTimerDisplay(`${mins0}:${secs0}`);
 
     setIsCommandSpeaking(true);
-    // Same breathing-room fix as startDrill above — let "Calibration
-    // complete" actually finish before "Freestyle round" starts, instead
-    // of firing in the same tick right after it.
-    window.setTimeout(() => {
-      speakCommand('Freestyle round. Throw when ready.', undefined, () => setIsCommandSpeaking(false));
-    }, 1500);
+    speakCommand('Freestyle round. Throw when ready.', undefined, () => setIsCommandSpeaking(false));
 
     sessionTimerRef.current = setInterval(() => {
       if (stageRef.current !== 'camera') return;
-      // isPausedRef was missing here (the coach-mode timer in startDrill
-      // already checks it): pausing a freestyle round froze the pose loop
-      // and scoring but the round clock kept running down, so a paused
-      // round could end — and be analysed — while the fighter was away.
-      if (isTrackingInadequateRef.current || isPausedRef.current) return;
-      if (!isUnlimited) remaining -= 1;
+      if (isTrackingInadequateRef.current) return;
+      remaining -= 1;
       elapsedSecondsRef.current += 1;
-      const displaySeconds = isUnlimited ? elapsedSecondsRef.current : Math.max(0, remaining);
-      const mins = Math.floor(displaySeconds / 60).toString().padStart(2, '0');
-      const secs = (displaySeconds % 60).toString().padStart(2, '0');
+      const clamped = Math.max(0, remaining);
+      const mins = Math.floor(clamped / 60).toString().padStart(2, '0');
+      const secs = (clamped % 60).toString().padStart(2, '0');
       setTimerDisplay(`${mins}:${secs}`);
-      if (!isUnlimited && remaining === 10) speakCommand('Ten seconds.');
-      if (!isUnlimited && remaining <= 0) {
+      if (remaining === 10) speakCommand('Ten seconds.');
+      if (remaining <= 0) {
         stopAndAnalyse();
       }
     }, 1000);
@@ -2494,9 +1655,30 @@ export default function VisionPage() {
     // complete and honest. Freestyle has no called commands, so this never
     // applies there (awaitingRef stays true for the whole round by design).
     if (awaitingRef.current && modeRef.current !== 'freestyle') {
-      // Stopped mid-command: the fighter never had the full window, so this
-      // is logged as unverified rather than a miss.
-      logUnansweredCommand(awaitingKindRef.current || 'punch', activeCommandTextRef.current, true);
+      const missedKind = awaitingKindRef.current || 'punch';
+      const missedCommand = activeCommandTextRef.current;
+      const peakVelocity = Math.round(currentRepPeakVelocityRef.current);
+      missCountRef.current += 1;
+      setMissCount(missCountRef.current);
+      repLogRef.current.push({
+        index: repLogRef.current.length + 1,
+        command: missedCommand,
+        kind: missedKind,
+        hit: false,
+        reactionMs: null,
+        peakVelocity,
+        estimatedPower: estimatePower(peakVelocity),
+        rotationScore: 0,
+        torsoRotationScore: 0,
+        hipRotationScore: 0,
+        kneeDriveScore: 0,
+        weightTransferScore: 0,
+        footPivotScore: 0,
+        headLateralScore: 0,
+        headDropScore: 0,
+        trajectory: 'straight',
+        trajectoryMatch: false,
+      });
     }
     awaitingRef.current = false;
     cleanupSession();
@@ -2528,79 +1710,80 @@ export default function VisionPage() {
       ? trackingSamplesRef.current.reduce((a, b) => a + b, 0) / trackingSamplesRef.current.length
       : 0;
 
-    // This is TRACKING CONFIDENCE, not stance quality. It measures how
-    // clearly the camera could see the fighter, which is a property of the
-    // filming setup, not of their boxing. It was previously surfaced to the
-    // user as "stance" and "posture", which made a well-lit room read as
-    // good technique. Renamed at the source so it can't be mislabeled
-    // downstream again.
-    const trackingConfidenceScore = Math.round(avgTrackingConfidence * 100);
-    // Separate, honest readout of capture quality for the report.
-    const analysisQuality = trackingConfidenceScore;
-    // Reflex normalization. The old curve was 100 - (avgReaction - 250) / 8,
-    // which hits 0 at 1050ms — but a voice-called rep's measured reaction
-    // includes the time the spoken word itself takes plus the travel time of
-    // the strike, so real sessions routinely average above that and every
-    // one of them reported a flat 0% reflex. The band below scores 250ms as
-    // perfect and only bottoms out at 1600ms, so a genuinely slow-but-real
-    // session gets a real number instead of a floored zero. A true 0 is now
-    // reserved for "no reaction data at all" (no landed rep with a reaction
-    // time), which is an honest 0 rather than a clipped score.
+    const stanceScore = Math.round(avgTrackingConfidence * 100);
     const reflexScore = avgReaction
-      ? Math.round(
-          Math.min(
-            100,
-            Math.max(
-              0,
-              ((REFLEX_FLOOR_MS - avgReaction) / (REFLEX_FLOOR_MS - REFLEX_CEILING_MS)) * 100
-            )
-          )
-        )
+      ? Math.round(Math.min(100, Math.max(0, 100 - (avgReaction - 250) / 8)))
       : 0;
-    const log = repLogRef.current;
-    const allHits = log.filter((r) => r.hit);
-    const hitsOnly = allHits.filter((r) => r.reactionMs !== null);
-    const punchHits = allHits.filter((r) => r.kind === 'punch');
-
-    // Power score: robust mean of all landed punches rather than a single peak spike
-    const powerScore = punchHits.length > 0
-      ? Math.round(punchHits.reduce((sum, r) => sum + r.estimatedPower, 0) / punchHits.length)
-      : Math.round(Math.min(100, (peakAngularVelocityRef.current / 900) * 100));
-
-    // Stability: balances consistency (low stdDev) with technique execution form
-    const stabilityScore = computeStabilityScore(allHits, trackingConfidenceScore);
-
-    // Swiftness: tempo scaled against the command cadence for the chosen difficulty (or 40/min in freestyle)
-    const maxCadence = isFreestyle
-      ? 40
-      : difficultyRef.current === 'hard'
-      ? 24
-      : difficultyRef.current === 'easy'
-      ? 14
-      : 18;
-    const swiftnessScore = computeSwiftnessScore(hitCountRef.current, elapsedSecondsRef.current, maxCadence);
-
-    // Overall Score: Authentic boxing composite (Accuracy 35%, Reflex 25%, Power 20%, Stability 20%)
-    let overallScore = isFreestyle
-      ? 0 // will be computed below once biomechanics are aggregated
-      : Math.round(accuracy * 0.35 + reflexScore * 0.25 + powerScore * 0.20 + stabilityScore * 0.20);
+    const powerScore = Math.round(Math.min(100, (peakAngularVelocityRef.current / 900) * 100));
+    let overallScore = Math.round((accuracy + stanceScore + reflexScore) / 3);
 
     let flaw = 'Tracking confidence stayed strong throughout — no major flaw detected.';
     let advice = 'Consistent frame presence and clean strike mechanics across the session.';
+    let flawFound = false;
+    if (!isFreestyle) {
+      const scores = [
+        { name: 'accuracy', value: accuracy },
+        { name: 'stance', value: stanceScore },
+        { name: 'reflex', value: reflexScore },
+      ];
+      const weakest = scores.sort((a, b) => a.value - b.value)[0];
+      // Only call something a flaw when it is genuinely weak. Previously the
+      // lowest of the three was ALWAYS reported, even at 95%.
+      if (weakest.value >= WEAK_AREA_THRESHOLD) {
+        flaw = 'No significant flaw detected — accuracy, tracking and reaction were all solid.';
+        advice = 'Keep this level of consistency and push the pace or difficulty next session.';
+      } else if (weakest.name === 'accuracy') {
+        flawFound = true;
+        flaw = 'Missed commands: several calls went unanswered inside the reaction window.';
+        advice = 'Focus on committing to each call immediately — hesitation cost you reps this session.';
+      } else if (weakest.name === 'stance') {
+        flawFound = true;
+        flaw = 'Tracking confidence dipped repeatedly — you drifted out of the optimal frame zone.';
+        advice = 'Stand roughly 6-8 feet from the camera and keep your full upper body visible throughout.';
+      } else if (weakest.name === 'reflex') {
+        flawFound = true;
+        flaw = 'Reaction times ran high relative to the call cadence.';
+        advice = 'Keep your hands up and weight forward so you can fire the instant a command lands.';
+      }
+    }
 
-    // Build mistakes breakdown from actual rep log
+    // Build a real, per-command mistakes breakdown from the actual rep log —
+    // nothing here is invented, it's all aggregated from logged reps.
+    const log = repLogRef.current;
+    const chainRepsForAttainment: FlawEngineRep[] = log.map((r) => ({
+      command: r.command,
+      kind: r.kind,
+      hit: r.hit,
+      estimatedPower: r.estimatedPower,
+      hipRotationScore: r.hipRotationScore ?? 0,
+      torsoRotationScore: r.torsoRotationScore ?? 0,
+      kneeDriveScore: r.kneeDriveScore,
+      weightTransferScore: r.weightTransferScore,
+      footPivotScore: r.footPivotScore,
+      headLateralScore: r.headLateralScore ?? 0,
+      headDropScore: r.headDropScore ?? 0,
+      trajectory: r.trajectory,
+      trajectoryMatch: r.trajectoryMatch,
+    }));
     const missesByCommand: Record<string, number> = {};
-    log.filter((r) => !r.hit && r.verified !== false).forEach((r) => {
+    log.filter((r) => !r.hit).forEach((r) => {
       missesByCommand[r.command] = (missesByCommand[r.command] || 0) + 1;
     });
     const mistakes: string[] = Object.entries(missesByCommand)
       .sort((a, b) => b[1] - a[1])
       .map(([cmd, count]) => `Missed ${cmd} ${count}x — no clean strike detected within the reaction window.`);
 
+    // hitsOnly drives reaction-time stats (freestyle has none, so this is
+    // naturally empty there). punchHits drives biomechanics and is NOT
+    // gated on reactionMs, so freestyle punches (which have no reaction
+    // time by design) are correctly included.
+    const allHits = log.filter((r) => r.hit);
+    const hitsOnly = allHits.filter((r) => r.reactionMs !== null);
+    const punchHits = allHits.filter((r) => r.kind === 'punch');
     if (hitsOnly.length > 0) {
       const slowest = hitsOnly.reduce((a, b) => ((a.reactionMs ?? 0) > (b.reactionMs ?? 0) ? a : b));
-      if (isLateReaction(slowest.reactionMs ?? null, !isFreestyle)) {
-        mistakes.push(`Slowest reaction was on ${slowest.command} at ${slowest.reactionMs}ms — a little behind your average.`);
+      if ((slowest.reactionMs ?? 0) > 700) {
+        mistakes.push(`Slowest reaction was on ${slowest.command} at ${slowest.reactionMs}ms — noticeably behind your average.`);
       }
     }
 
@@ -2609,7 +1792,6 @@ export default function VisionPage() {
     // through), so they're computed over punchHits, not all hits.
     let avgKneeDrive = 0, avgWeightTransfer = 0, avgFootPivot = 0, avgRotation = 0, trajectoryAccuracy = 0;
     let avgHipRotation = 0, avgTorsoRotation = 0;
-    let shapeJudged: RepLogEntry[] = [];
     if (punchHits.length > 0) {
       const weakestStrike = punchHits.reduce((a, b) => (a.peakVelocity < b.peakVelocity ? a : b));
       if (weakestStrike.peakVelocity < POWER_REFERENCE_VELOCITY * 0.35) {
@@ -2622,29 +1804,30 @@ export default function VisionPage() {
       avgKneeDrive = punchHits.reduce((sum, r) => sum + r.kneeDriveScore, 0) / punchHits.length;
       avgWeightTransfer = punchHits.reduce((sum, r) => sum + r.weightTransferScore, 0) / punchHits.length;
       avgFootPivot = punchHits.reduce((sum, r) => sum + r.footPivotScore, 0) / punchHits.length;
-      // Only reps whose shape could be judged with confidence count; with
-      // fewer than 3 such reps there isn't enough evidence to say anything.
-      shapeJudged = punchHits.filter(
-        (r) => r.verified !== false && (r.trajectoryVerdict ?? (r.trajectoryMatch ? 'match' : 'mismatch')) !== 'unknown'
-      );
-      trajectoryAccuracy = isFreestyle || shapeJudged.length < 3 ? 100 : Math.round(
-        (shapeJudged.filter((r) => r.trajectoryMatch).length / shapeJudged.length) * 100
+      trajectoryAccuracy = isFreestyle ? 100 : Math.round(
+        (punchHits.filter((r) => r.trajectoryMatch).length / punchHits.length) * 100
       );
 
-      if (avgRotation < 40) {
-        mistakes.push('Low torso rotation across your strikes — drive power from your hips and shoulders, not just your arm.');
-      }
-      if (avgKneeDrive < 35) {
-        mistakes.push('Minimal knee drive detected — push off your back leg to load each punch instead of throwing arm-only.');
-      }
-      if (avgWeightTransfer < 35) {
-        mistakes.push('Weight stayed mostly static — shift your weight forward/across into the strike for real power transfer.');
-      }
-      if (avgFootPivot < 30) {
-        mistakes.push('Rear foot barely pivoted — let your back heel rotate so your hips can fully turn into the punch.');
-      }
-      if (!isFreestyle && shapeJudged.length >= 3 && trajectoryAccuracy < 50) {
-        const mismatched = shapeJudged.filter((r) => !r.trajectoryMatch);
+      // Technique-aware chain findings: each punch is judged against ITS OWN
+      // technique's target (so jabs aren't failed for lacking hip pivot), a
+      // metric must reach >= 3 qualifying punches, and only genuinely weak
+      // ones (< 60% of target) are reported — worst three at most.
+      const chainChecks: Array<{ metric: FlawMetric; msg: string; flaw: string; advice: string }> = [
+        { metric: 'torsoRotationScore', msg: 'Low shoulder/torso rotation on your power punches — turn your torso into the strike instead of just extending the arm.', flaw: 'Torso rotation was the weak link across your punches.', advice: 'Drive power from your hips and shoulders on every strike, not just your arm.' },
+        { metric: 'hipRotationScore', msg: 'Hips barely turned on your power punches — rotate your hips so the punch carries your body weight.', flaw: 'Hip rotation was minimal on your power punches.', advice: 'Turn your rear hip through the punch, not just your shoulder.' },
+        { metric: 'kneeDriveScore', msg: 'Minimal knee drive detected — push off your back leg to load each punch instead of throwing arm-only.', flaw: 'Knee drive was minimal through most of the session.', advice: 'Push off your back leg to load each punch before you throw it.' },
+        { metric: 'weightTransferScore', msg: 'Weight stayed mostly static — shift your weight forward/across into the strike for real power transfer.', flaw: 'Weight transfer was flat across the session.', advice: 'Shift your weight forward and across into each strike.' },
+        { metric: 'footPivotScore', msg: 'Rear foot barely pivoted — let your back heel rotate so your hips can fully turn into the punch.', flaw: 'Rear foot pivot was minimal.', advice: 'Let your back heel rotate so your hips can fully turn into the punch.' },
+        { metric: 'estimatedPower', msg: 'Strike speed stayed on the slow side for your power punches — snap through the extension.', flaw: 'Strike speed stayed on the slower side throughout.', advice: 'Snap through the extension instead of pushing the arm out.' },
+      ];
+      const findings = chainChecks
+        .map((c) => ({ ...c, att: targetAttainment(chainRepsForAttainment, c.metric) }))
+        .filter((c) => c.att !== null && c.att.ratio < CHAIN_WEAK_RATIO)
+        .sort((a, b) => (a.att!.ratio - b.att!.ratio))
+        .slice(0, 3);
+      findings.forEach((f) => mistakes.push(f.msg));
+      if (!isFreestyle && punchHits.length >= 3 && trajectoryAccuracy < 60) {
+        const mismatched = punchHits.filter((r) => !r.trajectoryMatch);
         const commonCmd = mismatched.length
           ? Object.entries(
               mismatched.reduce((acc: Record<string, number>, r) => {
@@ -2655,32 +1838,25 @@ export default function VisionPage() {
           : null;
         mistakes.push(
           commonCmd
-            ? `${commonCmd} looked different from the call on several reps — worth a quick check of the path (straight vs looping vs rising).`
-            : 'A few punches looked different from the call — focus on clean punch-specific paths.'
+            ? `${commonCmd} was often thrown with the wrong shape — check your trajectory (straight vs looping vs rising) for that punch.`
+            : 'Several punches didn\'t match the expected trajectory shape for the call — focus on clean punch-specific paths.'
         );
       }
 
       if (isFreestyle) {
         // No accuracy/reflex signal in freestyle — overall score is a pure
         // technique composite instead.
-        // Tracking confidence is deliberately NOT a term here. It measures
-        // how well the camera could see you, so including it let good
-        // lighting inflate a technique score — a freestyle round filmed
-        // clearly scored higher than the same round filmed poorly, with
-        // identical boxing. This is now a pure technique composite.
         overallScore = Math.round(
-          (powerScore + avgRotation + avgKneeDrive + avgWeightTransfer + avgFootPivot + stabilityScore) / 6
+          (powerScore + stanceScore + avgRotation + avgKneeDrive + avgWeightTransfer + avgFootPivot) / 6
         );
-        const techScores = [
-          { name: 'rotation', value: avgRotation, flaw: 'Torso rotation was the weak link across your combos.', advice: 'Drive power from your hips and shoulders on every strike, not just your arm.' },
-          { name: 'knee', value: avgKneeDrive, flaw: 'Knee drive was minimal through most of the round.', advice: 'Push off your back leg to load each punch before you throw it.' },
-          { name: 'weight', value: avgWeightTransfer, flaw: 'Weight transfer was flat across the round.', advice: 'Shift your weight forward and across into each strike.' },
-          { name: 'pivot', value: avgFootPivot, flaw: 'Rear foot pivot was minimal.', advice: 'Let your back heel rotate so your hips can fully turn into the punch.' },
-          { name: 'power', value: powerScore, flaw: 'Strike speed stayed on the slower side throughout.', advice: 'Snap through the extension instead of pushing the arm out.' },
-        ];
-        const weakestTech = techScores.sort((a, b) => a.value - b.value)[0];
-        flaw = weakestTech.flaw;
-        advice = weakestTech.advice;
+        if (findings.length > 0) {
+          flawFound = true;
+          flaw = findings[0].flaw;
+          advice = findings[0].advice;
+        } else {
+          flaw = 'No significant flaw detected — your technique chain held up across the round.';
+          advice = 'Keep this form and push the pace next round.';
+        }
       }
     }
     // Defensive head-movement aggregates — measured on defense hits only,
@@ -2703,81 +1879,44 @@ export default function VisionPage() {
     // strings computed above are kept as a fallback (used only when the
     // engine has too little data — e.g. under MIN_SAMPLE_SIZE reps per
     // technique — to make a confident call).
-    const engineReps: FlawEngineRep[] = log.map((r) => ({
-      command: r.command,
-      kind: r.kind,
-      hit: r.hit,
-      estimatedPower: r.estimatedPower,
-      hipRotationScore: r.hipRotationScore ?? 0,
-      torsoRotationScore: r.torsoRotationScore ?? 0,
-      kneeDriveScore: r.kneeDriveScore,
-      weightTransferScore: r.weightTransferScore,
-      footPivotScore: r.footPivotScore,
-      headLateralScore: r.headLateralScore ?? 0,
-      headDropScore: r.headDropScore ?? 0,
-      trajectory: r.trajectory,
-      trajectoryMatch: r.trajectoryMatch,
-      trajectoryVerdict: r.trajectoryVerdict,
-      verified: r.verified,
-      // Forwarded as-is, INCLUDING undefined. The engine distinguishes
-      // "not measured" from "measured as zero", so defaulting these to 0
-      // here would fabricate a perfect-failure reading for every signal a
-      // given device couldn't capture.
-      trackingConfidence: r.trackingConfidence,
-      guardRecoveryScore: r.guardRecoveryScore,
-      guardIntegrityScore: r.guardIntegrityScore,
-      wristAlignmentScore: r.wristAlignmentScore,
-      sequenceScore: r.sequenceScore,
-      recoverySpeedScore: r.recoverySpeedScore,
+    const detailedFlaws: DetectedFlaw[] = topSessionFlaws(chainRepsForAttainment, 5);
+    const techniqueSummaries = summarizeTechniques(chainRepsForAttainment);
+
+    // --- New merits (Overall/Power/Reflex above keep their existing formulas)
+    // Stability = repeatability of technique + timing + frame steadiness.
+    // Swiftness = sustained strike speed + quickness (coached) / cadence
+    // (freestyle). Full definitions live in lib/coach/sessionMerits.ts.
+    const meritReps: MeritRep[] = log.map((r, i) => ({
+      ...chainRepsForAttainment[i],
+      peakVelocity: r.peakVelocity,
+      reactionMs: r.reactionMs,
     }));
-    const detailedFlaws: DetectedFlaw[] = topSessionFlaws(engineReps, 5);
-    const techniqueSummaries = summarizeTechniques(engineReps);
-    // Root-cause view: collapses correlated symptoms into the single
-    // correction that addresses the cluster.
-    const rootCauses: RootCauseDiagnosis[] = diagnoseRootCauses(engineReps);
+    const stabilityScore = computeStabilityScore(meritReps, stanceScore);
+    const swiftnessScore = computeSwiftnessScore(meritReps, {
+      isFreestyle,
+      elapsedSeconds: elapsedSecondsRef.current,
+      referenceVelocity: POWER_REFERENCE_VELOCITY,
+    });
 
     if (detailedFlaws.length > 0) {
       // Top-ranked (most severe) flaw drives the headline "biggest
       // opportunity" + coach line, same slots the UI already reads.
       const top = detailedFlaws[0];
+      flawFound = true;
       flaw = `${top.techniqueLabel}: ${top.cause}`;
       advice = top.coachingTip;
-    } else {
-      if (!isFreestyle && accuracy < 70) {
-        flaw = 'Missed commands: several calls went unanswered inside the reaction window.';
-        advice = 'Focus on committing to each call immediately — anticipate and fire.';
-      } else if (avgRotation < 40 && punchHits.length > 0) {
-        flaw = 'Low torso rotation across your strikes — power was mostly arm-driven.';
-        advice = 'Drive power from your hips and core on every strike instead of just swinging the arm.';
-      } else if (avgKneeDrive < 35 && punchHits.length > 0) {
-        flaw = 'Minimal knee drive detected — weight stayed mostly static.';
-        advice = 'Push off your rear foot to load each punch before throwing it.';
-      } else if (!isFreestyle && reflexScore < 50 && hitsOnly.length > 0) {
-        flaw = 'Reaction times ran high relative to the call cadence.';
-        advice = 'Keep your hands up and weight forward so you can fire the instant a command lands.';
-      } else {
-        flaw = 'Crisp execution and solid frame presence throughout the session.';
-        advice = 'Keep maintaining your tempo, balance, and quick returns to guard.';
-      }
-    }
-
-    if (mistakes.length === 0) {
-      mistakes.push('No specific recurring mistake detected — commands were answered cleanly and on time.');
     }
 
     setResultsData({
       overallScore,
       powerScore,
-      stanceScore: trackingConfidenceScore, // legacy key, kept so saved sessions stay readable
-      trackingConfidenceScore,
+      stanceScore,
       reflexScore,
-      stabilityScore,
-      swiftnessScore,
       accuracy,
       avgReflex: avgReaction,
       hits: hitCountRef.current,
       misses: missCountRef.current,
-      posture: Math.round(trackingConfidenceScore / 10),
+      posture: Math.round(stanceScore / 10),
       advice,
       flaw,
       mistakes,
@@ -2794,9 +1933,9 @@ export default function VisionPage() {
       isFreestyle,
       detailedFlaws,
       techniqueSummaries,
-      rootCauses,
-      analysisQuality,
-      engineInfo,
+      stabilityScore,
+      swiftnessScore,
+      hasFlaw: flawFound,
     });
     setInsufficientData(false);
     setStage('results');
@@ -2824,8 +1963,6 @@ export default function VisionPage() {
         power_score: resultsData.powerScore,
         tracking_score: resultsData.stanceScore,
         reflex_score: resultsData.reflexScore,
-        stability_score: resultsData.stabilityScore,
-        swiftness_score: resultsData.swiftnessScore,
         rotation_score: resultsData.rotationScore,
         hip_rotation_score: resultsData.hipRotationScore,
         torso_rotation_score: resultsData.torsoRotationScore,
@@ -2835,6 +1972,8 @@ export default function VisionPage() {
         head_lateral_score: resultsData.headLateralScore,
         head_drop_score: resultsData.headDropScore,
         trajectory_accuracy: resultsData.trajectoryAccuracy,
+        stability_score: resultsData.stabilityScore,
+        swiftness_score: resultsData.swiftnessScore,
         flaw: resultsData.flaw,
         advice: resultsData.advice,
         detailed_flaws: resultsData.detailedFlaws,
@@ -2845,7 +1984,7 @@ export default function VisionPage() {
             velocity_rating: r.peakVelocity > POWER_REFERENCE_VELOCITY * 0.7 ? 'Explosive' : r.peakVelocity > POWER_REFERENCE_VELOCITY * 0.4 ? 'Snappy' : 'Slow',
             reflex_time_ms: r.reactionMs ?? 0,
             extension_speed_ms: r.reactionMs ?? 0,
-            form_notes: r.hit ? 'Clean strike, on time.' : r.verified === false ? 'Not verified — tracking was too poor to judge this rep.' : 'Missed — no clean strike detected within the window.',
+            form_notes: r.hit ? 'Clean strike, on time.' : 'Missed — no clean strike detected within the window.',
           })),
           reps: resultsData.log,
         },
@@ -2888,13 +2027,6 @@ export default function VisionPage() {
     reactionTimesRef.current = [];
     if (drillTimerRef.current) clearTimeout(drillTimerRef.current);
     if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
-    armStatesRef.current = {
-      L: { state: 'guard', smoothedAngle: 0, history: [], guardEnteredAt: 0, prevAngle: 0, prevAngleTs: null, angularVel: 0, recent: [], valid: false },
-      R: { state: 'guard', smoothedAngle: 0, history: [], guardEnteredAt: 0, prevAngle: 0, prevAngleTs: null, angularVel: 0, recent: [], valid: false },
-    };
-    elbowStateRef.current = 'guard';
-    hookValidatedThisBurstRef.current = false;
-    uppercutValidatedThisBurstRef.current = false;
     setCalibSuccess(false);
     calibSuccessRef.current = false;
     setAwaitingUserStart(true);
@@ -2954,15 +2086,15 @@ export default function VisionPage() {
                 AI COACH PROFILE VOICE
               </span>
               <div className="grid grid-cols-3 gap-2.5">
-                {([
+                {[
                   { key: 'steel', label: 'STEEL', desc: 'Male Core' },
                   { key: 'athena', label: 'ATHENA', desc: 'Female Core' },
                   { key: 'cyber', label: 'CYBER', desc: 'Synthetic' },
-                ] as const).map((choice) => (
+                ].map((choice) => (
                   <button
                     key={choice.key}
                     onClick={() => {
-                      setVoiceProfile(choice.key);
+                      setVoiceProfile(choice.key as any);
                       speakCommand(`${choice.label} calibrated.`);
                     }}
                     className={`flex flex-col items-center justify-center py-2.5 rounded-2xl border text-[10px] font-black transition-all ${voiceProfile === choice.key
@@ -3057,15 +2189,15 @@ export default function VisionPage() {
                   SPEED DIFFICULTY LEVEL
                 </span>
                 <div className="grid grid-cols-3 gap-2.5">
-                  {([
+                  {[
                     { key: 'easy', label: 'EASY', color: 'text-green-400 border-green-500/30' },
                     { key: 'medium', label: 'MEDIUM', color: 'text-primary border-primary/30' },
                     { key: 'hard', label: 'HARD', color: 'text-red-500 border-red-500/30' },
-                  ] as const).map((choice) => (
+                  ].map((choice) => (
                     <button
                       key={choice.key}
                       onClick={() => {
-                        setDifficulty(choice.key);
+                        setDifficulty(choice.key as any);
                         speakCommand(`${choice.label} level.`);
                       }}
                       className={`py-3 rounded-2xl border text-[10px] font-black transition-all ${difficulty === choice.key
@@ -3142,15 +2274,13 @@ export default function VisionPage() {
             {mode === 'freestyle' ? (
               <div className="bg-white/[0.02] border border-white/5 p-4 rounded-3xl text-center">
                 <div className="text-3xl font-black italic text-white leading-none">
-                  {freestyleDuration === 0
-                    ? 'Unlimited'
-                    : `${Math.floor(freestyleDuration / 60)}:${String(freestyleDuration % 60).padStart(2, '0')}`}
+                  {Math.floor(freestyleDuration / 60)}:{String(freestyleDuration % 60).padStart(2, '0')}
                 </div>
                 <span className="text-[8px] font-black text-purple-400 tracking-widest uppercase block mt-1.5 mb-4">
                   ROUND DURATION
                 </span>
-                <div className="grid grid-cols-5 gap-2">
-                  {[0, 30, 60, 90, 120].map((secs) => (
+                <div className="grid grid-cols-4 gap-2">
+                  {[30, 60, 90, 120].map((secs) => (
                     <button
                       key={secs}
                       onClick={() => setFreestyleDuration(secs)}
@@ -3159,7 +2289,7 @@ export default function VisionPage() {
                           : 'bg-black/40 border-white/5 text-white/55 hover:text-white'
                         }`}
                     >
-                      {secs === 0 ? 'Unlimited' : `${secs}s`}
+                      {secs}s
                     </button>
                   ))}
                 </div>
@@ -3221,7 +2351,15 @@ export default function VisionPage() {
                 ref={canvasRef}
                 className="absolute inset-0 w-full h-full object-cover transform -scale-x-100 pointer-events-none"
               />
-              {/* Grid overlay is now body-anchored and drawn on the canvas — see lib/vision/overlayRenderer.ts */}
+              {/* Subtle tactical grid overlay */}
+              <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-[0.06]" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <pattern id="hud-grid" width="48" height="48" patternUnits="userSpaceOnUse">
+                    <path d="M 48 0 L 0 0 0 48" fill="none" stroke="#e2ff3b" strokeWidth="0.6"/>
+                  </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#hud-grid)" />
+              </svg>
             </div>
 
             {/* ── Corner brackets ── */}
@@ -3239,16 +2377,7 @@ export default function VisionPage() {
                   <span className="text-white font-mono font-black text-[10px] tracking-widest">LIVE {timerDisplay}</span>
                 </div>
                 <div className="bg-primary/20 border border-primary/50 rounded-full px-2.5 py-1">
-                  {/*
-                    Real engine telemetry, not a hardcoded number. Render
-                    rate and inference rate are deliberately shown as two
-                    different figures because they now genuinely differ —
-                    the overlay repaints at camera rate while inference is
-                    capped per device tier.
-                  */}
-                  <span className="text-primary font-mono font-black text-[9px] tracking-widest">
-                    {engineInfo ? `${engineInfo.renderFps}/${engineInfo.inferenceFps} FPS` : '— FPS'}
-                  </span>
+                  <span className="text-primary font-mono font-black text-[9px] tracking-widest">{liveFps} FPS</span>
                 </div>
               </div>
               {/* Right: Restart Drill + Stance Shield */}
@@ -3288,22 +2417,13 @@ export default function VisionPage() {
                       : 'border-primary/30 shadow-[0_0_10px_rgba(226,255,59,0.08)]'
                   }`}
                 >
-                  {/*
-                    This is ELBOW ANGULAR VELOCITY, the quantity actually
-                    measured. It was previously multiplied by an arbitrary
-                    0.024 and labelled "IMPACT VELOCITY ... m/s", which
-                    presents a scaled angular reading as a calibrated linear
-                    fist speed in physical units. A monocular webcam cannot
-                    measure that, so the label is now the real quantity and
-                    the real unit.
-                  */}
-                  <span className="text-[7px] font-black text-white/50 tracking-widest uppercase block mb-0.5">EXTENSION SPEED</span>
+                  <span className="text-[7px] font-black text-white/50 tracking-widest uppercase block mb-0.5">IMPACT VELOCITY</span>
                   <div className="flex items-baseline gap-1.5">
                     <div className={`w-1.5 h-1.5 rounded-full ${isVelocityFlashing ? 'bg-[#E2FF3B] animate-ping' : 'bg-primary'}`} />
                     <span className="text-primary font-mono font-black text-lg leading-none">
-                      {Math.round(liveVelocity || peakAngularVelocityRef.current || 0)}
+                      {((liveVelocity || peakAngularVelocityRef.current || 550) * 0.024).toFixed(1)}
                     </span>
-                    <span className="text-white/50 font-mono text-[8px]">°/s</span>
+                    <span className="text-white/50 font-mono text-[8px]">m/s</span>
                     <span className="text-[7px] font-black text-red-400 bg-red-500/20 border border-red-500/30 rounded px-1">MAX</span>
                   </div>
                 </div>
@@ -3312,20 +2432,13 @@ export default function VisionPage() {
                   <div className="bg-black/60 border border-white/10 rounded-full px-2 py-0.5">
                     <span className="text-[8px] font-black tracking-widest">
                       <span className="text-white/50">STANCE: </span>
-                      <span className="text-cyan-400">{detectedStance ?? 'READING…'}</span>
+                      <span className="text-cyan-400">ORTHODOX</span>
                     </span>
                   </div>
                   <div className="bg-black/60 border border-white/10 rounded-full px-2 py-0.5">
                     <span className="text-[8px] font-black tracking-widest">
                       <span className="text-white/50">ACCURACY: </span>
-                      <span className="text-primary">{attemptedCount - unverifiedCount > 0 ? `${Math.round((hitCount / (attemptedCount - unverifiedCount)) * 100)}%` : '—'}</span>
-                    </span>
-                  </div>
-                  <div className="bg-black/60 border border-white/10 rounded-full px-2 py-0.5">
-                    <span className="text-[8px] font-black tracking-widest">
-                      <span className="text-white/50">PUNCHES: </span>
-                      <span className="text-primary">{livePunchTotal}</span>
-                      {livePunchLabel && <span className="text-[#E2FF3B] ml-1">{livePunchLabel}</span>}
+                      <span className="text-primary">{attemptedCount > 0 ? Math.round((hitCount / attemptedCount) * 100) : 94}%</span>
                     </span>
                   </div>
                 </div>
@@ -3451,55 +2564,47 @@ export default function VisionPage() {
                   </span>
                 </div>
 
-                {/* Called-command strip — renders the real rolling history of
-                    commands issued through setExpectedCommand(), i.e. exactly
-                    what the voice system spoke and exactly what scoring is
-                    comparing against. It used to cycle a hardcoded
-                    ['JAB','CROSS','HOOK','SLIP R','UPPER'] array off comboIndex,
-                    which had nothing to do with the randomly-chosen commands
-                    actually being called. */}
+                {/* Target combo row (Reactive to combo progress) */}
                 <div className="bg-black/85 border border-white/10 rounded-2xl px-3 py-2 shadow-[0_4px_20px_rgba(0,0,0,0.6)]">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-1.5">
                       <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                      <span className="text-[7.5px] font-black text-white/70 tracking-widest uppercase">CALLED COMMANDS</span>
+                      <span className="text-[7.5px] font-black text-white/70 tracking-widest uppercase">TARGET COMBO // 1-2-3</span>
                     </div>
                     <div className="text-right">
                       <span className="text-[7.5px] font-black text-primary uppercase block font-mono">
-                        {mode === 'freestyle' ? 'FREESTYLE' : `CALL ${attemptedCount}/${punchTarget}`}
+                        STEP {(comboIndex % 5) + 1}/5
                       </span>
-                      <span className="text-[7px] font-black text-white/40 uppercase">
-                        {difficulty === 'hard' ? 'FAST CADENCE' : difficulty === 'easy' ? 'RELAXED CADENCE' : 'STEADY CADENCE'}
-                      </span>
+                      <span className="text-[7px] font-black text-white/40 uppercase">CADENCE 132 BPM</span>
                     </div>
                   </div>
-                  {/* Real called-command pills: last one is the live call */}
+                  {/* Reactive Combo step pills */}
                   <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
-                    {commandHistoryDisplay.length === 0 ? (
-                      <div className="flex-shrink-0 px-2.5 py-1.5 rounded-full border border-white/10 bg-black/60 text-white/40 text-[8px] font-black font-mono tracking-wide">
-                        AWAITING FIRST CALL
-                      </div>
-                    ) : (
-                      commandHistoryDisplay.map((step, i) => {
-                        const isCurrent = i === commandHistoryDisplay.length - 1;
-                        const isDefenseCall = DEFENSE_COMMANDS.some((c) => c.text === step);
-                        return (
-                          <div
-                            key={`${step}-${i}`}
-                            className={`flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-full border text-[8px] font-black font-mono tracking-wide transition-all duration-200 ${
-                              isCurrent
-                                ? 'bg-primary/25 border-primary text-primary shadow-[0_0_12px_rgba(226,255,59,0.5)] scale-105'
-                                : isDefenseCall
-                                ? 'bg-amber-500/10 border-amber-500/30 text-amber-400/70'
-                                : 'bg-[#101e08]/90 border-[#84CC16]/60 text-[#84CC16]'
-                            }`}
-                          >
-                            <span className="text-[7px] opacity-70">{isCurrent ? '▶' : '✓'}</span>
-                            <span>{step}</span>
-                          </div>
-                        );
-                      })
-                    )}
+                    {(['JAB', 'CROSS', 'HOOK', 'SLIP R', 'UPPER'] as const).map((step, i) => {
+                      const currentStepInCycle = comboIndex % 5;
+                      const isCurrent = currentStepInCycle === i;
+                      const isCompleted = currentStepInCycle > i;
+
+                      return (
+                        <div
+                          key={step}
+                          className={`flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-full border text-[8px] font-black font-mono tracking-wide transition-all duration-200 ${
+                            isCurrent
+                              ? 'bg-primary/25 border-primary text-primary shadow-[0_0_12px_rgba(226,255,59,0.5)] scale-105'
+                              : isCompleted
+                              ? 'bg-[#101e08]/90 border-[#84CC16]/60 text-[#84CC16]'
+                              : i === 3
+                              ? 'bg-amber-500/10 border-amber-500/30 text-amber-400/70'
+                              : 'bg-black/60 border-white/10 text-white/40'
+                          }`}
+                        >
+                          <span className="text-[7px] opacity-70">
+                            {isCompleted ? '✓' : i + 1}
+                          </span>
+                          <span>{step}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -3682,37 +2787,35 @@ export default function VisionPage() {
                 </h3>
               </div>
 
-              <div className="grid grid-cols-4 gap-2.5 mt-2">
-                {[
-                  { label: 'Overall', val: `${resultsData.overallScore}%` },
-                  { label: 'Power', val: `${resultsData.powerScore}%` },
-                  { label: 'Tracking', val: `${resultsData.stanceScore}%` },
-                  resultsData.isFreestyle
-                    ? { label: 'Rotation', val: `${resultsData.rotationScore}%` }
-                    : { label: 'Reflex', val: `${resultsData.reflexScore}%` },
-                ].map((pill, idx) => (
-                  <div key={idx} className="bg-white/[0.02] border border-white/5 rounded-2xl py-3 text-center">
-                    <div className="text-sm font-black text-white leading-none mb-1">
-                      {pill.val}
-                    </div>
-                    <span className="text-[7px] font-black text-white/30 uppercase tracking-wider block">
-                      {pill.label}
-                    </span>
-                  </div>
-                ))}
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2.5 mt-2">
+                <MeritRing
+                  label="Overall"
+                  value={resultsData.overallScore}
+                  caption={resultsData.isFreestyle ? 'Technique composite' : 'Accuracy + tracking + reflex'}
+                />
+                <MeritRing label="Power" value={resultsData.powerScore} caption="Peak hand speed" />
+                <MeritRing
+                  label="Reflex"
+                  value={resultsData.isFreestyle || !resultsData.avgReflex ? null : resultsData.reflexScore}
+                  caption={resultsData.avgReflex ? `Avg ${resultsData.avgReflex}ms` : 'Needs called drills'}
+                />
+                <MeritRing label="Stability" value={resultsData.stabilityScore ?? null} caption="Rep-to-rep consistency" />
+                <MeritRing label="Swiftness" value={resultsData.swiftnessScore ?? null} caption="Sustained speed + pace" />
               </div>
 
-              <div className="grid grid-cols-3 gap-3.5 mt-3.5">
+              <div className="grid grid-cols-4 gap-2.5 mt-3.5">
                 {(resultsData.isFreestyle
                   ? [
                       { val: `${resultsData.hits}`, label: 'Punches Thrown' },
                       { val: `${resultsData.kneeDriveScore}%`, label: 'Knee Drive' },
                       { val: `${resultsData.weightTransferScore}%`, label: 'Weight Transfer' },
+                      { val: `${resultsData.stanceScore}%`, label: 'Tracking' },
                     ]
                   : [
                       { val: `${resultsData.hits}/${resultsData.hits + resultsData.misses}`, label: 'Commands Hit' },
                       { val: resultsData.avgReflex ? `${resultsData.avgReflex}ms` : 'N/A', label: 'Avg Reaction' },
                       { val: `${resultsData.accuracy}%`, label: 'Accuracy' },
+                      { val: `${resultsData.stanceScore}%`, label: 'Tracking' },
                     ]
                 ).map((pill, idx) => (
                   <div key={idx} className="bg-white/[0.01] border border-white/5 rounded-2xl py-2.5 text-center">
@@ -3727,49 +2830,19 @@ export default function VisionPage() {
               </div>
             </GlassCard>
 
-            {/* Performance Merits — five circular-progress cards, arranged
-                vertically. Overall/Power/Reflex reuse the exact scores
-                already computed above (no new formula for these); Stability
-                and Swiftness are genuinely new formulas (see
-                computeStabilityScore / computeSwiftnessScore) built from
-                data the capture loop was already recording. */}
-            <GlassCard className="p-5 border-primary/20 bg-black/40">
-              <span className="text-[9px] font-black text-primary tracking-widest uppercase block mb-4">
-                Performance Merits
-              </span>
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { label: 'Overall', value: resultsData.overallScore },
-                  { label: 'Power', value: resultsData.powerScore },
-                  resultsData.isFreestyle
-                    ? { label: 'Rotation', value: resultsData.rotationScore }
-                    : { label: 'Reflex', value: resultsData.reflexScore },
-                  { label: 'Stability', value: resultsData.stabilityScore },
-                ].map((merit) => (
-                  <div
-                    key={merit.label}
-                    className="flex flex-col items-center gap-2 bg-white/[0.02] border border-white/5 rounded-2xl py-4"
-                  >
-                    <ProgressRing progress={merit.value ?? 0} size={76} strokeWidth={6} label={merit.label} />
-                    <span className="text-[8px] font-black text-white/50 uppercase tracking-widest">
-                      {merit.label}
-                    </span>
-                  </div>
-                ))}
-                <div className="col-span-2 flex flex-col items-center gap-2 bg-white/[0.02] border border-white/5 rounded-2xl py-4">
-                  <ProgressRing progress={resultsData.swiftnessScore ?? 0} size={76} strokeWidth={6} label="Tempo" />
-                  <span className="text-[8px] font-black text-white/50 uppercase tracking-widest">
-                    Swiftness
-                  </span>
-                </div>
-              </div>
-            </GlassCard>
-
-            <div className="flex items-center gap-3 p-4 bg-red-500/[0.02] border border-red-500/10 rounded-2xl">
-              <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
+            <div
+              className={`flex items-center gap-3 p-4 rounded-2xl border ${
+                resultsData.hasFlaw ? 'bg-red-500/[0.02] border-red-500/10' : 'bg-emerald-500/[0.03] border-emerald-500/20'
+              }`}
+            >
+              <AlertTriangle className={`w-5 h-5 flex-shrink-0 ${resultsData.hasFlaw ? 'text-red-500' : 'text-emerald-500'}`} />
               <div>
-                <span className="text-[7px] font-black text-red-500 uppercase tracking-widest block mb-0.5">
-                  BIGGEST OPPORTUNITY
+                <span
+                  className={`text-[7px] font-black uppercase tracking-widest block mb-0.5 ${
+                    resultsData.hasFlaw ? 'text-red-500' : 'text-emerald-500'
+                  }`}
+                >
+                  {resultsData.hasFlaw ? 'BIGGEST OPPORTUNITY' : 'CLEAN SESSION'}
                 </span>
                 <p className="text-xs font-bold text-white/80 leading-normal">
                   {resultsData.flaw}
@@ -3790,86 +2863,6 @@ export default function VisionPage() {
                     </li>
                   ))}
                 </ul>
-              </GlassCard>
-            )}
-
-            {/*
-              Root-cause view sits ABOVE the flaw list on purpose. The flaw
-              list answers "what did the camera measure", this answers "what
-              is actually wrong" — and several measured flaws usually roll up
-              into one correction. Showing the cluster first is how a coach
-              would order it.
-            */}
-            {resultsData.rootCauses && resultsData.rootCauses.length > 0 && (
-              <GlassCard className="p-5 border-white/5 bg-black/40">
-                <span className="text-[9px] font-black text-primary tracking-widest uppercase block mb-1">
-                  Root Cause Analysis
-                </span>
-                <p className="text-[8px] text-white/30 uppercase tracking-wider mb-3">
-                  Correlated faults grouped into the single correction that fixes them
-                </p>
-                <div className="flex flex-col gap-3">
-                  {resultsData.rootCauses.slice(0, 3).map((rc: RootCauseDiagnosis, idx: number) => (
-                    <div key={idx} className="bg-white/[0.02] border border-white/5 rounded-2xl p-3.5">
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-[10px] font-black text-white uppercase tracking-wide">
-                          {rc.label}
-                        </span>
-                        <span className="text-[7px] font-black text-white/40 uppercase tracking-widest">
-                          {rc.confidence}% confidence
-                        </span>
-                      </div>
-                      <p className="text-[10px] font-bold text-primary leading-snug mb-1.5">
-                        {rc.primaryFix}
-                      </p>
-                      <p className="text-[9px] text-white/40 leading-snug mb-1.5">
-                        Drill: {rc.drill}
-                      </p>
-                      <div className="flex flex-wrap gap-1">
-                        {rc.indicators.map((ind, i2) => (
-                          <span
-                            key={i2}
-                            className="text-[7px] font-bold text-white/35 bg-white/[0.03] border border-white/5 rounded px-1.5 py-0.5"
-                          >
-                            {ind.techniqueLabel} {ind.metric.replace('Score', '')} {ind.measuredValue}%
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </GlassCard>
-            )}
-
-            {/*
-              Capture quality is reported SEPARATELY from performance. It
-              describes how well the camera could see you, not how well you
-              boxed — conflating the two is what made the old "stance score"
-              misleading.
-            */}
-            {typeof resultsData.analysisQuality === 'number' && (
-              <GlassCard className="p-5 border-white/5 bg-black/40">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[9px] font-black text-primary tracking-widest uppercase">
-                    Capture Quality
-                  </span>
-                  <span className="text-[11px] font-black text-white">
-                    {resultsData.analysisQuality}%
-                  </span>
-                </div>
-                <p className="text-[8px] text-white/30 uppercase tracking-wider">
-                  How clearly the camera tracked you — not a measure of your boxing
-                  {resultsData.engineInfo
-                    ? ` · ${resultsData.engineInfo.model} model · ${resultsData.engineInfo.inferenceFps}fps · ${resultsData.engineInfo.delegate}`
-                    : ''}
-                </p>
-                {resultsData.analysisQuality < 60 && (
-                  <p className="text-[9px] text-orange-400/80 leading-snug mt-2">
-                    Tracking was weak this session, so the technique findings below carry
-                    lower confidence. Stand 6-8 feet from the camera with your full body
-                    in frame and even lighting for a more reliable read.
-                  </p>
-                )}
               </GlassCard>
             )}
 
@@ -3903,8 +2896,7 @@ export default function VisionPage() {
                       <p className="text-[10px] text-white/60 leading-snug mb-2">
                         {f.cause}{' '}
                         <span className="text-white/30">
-                          (measured {f.measuredValue}% vs target {f.targetValue}%, over {f.sampleSize} reps
-                          {typeof f.confidence === 'number' ? `, ${f.confidence}% confidence` : ''})
+                          (measured {f.measuredValue}% vs target {f.targetValue}%, over {f.sampleSize} reps)
                         </span>
                       </p>
                       <p className="text-[10px] font-bold text-primary leading-snug mb-1">
@@ -3928,7 +2920,7 @@ export default function VisionPage() {
                   Strongest / Weakest Techniques
                 </span>
                 <div className="flex flex-col gap-1.5">
-                  {resultsData.techniqueSummaries.map((t: TechniqueSummary, idx: number) => (
+                  {resultsData.techniqueSummaries.map((t: any, idx: number) => (
                     <div
                       key={idx}
                       className="flex items-center justify-between px-3 py-2 rounded-xl bg-white/[0.02] border border-white/5"
@@ -4029,21 +3021,17 @@ export default function VisionPage() {
                         <span className="text-white/30 font-mono w-5">{r.index}.</span>
                         <span className="text-white/80 uppercase tracking-wide">{r.command}</span>
                         <span
-                          className={`px-1.5 py-0.5 rounded-full text-[7px] uppercase tracking-widest ${r.hit
-                            ? 'bg-primary/15 text-primary'
-                            : r.verified === false
-                              ? 'bg-white/10 text-white/50'
-                              : 'bg-red-500/15 text-red-400'
+                          className={`px-1.5 py-0.5 rounded-full text-[7px] uppercase tracking-widest ${r.hit ? 'bg-primary/15 text-primary' : 'bg-red-500/15 text-red-400'
                             }`}
                         >
-                          {r.hit ? 'HIT' : r.verified === false ? 'UNVERIFIED' : 'MISS'}
+                          {r.hit ? 'HIT' : 'MISS'}
                         </span>
-                        {r.hit && r.kind === 'punch' && r.verified !== false && (r.trajectoryVerdict ?? (r.trajectoryMatch ? 'match' : 'mismatch')) === 'mismatch' && (
+                        {r.hit && r.kind === 'punch' && !r.trajectoryMatch && (
                           <span
                             title={`Thrown as a ${r.trajectory} path`}
                             className="px-1.5 py-0.5 rounded-full text-[7px] uppercase tracking-widest bg-orange-500/15 text-orange-400"
                           >
-                            CHECK PATH
+                            WRONG PATH
                           </span>
                         )}
                       </div>
