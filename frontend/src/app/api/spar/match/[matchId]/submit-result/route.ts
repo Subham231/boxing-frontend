@@ -1,147 +1,169 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireFirebaseUid } from '@/lib/server/require-firebase';
 import { supabaseAdmin } from '@/lib/server/supabase-admin';
-import {
-  computeSparScore,
-  computeReflexScore,
-  normalizePowerAndForm,
-  pickWinner,
-  validateSparResult,
-  type SparCommand,
-  type SparResultBreakdown,
-} from '@/lib/server/spar';
 
 export const runtime = 'nodejs';
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { matchId: string } },
-) {
+// Short in-memory cache: the board is identical for every viewer, so we
+// aggregate at most once per TTL per period instead of on every poll.
+const CACHE_TTL_MS = 20_000;
+const boardCache = new Map<string, { at: number; body: unknown }>();
+
+function getPeriodStartIST(period: 'weekly' | 'monthly' | 'all_time'): string | null {
+  if (period === 'all_time') return null;
+
+  const now = new Date();
+  // IST is UTC+5:30
+  const istOffset = 5.5 * 60 * 60 * 1000;
+  const istDate = new Date(now.getTime() + istOffset);
+
+  if (period === 'weekly') {
+    // Current ISO day: 1 = Mon, ..., 7 = Sun
+    const day = istDate.getUTCDay() || 7;
+    istDate.setUTCDate(istDate.getUTCDate() - day + 1); // Reset to Monday
+    istDate.setUTCHours(0, 0, 0, 0);
+  } else {
+    // Reset to 1st of current month
+    istDate.setUTCDate(1);
+    istDate.setUTCHours(0, 0, 0, 0);
+  }
+
+  // Convert back to UTC ISO string
+  return new Date(istDate.getTime() - istOffset).toISOString();
+}
+
+export async function GET(req: NextRequest) {
   const auth = await requireFirebaseUid(req);
   if ('error' in auth) return auth.error;
   if (!supabaseAdmin) {
     return NextResponse.json({ error: 'Database not configured.' }, { status: 500 });
   }
 
-  const matchId = params.matchId;
-  const uid = auth.uid;
-  const body = await req.json().catch(() => ({}));
-  const breakdown = body.breakdown as SparResultBreakdown;
+  const { searchParams } = new URL(req.url);
+  const period = (searchParams.get('period') || 'weekly') as 'weekly' | 'monthly' | 'all_time';
+  const periodStart = getPeriodStartIST(period);
 
-  const { data: match, error: matchErr } = await supabaseAdmin
+  const cached = boardCache.get(period);
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
+    return NextResponse.json(cached.body, { headers: { 'Cache-Control': 'private, max-age=15' } });
+  }
+
+  let query = supabaseAdmin
     .from('spar_matches')
-    .select('*')
-    .eq('id', matchId)
-    .maybeSingle();
+    .select('id, player_a_uid, player_b_uid, winner_uid, player_a_result, player_b_result, completed_at, status')
+    .eq('status', 'completed');
 
-  if (matchErr || !match) {
-    return NextResponse.json({ error: 'Match not found.' }, { status: 404 });
-  }
-  if (match.player_a_uid !== uid && match.player_b_uid !== uid) {
-    return NextResponse.json({ error: 'Not a participant.' }, { status: 403 });
-  }
-  if (['completed', 'abandoned'].includes(match.status)) {
-    return NextResponse.json({ error: 'Match already finished.' }, { status: 409 });
+  if (periodStart) {
+    query = query.gte('completed_at', periodStart);
   }
 
-  const sequence = (match.command_sequence || []) as SparCommand[];
-  const check = validateSparResult(sequence, breakdown);
-  if (!check.ok) {
-    return NextResponse.json({ error: check.reason }, { status: 400 });
-  }
+  const { data: matches, error } = await query;
 
-  const normalized: SparResultBreakdown = {
-    ...breakdown,
-    ...normalizePowerAndForm(breakdown),
-    reflexScore: computeReflexScore(breakdown.avgReactionMs ?? null),
-    score: computeSparScore(breakdown),
-  };
-
-  const { error: idemErr } = await supabaseAdmin.from('spar_result_submissions').insert({
-    match_id: matchId,
-    uid,
-  });
-  if (idemErr) {
-    if (idemErr.code === '23505') {
-      return NextResponse.json({ error: 'Result already submitted.' }, { status: 409 });
-    }
-    return NextResponse.json({ error: 'Failed to record submission.' }, { status: 500 });
-  }
-
-  const isA = match.player_a_uid === uid;
-  const patch: Record<string, unknown> = {
-    status: 'awaiting_results',
-  };
-  if (isA) patch.player_a_result = normalized;
-  else patch.player_b_result = normalized;
-
-  await supabaseAdmin.from('spar_matches').update(patch).eq('id', matchId);
-
-  const { data: fresh } = await supabaseAdmin
-    .from('spar_matches')
-    .select('*')
-    .eq('id', matchId)
-    .single();
-
-  if (fresh?.player_a_result && fresh?.player_b_result) {
-    const winner = pickWinner(
-      fresh.player_a_uid,
-      fresh.player_b_uid,
-      fresh.player_a_result as SparResultBreakdown,
-      fresh.player_b_result as SparResultBreakdown,
-    );
-    await supabaseAdmin
-      .from('spar_matches')
-      .update({
-        winner_uid: winner,
-        status: 'completed',
-        completed_at: new Date().toISOString(),
-      })
-      .eq('id', matchId);
-
-    if (fresh.is_paid_match) {
-      await upsertLeaderboard(fresh.player_a_uid, fresh.player_b_uid, winner);
-    }
-
-    await supabaseAdmin.from('spar_queue').delete().in('uid', [fresh.player_a_uid, fresh.player_b_uid]);
-  }
-
-  return NextResponse.json({ ok: true, softFlags: check.softFlags });
-}
-
-async function upsertLeaderboard(aUid: string, bUid: string, winnerUid: string) {
-  if (!supabaseAdmin) return;
-  for (const uid of [aUid, bUid]) {
-    const { data: profile } = await supabaseAdmin
-      .from('reflex_profiles')
-      .select('display_name')
-      .eq('uid', uid)
-      .maybeSingle();
-    const name = (profile?.display_name || 'FIGHTER').toUpperCase();
-    const won = uid === winnerUid;
-    const { data: existing } = await supabaseAdmin
+  if (error || !matches) {
+    // Fallback to legacy spar_leaderboard table if matches query errors
+    const { data: fallback } = await supabaseAdmin
       .from('spar_leaderboard')
-      .select('wins, losses')
-      .eq('uid', uid)
-      .maybeSingle();
-    if (!existing) {
-      await supabaseAdmin.from('spar_leaderboard').insert({
-        uid,
-        display_name: name,
-        wins: won ? 1 : 0,
-        losses: won ? 0 : 1,
-        updated_at: new Date().toISOString(),
-      });
-    } else {
-      await supabaseAdmin
-        .from('spar_leaderboard')
-        .update({
-          display_name: name,
-          wins: existing.wins + (won ? 1 : 0),
-          losses: existing.losses + (won ? 0 : 1),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('uid', uid);
+      .select('uid, display_name, wins, losses, updated_at')
+      .order('wins', { ascending: false })
+      .limit(50);
+
+    const rows = (fallback || []).map((r: any) => {
+      const total = (r.wins || 0) + (r.losses || 0);
+      const winRate = total > 0 ? Math.round(((r.wins || 0) / total) * 100) : 0;
+      return {
+        uid: r.uid,
+        display_name: r.display_name,
+        wins: r.wins || 0,
+        losses: r.losses || 0,
+        matches_played: total,
+        win_rate: winRate,
+        avg_score: null as number | null,
+      };
+    });
+
+    return NextResponse.json({ rows, period, periodStart });
+  }
+
+  // Aggregate user stats from completed matches
+  type UserStats = {
+    uid: string;
+    wins: number;
+    losses: number;
+    matches_played: number;
+    scoreSum: number;
+    scoreCount: number;
+  };
+
+  const map = new Map<string, UserStats>();
+
+  for (const m of matches) {
+    const uids = [m.player_a_uid, m.player_b_uid].filter(Boolean);
+    for (const uid of uids) {
+      if (!map.has(uid)) {
+        map.set(uid, {
+          uid,
+          wins: 0,
+          losses: 0,
+          matches_played: 0,
+          scoreSum: 0,
+          scoreCount: 0,
+        });
+      }
+      const st = map.get(uid)!;
+      st.matches_played += 1;
+      if (m.winner_uid === uid) {
+        st.wins += 1;
+      } else if (m.winner_uid) {
+        st.losses += 1;
+      }
+
+      const res = uid === m.player_a_uid ? m.player_a_result : m.player_b_result;
+      if (res && typeof res.score === 'number') {
+        st.scoreSum += res.score;
+        st.scoreCount += 1;
+      }
     }
   }
+
+  const uids = Array.from(map.keys());
+  const { data: profiles } = uids.length
+    ? await supabaseAdmin
+        .from('reflex_profiles')
+        .select('uid, display_name, avatar_url')
+        .in('uid', uids)
+    : { data: [] as any[] };
+
+  const nameMap = new Map<string, { name: string; avatar_url: string | null }>(
+    (profiles || []).map((p: any) => [
+      p.uid,
+      { name: (p.display_name || 'FIGHTER').toUpperCase(), avatar_url: p.avatar_url || null },
+    ]),
+  );
+
+  const rows = Array.from(map.values())
+    .map((st) => {
+      const p = nameMap.get(st.uid);
+      const winRate = st.matches_played > 0 ? Math.round((st.wins / st.matches_played) * 100) : 0;
+      const avgScore: number | null = st.scoreCount > 0 ? Math.round((st.scoreSum / st.scoreCount) * 10) / 10 : null;
+      return {
+        uid: st.uid,
+        display_name: p?.name || 'FIGHTER',
+        avatar_url: p?.avatar_url || null,
+        wins: st.wins,
+        losses: st.losses,
+        matches_played: st.matches_played,
+        win_rate: winRate,
+        avg_score: avgScore,
+      };
+    })
+    .sort((a, b) => {
+      if (b.wins !== a.wins) return b.wins - a.wins;
+      if (b.win_rate !== a.win_rate) return b.win_rate - a.win_rate;
+      return (b.avg_score ?? -1) - (a.avg_score ?? -1);
+    })
+    .slice(0, 50);
+
+  const body = { rows, period, periodStart, totalMatches: matches.length };
+  boardCache.set(period, { at: Date.now(), body });
+  return NextResponse.json(body, { headers: { 'Cache-Control': 'private, max-age=15' } });
 }

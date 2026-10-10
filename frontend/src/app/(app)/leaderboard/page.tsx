@@ -1,381 +1,402 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Trophy, ArrowLeft, Swords } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
-import { useFirebaseUser } from '@/lib/useFirebaseUser';
-import { getRankInfoByLevel } from '@/components/ui/RankBadge';
+import { ArrowLeft, Loader2, Swords, Trophy, AlertCircle, Video, Mic, Wifi } from 'lucide-react';
+import { firebaseAuth } from '@/lib/firebase';
+import { GlassCard } from '@/components/ui/GlassCard';
+import { NeonButton } from '@/components/ui/NeonButton';
 
-interface LeaderboardItem {
-  uid?: string;
-  name: string;
+type SparStatus = {
+  mode: 'paid' | 'free';
+  canSpar: boolean;
+  needsAd: boolean;
+  remaining: number;
+  sparDailyLimit: number;
+  sparDailyUsed: number;
+  freeSparAvailable: boolean;
+  freeSparUnlocked: boolean;
+  planName: string | null;
+  queueOnline: number;
+  estimatedWaitSeconds: number;
+  rankLabel: string;
+  mmr: number | null;
+};
+
+type LeaderRow = {
+  uid: string;
+  display_name: string;
   avatar_url?: string | null;
-  score: number;
-  display_val: string;
-  rank_level?: number;
-  matches_played?: number;
-  win_rate?: number;
-  avg_score?: number;
-}
+  wins: number;
+  losses: number;
+  matches_played: number;
+  win_rate: number;
+  avg_score: number | null;
+};
 
-export default function LeaderboardPage() {
+/** Matchmaking + leaderboard — reached after rules intro / ad unlock. */
+export default function SparLobbyPage() {
   const router = useRouter();
-  const { user } = useFirebaseUser();
-  const [mounted, setMounted] = useState(false);
-  const [activeTab, setActiveTab] = useState<'streak' | 'spar' | 'reflex' | 'combo'>('streak');
-  const [sparPeriod, setSparPeriod] = useState<'weekly' | 'monthly'>('weekly');
-
-  const [reflexRankings, setReflexRankings] = useState<LeaderboardItem[]>([]);
-  const [streakRankings, setStreakRankings] = useState<LeaderboardItem[]>([]);
-  const [comboRankings, setComboRankings] = useState<LeaderboardItem[]>([]);
-  const [sparRankings, setSparRankings] = useState<LeaderboardItem[]>([]);
-
+  const [status, setStatus] = useState<SparStatus | null>(null);
+  const [leaderboard, setLeaderboard] = useState<LeaderRow[]>([]);
+  const [leaderboardPeriod, setLeaderboardPeriod] = useState<'weekly' | 'monthly'>('weekly');
   const [loading, setLoading] = useState(true);
-  const [errored, setErrored] = useState(false);
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const searchGenerationRef = useRef(0);
 
-  const loadSparRankings = useCallback(async (period: 'weekly' | 'monthly') => {
+  const authHeaders = useCallback(async () => {
+    const user = firebaseAuth.currentUser;
+    if (!user) throw new Error('Please log in.');
+    const token = await user.getIdToken();
+    return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  }, []);
+
+  const leaderboardSigRef = useRef('');
+  const hasLoadedLeaderboardRef = useRef(false);
+  const periodRef = useRef(leaderboardPeriod);
+  periodRef.current = leaderboardPeriod;
+
+  // Background refreshes are silent: no spinner, and state only changes when
+  // the data actually changed, so the list never flashes or re-renders.
+  const loadLeaderboard = useCallback(async (period: 'weekly' | 'monthly', silent = false) => {
+    if (!silent && !hasLoadedLeaderboardRef.current) setLoadingLeaderboard(true);
     try {
-      if (!user) return;
-      const token = await user.getIdToken();
-      const res = await fetch(`/api/spar/leaderboard?period=${period}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const headers = await authHeaders();
+      const res = await fetch(`/api/spar/leaderboard?period=${period}`, { headers });
       const data = await res.json();
-      if (data.rows) {
-        setSparRankings(
-          data.rows.map((r: any) => ({
-            uid: r.uid,
-            name: r.display_name,
-            avatar_url: r.avatar_url || null,
-            score: r.wins,
-            display_val: `${r.wins}W (${r.win_rate}%)`,
-            matches_played: r.matches_played,
-            win_rate: r.win_rate,
-            avg_score: r.avg_score,
-          })),
-        );
+      if (period !== periodRef.current) return; // stale response for an old tab
+      const rows: LeaderRow[] = data.rows || [];
+      const sig = JSON.stringify(rows);
+      if (sig !== leaderboardSigRef.current) {
+        leaderboardSigRef.current = sig;
+        setLeaderboard(rows);
       }
-    } catch (e) {
-      console.error('Failed to load spar rankings:', e);
+      hasLoadedLeaderboardRef.current = true;
+    } catch {
+      /* keep showing the previous rows */
+    } finally {
+      setLoadingLeaderboard(false);
     }
-  }, [user]);
+  }, [authHeaders]);
 
-  const loadAllRankings = useCallback(async () => {
-    if (!supabase) {
-      setErrored(true);
-      setLoading(false);
-      return;
-    }
-
+  const loadStatus = useCallback(async () => {
     try {
-      // 1. Reflex rankings
-      const { data: rtScores } = await supabase
-        .from('reflex_scores')
-        .select('uid, weekly_score')
-        .eq('game_id', 'reaction_tap')
-        .not('weekly_score', 'is', null)
-        .order('weekly_score', { ascending: true })
-        .limit(50);
-
-      const { data: cfScores } = await supabase
-        .from('reflex_scores')
-        .select('uid, weekly_score')
-        .eq('game_id', 'combo_flash')
-        .not('weekly_score', 'is', null)
-        .order('weekly_score', { ascending: false })
-        .limit(50);
-
-      const scoreUids = [...(rtScores || []), ...(cfScores || [])].map((r: any) => r.uid);
-      const { data: scoreProfiles } = scoreUids.length
-        ? await supabase.from('reflex_public_profiles').select('uid, display_name').in('uid', scoreUids)
-        : { data: [] as any[] };
-      const nameByUid = new Map<string, string>(
-        (scoreProfiles || []).map((p: any) => [p.uid, (p.display_name || 'FIGHTER').toUpperCase()]),
-      );
-
-      setReflexRankings(
-        (rtScores || []).map((d: any) => ({
-          name: nameByUid.get(d.uid) || 'FIGHTER',
-          score: d.weekly_score,
-          display_val: `${d.weekly_score}s`,
-        })),
-      );
-
-      // 2. Combo rankings
-      setComboRankings(
-        (cfScores || []).map((d: any) => ({
-          name: nameByUid.get(d.uid) || 'FIGHTER',
-          score: d.weekly_score,
-          display_val: `${d.weekly_score} pts`,
-        })),
-      );
-
-      // 3. Streak rankings
-      const { data: streakRows } = await supabase
-        .from('user_streaks')
-        .select('uid, current_streak, longest_streak, rank_level')
-        .order('current_streak', { ascending: false })
-        .limit(50);
-
-      if (streakRows && streakRows.length > 0) {
-        const uids = streakRows.map((r: any) => r.uid);
-        const { data: profiles } = await supabase
-          .from('reflex_public_profiles')
-          .select('uid, display_name, avatar_url')
-          .in('uid', uids);
-        const profileByUid = new Map<string, { display_name?: string; avatar_url?: string }>(
-          (profiles || []).map((p: any) => [p.uid, p]),
-        );
-
-        setStreakRankings(
-          streakRows.map((r: any) => {
-            const p = profileByUid.get(r.uid);
-            return {
-              uid: r.uid,
-              name: (p?.display_name || 'FIGHTER').toUpperCase(),
-              avatar_url: p?.avatar_url || null,
-              score: r.current_streak,
-              display_val: `${r.current_streak} days`,
-              rank_level: r.rank_level,
-            };
-          }),
-        );
-      } else {
-        setStreakRankings([]);
-      }
-
-      setErrored(false);
-    } catch (e) {
-      console.error('Failed to load leaderboard data:', e);
-      setErrored(true);
+      const headers = await authHeaders();
+      const sRes = await fetch('/api/spar/status', { headers });
+      const sData = await sRes.json();
+      if (sRes.ok) setStatus(sData);
+    } catch (e: any) {
+      setError((prev) => prev ?? (e.message || 'Failed to load spar status.'));
     } finally {
       setLoading(false);
     }
+  }, [authHeaders]);
+
+  const refresh = useCallback(async () => {
+    await Promise.all([loadStatus(), loadLeaderboard(periodRef.current, true)]);
+  }, [loadStatus, loadLeaderboard]);
+
+  // Initial load once auth is ready.
+  useEffect(() => {
+    const unsub = firebaseAuth.onAuthStateChanged((u) => {
+      if (u) refresh();
+    });
+    return () => unsub();
+  }, [refresh]);
+
+  // Switching period: load that period once (spinner only on very first load).
+  useEffect(() => {
+    leaderboardSigRef.current = '';
+    if (firebaseAuth.currentUser) loadLeaderboard(leaderboardPeriod);
+  }, [leaderboardPeriod, loadLeaderboard]);
+
+  // Queue status changes often (15 s); leaderboard rarely (60 s). Both pause in background tabs.
+  useEffect(() => {
+    const visible = () => document.visibilityState === 'visible';
+    const statusTimer = window.setInterval(() => { if (visible()) loadStatus(); }, 15000);
+    const boardTimer = window.setInterval(() => { if (visible()) loadLeaderboard(periodRef.current, true); }, 60000);
+    const onVis = () => { if (visible()) refresh(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      window.clearInterval(statusTimer);
+      window.clearInterval(boardTimer);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, [loadStatus, loadLeaderboard, refresh]);
+
+  const currentUserUid = firebaseAuth.currentUser?.uid;
+  const currentRank = currentUserUid
+    ? leaderboard.findIndex((row) => row.uid === currentUserUid) + 1
+    : 0;
+
+  const startSearch = async () => {
+    const generation = ++searchGenerationRef.current;
+    setError(null);
+
+    setSearching(true);
+    try {
+      const headers = await authHeaders();
+      const joinRes = await fetch('/api/spar/queue/join', { method: 'POST', headers });
+      const joinData = await joinRes.json();
+      if (!joinRes.ok) {
+        throw new Error(joinData.error || 'Could not join queue.');
+      }
+
+      if (joinData.status === 'matched') {
+        sessionStorage.setItem('spar_match', JSON.stringify(joinData));
+        router.push(`/spar/match?id=${joinData.matchId}`);
+        return;
+      }
+
+      const started = Date.now();
+      while (Date.now() - started < 90000 && generation === searchGenerationRef.current) {
+        await new Promise((r) => setTimeout(r, 1500));
+        if (generation !== searchGenerationRef.current) return;
+        const stRes = await fetch('/api/spar/queue/status', { headers });
+        const stData = await stRes.json();
+        if (generation !== searchGenerationRef.current) return;
+        if (stData.status === 'matched') {
+          sessionStorage.setItem('spar_match', JSON.stringify(stData));
+          router.push(`/spar/match?id=${stData.matchId}`);
+          return;
+        }
+      }
+      await fetch('/api/spar/queue/leave', { method: 'POST', headers });
+      throw new Error('No opponent found. Try again.');
+    } catch (e: any) {
+      setError(e.message || 'Matchmaking failed.');
+      setSearching(false);
+      refresh();
+    }
+  };
+
+  const cancelSearch = async () => {
+    searchGenerationRef.current += 1;
+    try {
+      const headers = await authHeaders();
+      await fetch('/api/spar/queue/leave', { method: 'POST', headers });
+    } catch {
+      /* ignore */
+    }
+    setSearching(false);
+  };
+
+  useEffect(() => () => {
+    searchGenerationRef.current += 1;
   }, []);
 
-  useEffect(() => {
-    setMounted(true);
-    loadAllRankings();
-    loadSparRankings(sparPeriod);
-
-    if (!supabase) return;
-    const channel = supabase
-      .channel('leaderboard-user-streaks')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'user_streaks' }, () => {
-        loadAllRankings();
-      })
-      .subscribe();
-
-    const interval = setInterval(loadAllRankings, 30000);
-
-    return () => {
-      supabase?.removeChannel(channel);
-      clearInterval(interval);
-    };
-  }, [loadAllRankings, loadSparRankings, sparPeriod]);
-
-  useEffect(() => {
-    if (activeTab === 'spar') {
-      loadSparRankings(sparPeriod);
-    }
-  }, [activeTab, sparPeriod, loadSparRankings]);
-
-  const activeRankings = React.useMemo(() => {
-    if (activeTab === 'spar') return sparRankings;
-    if (activeTab === 'reflex') return reflexRankings;
-    if (activeTab === 'combo') return comboRankings;
-    return streakRankings;
-  }, [activeTab, sparRankings, reflexRankings, comboRankings, streakRankings]);
-
-  if (!mounted) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-bg-dark gap-4">
-        <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
-        <p className="text-[10px] text-text-muted uppercase tracking-[3px]">Loading Arena...</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="flex flex-col gap-6 anim-fade-in relative pb-16">
-      {/* Telemetry Display */}
-      <div className="absolute -top-16 left-0 right-0 flex justify-between items-center text-[10px] font-mono text-primary font-bold z-10 pointer-events-none select-none">
-        <span className="opacity-80 uppercase">MODULE: GLOBAL LEADERBOARD</span>
-        <span className="opacity-40 uppercase">{errored ? 'SYNC_STATUS_OFFLINE' : 'SYNC_STATUS_LIVE'}</span>
-      </div>
-
-      {/* Page Header */}
-      <header className="flex justify-between items-start">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-full border-2 border-primary/80 shadow-[0_0_15px_rgba(226,255,59,0.3)] overflow-hidden bg-black/40 flex items-center justify-center">
-            <Trophy className="w-6 h-6 text-primary" />
-          </div>
-          <div>
-            <div className="text-[10px] font-black text-white/50 tracking-wider uppercase mb-0.5">
-              GLOBAL RANKINGS
-            </div>
-            <h1 className="text-xl font-black italic uppercase leading-none text-white tracking-wide">
-              FIGHTER BOARD
-            </h1>
-          </div>
-        </div>
-
+    <div className="min-h-screen bg-[#0d0d0d] px-4 pb-[calc(210px+env(safe-area-inset-bottom,0px))] pt-3 font-sans text-white">
+      <header className="mx-auto mb-5 flex w-full max-w-[500px] items-center gap-3">
         <button
-          onClick={() => router.back()}
-          className="w-10 h-10 rounded-full border border-white/10 bg-white/5 flex items-center justify-center text-white/60 hover:text-white transition-all"
+          aria-label="Back to sparring"
+          onClick={() => router.push('/spar')}
+          className="flex h-12 w-12 items-center justify-center rounded-full bg-[#242424] text-white/80 transition hover:text-white"
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft className="h-6 w-6" />
         </button>
+        <div className="flex-1">
+          <span className="block text-[12px] font-black uppercase tracking-wider text-primary">LIVE 1V1</span>
+          <h1 className="text-[21px] font-black italic uppercase leading-none">FIND OPPONENT</h1>
+        </div>
+        <span className="rounded-full border border-[#37372f] bg-[#242424] px-3 py-2 text-[11px] font-black uppercase text-[#d0d0b8]">
+          <span className="mr-1 text-primary">●</span> {status?.rankLabel || 'UNRANKED'} {status?.mmr ? `• ${status.mmr} MMR` : ''}
+        </span>
       </header>
 
-      {/* Segmented control tabs */}
-      <div className="flex border border-white/5 bg-white/[0.02] p-1.5 rounded-full select-none gap-1">
-        {[
-          { id: 'streak', label: 'Streak' },
-          { id: 'spar', label: 'Spar 1v1' },
-          { id: 'reflex', label: 'Reflex' },
-          { id: 'combo', label: 'Combo' },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id as any)}
-            className={`flex-1 py-2 text-[9px] font-black uppercase tracking-wider rounded-full transition-all duration-300 ${
-              activeTab === tab.id
-                ? 'bg-primary text-black shadow-[0_4px_12px_rgba(226,255,59,0.25)]'
-                : 'text-white/40 hover:text-white'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      {loading ? (
+        <div className="flex justify-center py-20">
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        </div>
+      ) : (
+        <div className="mx-auto flex w-full max-w-[500px] flex-col gap-5">
+          <GlassCard className="rounded-3xl border-[#35352e] bg-[#1c1c1c] p-7">
+            <div className="flex items-center gap-5">
+              <div className="flex h-[70px] w-[70px] items-center justify-center rounded-2xl border border-[#3b4130] bg-[#292b29]">
+                <Swords className="h-9 w-9 text-primary" />
+              </div>
+              <div className="flex-1">
+                <div className="text-[22px] font-black uppercase leading-tight">{status?.mode === 'paid' ? status.planName : 'Free Spar'}</div>
+                <div className="mt-1 text-[16px] font-black uppercase tracking-wide text-[#d0d0b8]">
+                  {status?.mode === 'paid' ? (status.sparDailyLimit < 0 ? 'Unlimited spars today' : `${status.sparDailyLimit - status.sparDailyUsed} spars remaining`) : '1 free spar available today'}
+                </div>
+              </div>
+              <span className="rounded-md border border-primary/60 bg-primary/10 px-3 py-2 text-[14px] font-black uppercase text-primary">{status?.mode === 'paid' ? 'ACTIVE' : 'FREE'}</span>
+            </div>
 
-      {/* Leaderboard Panel */}
-      <div className="border border-white/5 bg-black/35 rounded-3xl overflow-hidden shadow-2xl">
-        <div className="bg-white/[0.02] px-5 py-4 border-b border-white/5 flex justify-between items-center select-none">
-          <div className="flex items-center gap-2">
-            {activeTab === 'spar' ? <Swords className="w-4 h-4 text-primary" /> : <Trophy className="w-4 h-4 text-primary" />}
-            <span className="text-[10px] font-black text-white tracking-widest uppercase">
-              {activeTab === 'spar' && `Sparring ${sparPeriod.toUpperCase()} (Wins & Win Rate)`}
-              {activeTab === 'reflex' && 'Reaction Tap (Avg Time)'}
-              {activeTab === 'streak' && 'Continuous training streaks'}
-              {activeTab === 'combo' && 'Combo Flash (Avg Score)'}
-            </span>
+            {error && (
+              <div className="flex items-start gap-2 text-[11px] text-red-400 font-semibold">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                {error}
+              </div>
+            )}
+
+            {searching ? (
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-center gap-2 py-4 text-primary font-black uppercase text-xs tracking-widest">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Searching for opponent…
+                </div>
+                <button
+                  type="button"
+                  onClick={cancelSearch}
+                  className="text-[10px] font-black uppercase text-white/50 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-lg px-3 py-2 tracking-widest"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <NeonButton className="mt-7 h-16 w-full text-[18px]" onClick={startSearch}>
+                {(
+                  <>
+                    FIND OPPONENT <Swords className="w-4 h-4 ml-1" />
+                  </>
+                )}
+              </NeonButton>
+            )}
+
+            <div className="mt-6 flex items-center justify-between border-t border-white/[0.08] pt-4 text-[13px] font-black uppercase tracking-wide text-[#d0d0b8]">
+              <span><span className="mr-2 text-primary">●</span>{status?.queueOnline || 0} FIGHTERS SEARCHING</span>
+              <span>EST. WAIT: ~{status?.estimatedWaitSeconds || 12}s</span>
+            </div>
+
+            {status?.mode === 'free' && !status.freeSparAvailable && (
+              <Link
+                href="/subscription"
+                className="text-center text-[10px] font-black text-primary uppercase tracking-widest"
+              >
+                Subscribe for more daily spars →
+              </Link>
+            )}
+          </GlassCard>
+
+          <div className="grid grid-cols-3 gap-2.5">
+            {[
+              { icon: Video, label: 'CAMERA', value: 'Ready (1080p)' },
+              { icon: Mic, label: 'AUDIO', value: 'Active Mic' },
+              { icon: Wifi, label: 'LATENCY', value: '24ms (Ranked)' },
+            ].map(({ icon: Icon, label, value }) => (
+              <div key={label} className="rounded-xl border border-[#35352e] bg-[#191919] px-3 py-4">
+                <div className="flex items-center gap-1 text-[10px] font-black uppercase text-[#d0d0b8]"><Icon className="h-4 w-4 text-primary" />{label}</div>
+                <div className="mt-3 whitespace-nowrap text-[12px] font-bold text-white">{value}</div>
+              </div>
+            ))}
           </div>
 
-          {activeTab === 'spar' ? (
-            <div className="flex items-center bg-black/70 border border-white/10 rounded-lg p-0.5">
-              <button
-                type="button"
-                onClick={() => setSparPeriod('weekly')}
-                className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${
-                  sparPeriod === 'weekly' ? 'bg-primary text-black' : 'text-white/40'
-                }`}
-              >
-                Weekly
-              </button>
-              <button
-                type="button"
-                onClick={() => setSparPeriod('monthly')}
-                className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${
-                  sparPeriod === 'monthly' ? 'bg-primary text-black' : 'text-white/40'
-                }`}
-              >
-                Monthly
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5">
-              <div className={`w-1.5 h-1.5 rounded-full ${errored ? 'bg-red-500' : 'bg-green-500 animate-pulse shadow-[0_0_6px_#22c55e]'}`} />
-              <span className="text-[8px] font-bold text-white/40 uppercase">{errored ? 'OFFLINE' : 'LIVE'}</span>
-            </div>
-          )}
-        </div>
+          {/* Weekly & Monthly Sparring Leaderboard */}
+          <section className="pb-[calc(170px+env(safe-area-inset-bottom,0px))]">
+            <div className="mb-5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Trophy className="h-7 w-7 text-primary" />
+                <span className="text-[22px] font-black uppercase tracking-wide text-[#f1f1ed]">
+                  Spar Leaderboard
+                </span>
+              </div>
 
-        <div className="flex flex-col max-h-[50vh] overflow-y-auto min-h-[220px]">
-          {loading ? (
-            <div className="flex-1 flex flex-col items-center justify-center p-10 text-[10px] font-bold text-white/30 uppercase tracking-[2px]">
-              Syncing with AI Core...
-            </div>
-          ) : errored ? (
-            <div className="flex-1 flex flex-col items-center justify-center p-10 text-[10px] font-bold text-white/30 uppercase tracking-[2px] gap-2">
-              <span>Couldn&apos;t reach the leaderboard.</span>
-              <button onClick={loadAllRankings} className="text-primary underline">Retry</button>
-            </div>
-          ) : activeRankings.length > 0 ? (
-            activeRankings.map((row, idx) => {
-              const rank = idx + 1;
-              const isMe = row.uid ? row.uid === user?.uid : false;
-              const rankTier = activeTab === 'streak' && row.rank_level !== undefined ? getRankInfoByLevel(row.rank_level) : null;
-
-              return (
-                <div
-                  key={row.uid || `${row.name}-${idx}`}
-                  className={`flex justify-between items-center px-5 py-3.5 border-b border-white/[0.02] last:border-0 transition-all duration-150 ${
-                    isMe ? 'bg-primary/10 border-l-4 border-primary pl-4' : ''
+              {/* Period Toggle */}
+              <div className="flex items-center rounded-xl border border-[#35352e] bg-[#242424] p-1">
+                <button
+                  type="button"
+                  onClick={() => setLeaderboardPeriod('weekly')}
+                  className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                    leaderboardPeriod === 'weekly'
+                      ? 'bg-primary text-black shadow-[0_0_10px_rgba(226,255,59,0.5)]'
+                        : 'text-[#d0d0b8] hover:text-white'
                   }`}
                 >
-                  <div className="flex items-center gap-3.5">
-                    <span className={`text-xs font-black w-6 text-center ${
-                      rank === 1
-                        ? 'text-yellow-400 font-black text-sm drop-shadow-[0_0_8px_rgba(250,204,21,0.6)]'
-                        : rank === 2
-                          ? 'text-zinc-300 font-bold'
-                          : rank === 3
-                            ? 'text-amber-600'
-                            : 'text-white/20'
-                    }`}>
-                      {rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank}
-                    </span>
-                    {(activeTab === 'streak' || activeTab === 'spar') && (
-                      <div className="w-7 h-7 rounded-full overflow-hidden bg-white/10 flex items-center justify-center shrink-0">
-                        {row.avatar_url ? (
-                          <img src={row.avatar_url} alt={row.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="text-[9px] font-black text-white/60">{row.name.charAt(0)}</span>
-                        )}
+                  Weekly
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLeaderboardPeriod('monthly')}
+                  className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                    leaderboardPeriod === 'monthly'
+                      ? 'bg-primary text-black shadow-[0_0_10px_rgba(226,255,59,0.5)]'
+                        : 'text-[#d0d0b8] hover:text-white'
+                  }`}
+                >
+                  Monthly
+                </button>
+              </div>
+            </div>
+
+            <div className="mb-5 text-[14px] font-bold uppercase leading-relaxed tracking-wide text-[#d0d0b8]">
+              {leaderboardPeriod === 'weekly'
+                ? '⚡ RESETS EVERY MONDAY · RANKED BY WINS, WR & COMBAT SCORE'
+                : '🏆 RESETS 1ST OF EVERY MONTH · RANKED BY WINS, WR & COMBAT SCORE'}
+            </div>
+
+            {loadingLeaderboard ? (
+              <div className="flex justify-center py-6 text-primary">
+                <Loader2 className="w-5 h-5 animate-spin" />
+              </div>
+            ) : leaderboard.length === 0 ? (
+              <div className="text-center py-6 text-white/30 text-[11px] font-semibold">
+                No matches recorded this {leaderboardPeriod === 'weekly' ? 'week' : 'month'} yet. Be the first to spar!
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3.5">
+                {leaderboard.slice(0, 15).map((row, i) => (
+                  <div
+                    key={row.uid || i}
+                    className={`flex min-h-[105px] items-center justify-between rounded-2xl border px-5 py-4 transition-all ${
+                      i === 0
+                          ? 'border-primary/70 bg-[#1c1c1c]'
+                        : 'border-[#292923] bg-[#1c1c1c]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span
+                        className={`flex h-14 w-14 items-center justify-center rounded-full text-[17px] font-black ${
+                          i === 0
+                            ? 'bg-primary text-black font-black shadow-[0_0_8px_rgba(226,255,59,0.6)]'
+                            : i === 1
+                              ? 'bg-amber-400 text-black'
+                              : i === 2
+                                ? 'bg-orange-500 text-white'
+                                : 'border border-[#35352e] bg-[#292929] text-white/60'
+                        }`}
+                      >
+                        {i + 1}
+                      </span>
+                      <div>
+                        <div className="text-[17px] font-black uppercase tracking-tight text-[#f1f1ed]">
+                          {row.display_name}
+                        </div>
+                        <div className="text-[13px] font-bold uppercase text-[#d0d0b8]">
+                          {row.matches_played} Matches · {row.wins}W - {row.losses}L
+                        </div>
                       </div>
-                    )}
-                    <div className="flex flex-col">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-black text-white/80 uppercase tracking-wide">
-                          {row.name}
+                    </div>
+
+                    <div className="flex items-center gap-2 text-right">
+                      <div className="flex flex-col items-end">
+                        <span className="text-[17px] font-black text-primary">{row.win_rate}% WR</span>
+                        <span className="text-[12px] font-black uppercase text-[#d0d0b8]">
+                          {row.avg_score != null ? `${row.avg_score} Avg Score` : '— Avg Score'}
                         </span>
-                        {rankTier && (
-                          <span className="px-2 py-0.5 text-[7px] font-black rounded uppercase flex items-center gap-1 bg-primary/10 text-primary border border-primary/20">
-                            {rankTier.name}
-                          </span>
-                        )}
                       </div>
-                      {activeTab === 'spar' && row.matches_played !== undefined && (
-                        <span className="text-[8px] text-white/40 font-bold uppercase">
-                          {row.matches_played} Matches · {row.avg_score} Avg Score
-                        </span>
-                      )}
                     </div>
                   </div>
-                  <span className="font-mono text-primary font-black text-xs">
-                    {row.display_val}
-                  </span>
-                </div>
-              );
-            })
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center p-10 text-[10px] font-bold text-white/30 uppercase tracking-[2px]">
-              No entries yet this {sparPeriod}. Be the first on the board.
-            </div>
-          )}
-        </div>
-      </div>
+                ))}
+              </div>
+            )}
+          </section>
 
-      <p className="text-[9px] font-bold text-white/30 uppercase tracking-widest text-center select-none">
-        {activeTab === 'spar' && (sparPeriod === 'weekly' ? 'Weekly Sparring League. Resets every Monday 12:00 AM.' : 'Monthly Sparring Championship. Resets 1st of every month.')}
-        {activeTab === 'reflex' && 'Lower is better. Fastest reaction times globally.'}
-        {activeTab === 'streak' && 'Daily discipline. Longest active training streaks, live from every fighter\'s account.'}
-        {activeTab === 'combo' && 'Memory and speed. Cumulative combo points per level.'}
-      </p>
+          <div className="fixed inset-x-0 bottom-[calc(80px+env(safe-area-inset-bottom,0px))] z-20 border-t border-white/[0.08] bg-[#0d0d0d]/95 px-4 pb-3 pt-3 backdrop-blur-md">
+            <div className="mx-auto flex w-full max-w-[500px] items-center gap-4 rounded-3xl border border-[#35352e] bg-[#1c1c1c] px-5 py-4">
+              <span className="flex h-14 w-14 items-center justify-center rounded-full border border-primary/60 bg-primary/10 text-[17px] font-black text-primary">#{currentRank || '—'}</span>
+              <div className="flex-1">
+                <div className="text-[17px] font-black uppercase text-[#f1f1ed]">YOU</div>
+                <div className="text-[13px] font-bold uppercase text-[#d0d0b8]">Live rank from Supabase</div>
+              </div>
+              <div className="text-right"><div className="text-[17px] font-black text-primary">{status?.rankLabel || 'UNRANKED'}</div><div className="text-[12px] font-black text-[#d0d0b8]">{status?.mmr || '—'} MMR</div></div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-

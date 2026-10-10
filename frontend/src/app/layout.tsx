@@ -4,8 +4,9 @@ import { Suspense } from "react";
 import { Analytics } from "@vercel/analytics/next";
 import { ReferralCapture } from "@/components/ReferralCapture";
 import { GTMPageViewTracker } from "@/components/analytics/GTMPageViewTracker";
-import { GTM_ID } from "@/lib/gtm";
 import "./globals.css";
+
+const GTM_ID = process.env.NEXT_PUBLIC_GTM_ID || "GTM-TWLX8P7R";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://sparai.in"),

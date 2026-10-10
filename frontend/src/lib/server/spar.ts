@@ -1,4 +1,5 @@
 // SERVER-ONLY spar helpers — command sequences, result gating, scoring.
+import { computeSparScoreParts, reflexFromReactionMs } from '@/lib/spar/sparScoring';
 
 export type SparCommandKind = 'punch' | 'defense';
 
@@ -15,6 +16,8 @@ export interface SparCommandResult {
   hit: boolean;
   reactionMs: number | null;
   trackingConfidence?: number;
+  power?: number;
+  form?: number;
 }
 
 export interface SparResultBreakdown {
@@ -25,6 +28,8 @@ export interface SparResultBreakdown {
   avgPower: number | null; // 0-100, peak wrist-speed-derived power on landed punches
   avgForm: number | null; // 0-100, elbow-extension-derived technique quality on landed punches
   reflexScore?: number | null; // 0-100, derived server-side from avgReactionMs so it can't be spoofed client-side
+  accuracy?: number | null; // 0-100, quality-weighted landed share (AI-analysis algo)
+  stability?: number | null; // 0-100, repeatability of landed punches
   score: number;
   perCommand: SparCommandResult[];
 }
@@ -144,25 +149,19 @@ export function validateSparResult(
   return { ok: true, softFlags };
 }
 
-export function computeSparScore(breakdown: SparResultBreakdown): number {
-  const hits = breakdown.hits || 0;
-  const total = Math.max(1, breakdown.commandsResponded || breakdown.perCommand?.length || 1);
-  const accuracy = hits / total;
-  const avg = breakdown.avgReactionMs;
-  const speedFactor = avg == null ? 0.5 : Math.max(0, Math.min(1, (900 - avg) / 700));
-  return Math.round((accuracy * 70 + speedFactor * 30) * 10) / 10;
+/** Same algorithm as AI Video Analysis: accuracy .35 + reflex .25 + power .20 + stability .20. */
+export function computeSparScore(breakdown: SparResultBreakdown, totalCommands?: number): number {
+  return computeSparScoreParts(breakdown.perCommand || [], totalCommands).overall;
 }
 
-/**
- * Reflex score (0-100) for the results screen — computed server-side from
- * avgReactionMs alone (never trusts a client-supplied reflex number) using
- * the same reaction-time-to-quality mapping as the speed component of
- * computeSparScore, just rescaled to a 0-100 display range.
- */
+/** Server-derived component scores, never trusted from the client. */
+export function computeSparParts(breakdown: SparResultBreakdown, totalCommands?: number) {
+  return computeSparScoreParts(breakdown.perCommand || [], totalCommands);
+}
+
+/** Reflex score (0-100) from avgReactionMs, shared with the solo mapping. */
 export function computeReflexScore(avgReactionMs: number | null): number | null {
-  if (avgReactionMs == null) return null;
-  const speedFactor = Math.max(0, Math.min(1, (900 - avgReactionMs) / 700));
-  return Math.round(speedFactor * 100);
+  return reflexFromReactionMs(avgReactionMs);
 }
 
 function clampScore(value: unknown): number | null {
@@ -192,11 +191,14 @@ export function pickWinner(
 ): string {
   const aScore = typeof a.score === 'number' ? a.score : computeSparScore(a);
   const bScore = typeof b.score === 'number' ? b.score : computeSparScore(b);
-  if (aScore === bScore) {
-    const aReact = a.avgReactionMs ?? 9999;
-    const bReact = b.avgReactionMs ?? 9999;
-    if (aReact === bReact) return aUid; // deterministic tie-break
-    return aReact < bReact ? aUid : bUid;
-  }
-  return aScore > bScore ? aUid : bUid;
+  if (aScore !== bScore) return aScore > bScore ? aUid : bUid;
+  // Tie-breakers: more landed punches, higher accuracy, faster reactions.
+  if ((a.hits || 0) !== (b.hits || 0)) return (a.hits || 0) > (b.hits || 0) ? aUid : bUid;
+  const aAcc = a.accuracy ?? -1;
+  const bAcc = b.accuracy ?? -1;
+  if (aAcc !== bAcc) return aAcc > bAcc ? aUid : bUid;
+  const aReact = a.avgReactionMs ?? 9999;
+  const bReact = b.avgReactionMs ?? 9999;
+  if (aReact !== bReact) return aReact < bReact ? aUid : bUid;
+  return aUid;
 }
