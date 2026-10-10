@@ -30,56 +30,56 @@ export const PLANS: Record<PlanId, PlanConfig> = {
   monthly: {
     id: 'monthly',
     name: 'SparAI Monthly',
-    priceInPaise: 62900, // ₹629
+    priceInPaise: 29900, // ₹299
     durationDays: 30,
     dailyAnalysisLimit: 1,
     weeklyPlannerLimit: 1,
     sparDailyLimit: 1,
     isElite: false,
     premiumGuru: false,
-    razorpayPlanId: process.env.RAZORPAY_PLAN_MONTHLY || 'plan_TOsvYdmDfSjY6J',
+    razorpayPlanId: process.env.RAZORPAY_PLAN_MONTHLY || 'plan_Tm6Zzh6ZKz8Smo',
     polarProductId: process.env.POLAR_PRODUCT_MONTHLY || '328ece7e-db19-4f53-b735-b1a52a671b40',
     priceUsd: 6.99,
   },
   monthly_pro: {
     id: 'monthly_pro',
     name: 'SparAI Pro',
-    priceInPaise: 72900, // ₹729
+    priceInPaise: 34900, // ₹349
     durationDays: 30,
     dailyAnalysisLimit: 2,
     weeklyPlannerLimit: 2,
     sparDailyLimit: 2,
     isElite: false,
     premiumGuru: false,
-    razorpayPlanId: process.env.RAZORPAY_PLAN_MONTHLY_PRO || 'plan_TOsxtFg2g3y72B',
+    razorpayPlanId: process.env.RAZORPAY_PLAN_MONTHLY_PRO || 'plan_Tm6adkd1zDSJBx',
     polarProductId: process.env.POLAR_PRODUCT_MONTHLY_PRO || '7310fdcc-5f12-44f3-933d-f94ca81901cb',
     priceUsd: 7.69,
   },
   three_month: {
     id: 'three_month',
     name: 'SparAI Performance — 3 Months',
-    priceInPaise: 162900, // ₹1,629
+    priceInPaise: 88900, // ₹889
     durationDays: 90,
     dailyAnalysisLimit: 3,
     weeklyPlannerLimit: 3,
     sparDailyLimit: 3,
     isElite: false,
     premiumGuru: false,
-    razorpayPlanId: process.env.RAZORPAY_PLAN_THREE_MONTH || 'plan_TOsyUPX0CJPHaN',
+    razorpayPlanId: process.env.RAZORPAY_PLAN_THREE_MONTH || 'plan_Tm6bXwwqhiUAMf',
     polarProductId: process.env.POLAR_PRODUCT_THREE_MONTH || 'be5d8d7b-80a8-41ff-8c53-5ceab93b7860',
     priceUsd: 17.99,
   },
   yearly: {
     id: 'yearly',
     name: 'SparAI Elite — Yearly',
-    priceInPaise: 629000, // ₹6,290
+    priceInPaise: 349900, // ₹3,499
     durationDays: 365,
     dailyAnalysisLimit: -1,
     weeklyPlannerLimit: -1,
     sparDailyLimit: -1,
     isElite: true,
     premiumGuru: true,
-    razorpayPlanId: process.env.RAZORPAY_PLAN_YEARLY || 'plan_TOszduZM7Q3GMC',
+    razorpayPlanId: process.env.RAZORPAY_PLAN_YEARLY || 'plan_Tm6cRrqpJE0V0u',
     polarProductId: process.env.POLAR_PRODUCT_YEARLY || '402ff207-0224-4b0d-b8a7-f0d59e01ad88',
     priceUsd: 64.99,
   },

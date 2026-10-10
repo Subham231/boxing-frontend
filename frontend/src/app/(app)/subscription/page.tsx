@@ -608,10 +608,10 @@ function SubscriptionContent() {
           </div>
           <div className="text-right">
             <span className="text-sm sm:text-base font-black text-primary uppercase">
-              FROM ₹629/MO
+              FROM ₹299/MO
             </span>
             <span className="text-[8px] font-bold text-white/50 uppercase block">
-              24/7 AI COACH (SAVE 94%)
+              24/7 AI COACH (SAVE 96%)
             </span>
           </div>
         </div>

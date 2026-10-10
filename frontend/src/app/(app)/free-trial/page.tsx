@@ -171,7 +171,7 @@ export default function FreeTrialReferralPage() {
             <div>
               <div className="text-xs font-black uppercase text-white tracking-wide">Day 30: Flexible Continuation</div>
               <p className="text-[11px] font-semibold text-white/60 mt-0.5 leading-snug">
-                Continue your championship streak for just ₹629/mo or cancel anytime before Day 30 with zero hassle.
+                Continue your championship streak for just ₹299/mo or cancel anytime before Day 30 with zero hassle.
               </p>
             </div>
           </div>
@@ -205,7 +205,7 @@ export default function FreeTrialReferralPage() {
               ₹0 FOR 30 DAYS
             </span>
             <span className="text-[8px] font-bold text-white/50 uppercase block">
-              THEN ONLY ₹629/MO (SAVE 94%)
+              THEN ONLY ₹299/MO (SAVE 96%)
             </span>
           </div>
         </div>

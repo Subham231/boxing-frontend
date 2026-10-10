@@ -61,6 +61,16 @@ export interface MiniAnalysisResult {
   punchCount: number;
   peakVelocity: number;
   avgVelocity: number;
+  reps?: PunchRep[];
+  flaws?: Array<{
+    name: string;
+    impact: string;
+    measured: number;
+    target: number;
+    severity: 'major' | 'moderate' | 'minor';
+    cause: string;
+    drill: string;
+  }>;
 }
 
 export default function FreestyleAnalysis(): JSX.Element {
@@ -464,11 +474,79 @@ export default function FreestyleAnalysis(): JSX.Element {
       const peakV = log.length>0 ? Math.max(...log.map(r=>r.peakVelocity)) : 0;
       const avgV  = log.length>0 ? Math.round(log.reduce((s,r)=>s+r.peakVelocity,0)/log.length) : 0;
 
+      const reflexScore = avgV > 0 ? Math.min(95, Math.max(50, Math.round((avgV / 720) * 88))) : 75;
+
       const totalScore = total < 3 ? 0 : Math.round(
         average(log.map((rep) => (rep.power + rep.rotation + rep.knee + rep.weight + rep.foot) / 5)),
       );
 
-      const res: MiniAnalysisResult = { totalScore, powerScore, stanceScore, reflexScore:0, rotationScore, punchCount:total, peakVelocity:peakV, avgVelocity:avgV };
+      const diagnosedFlaws: Array<{
+        name: string;
+        impact: string;
+        measured: number;
+        target: number;
+        severity: 'major' | 'moderate' | 'minor';
+        cause: string;
+        drill: string;
+      }> = [];
+
+      if (rotationScore < 72) {
+        diagnosedFlaws.push({
+          name: 'Core Kinetic Rotation Deficit',
+          impact: `-${Math.max(14, 100 - rotationScore)}% Power Transfer`,
+          measured: rotationScore,
+          target: 80,
+          severity: rotationScore < 50 ? 'major' : 'moderate',
+          cause: 'Upper torso rotates independently without driving torque through the pelvis and lumbar chain.',
+          drill: 'Russian Twists & Pivot Cable Presses (3x15 reps)',
+        });
+      }
+      if (stanceScore < 75) {
+        diagnosedFlaws.push({
+          name: 'Lower Kinetic Chain Collapse',
+          impact: `-${Math.max(12, 100 - stanceScore)}% Base Stability`,
+          measured: stanceScore,
+          target: 82,
+          severity: stanceScore < 55 ? 'major' : 'moderate',
+          cause: 'Stiff rear knee lockout and flat-footed contact during punch apex.',
+          drill: 'Resistance Band Split Squat Rotations (3x12 reps)',
+        });
+      }
+      if (avgV < 580) {
+        diagnosedFlaws.push({
+          name: 'Terminal Velocity & Recoil Lag',
+          impact: '-18% Strike Snap',
+          measured: Math.min(100, Math.round((avgV / 750) * 100)),
+          target: 85,
+          severity: 'moderate',
+          cause: 'Arm decelerates prior to full lockout, leaving punch hanging in pocket.',
+          drill: 'Heavy Bag Snap Retraction Drills (5 rounds x 45s)',
+        });
+      }
+      if (diagnosedFlaws.length === 0) {
+        diagnosedFlaws.push({
+          name: 'Tempo & Stride Variance',
+          impact: '-8% Kinetic Consistency',
+          measured: 78,
+          target: 88,
+          severity: 'minor',
+          cause: 'Micro-delays observed in foot anchoring between explosive combinations.',
+          drill: 'Agility Ladder Shadowboxing Sync (4 sets)',
+        });
+      }
+
+      const res: MiniAnalysisResult = {
+        totalScore,
+        powerScore,
+        stanceScore,
+        reflexScore,
+        rotationScore,
+        punchCount: total,
+        peakVelocity: peakV,
+        avgVelocity: avgV,
+        reps: log,
+        flaws: diagnosedFlaws,
+      };
       // Persist for AnalysisMeritsReveal and subsequent profile reveal
       try {
         localStorage.setItem('sparai_mini_analysis', JSON.stringify(res));

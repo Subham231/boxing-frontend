@@ -16,7 +16,16 @@ import {
   Shield,
   ShieldAlert,
   Zap,
-  Play
+  Play,
+  Activity,
+  Flame,
+  TrendingUp,
+  ChevronDown,
+  ChevronUp,
+  Layers,
+  Sparkles,
+  Crosshair,
+  Award
 } from 'lucide-react';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { NeonButton } from '@/components/ui/NeonButton';
@@ -214,71 +223,823 @@ function MeritRing({ label, value, caption }: { label: string; value: number | n
   );
 }
 
-// Per-rep peak strike speed, color-coded by hit/miss. Every bar is a real
-// measured value from that specific rep — nothing here is interpolated.
-function SpeedPowerChart({ log }: { log: RepLogEntry[] }) {
-  if (log.length === 0) return null;
-  const width = 300;
-  const height = 110;
-  const padding = 4;
-  const barGap = 2;
-  const barWidth = (width - padding * 2) / log.length;
-  const maxVelocity = Math.max(...log.map((r) => r.peakVelocity), 100);
+// ─────────────────────────────────────────────────────────────────────────────
+// Dynamic Analysis Visual Components
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface RadarMetric {
+  label: string;
+  value: number;
+  benchmark: number;
+  sub: string;
+}
+
+function BiomechanicalRadarChart({ metrics }: { metrics: RadarMetric[] }) {
+  const [activeIdx, setActiveIdx] = useState<number | null>(null);
+  const size = 300;
+  const center = size / 2;
+  const radius = 92;
+  const count = metrics.length;
+
+  const angleFor = (index: number) => (-Math.PI / 2) + (index * Math.PI * 2) / count;
+  const pointFor = (index: number, scale: number) => {
+    const angle = angleFor(index);
+    const r = radius * Math.min(1.15, Math.max(0.05, scale));
+    return {
+      x: center + Math.cos(angle) * r,
+      y: center + Math.sin(angle) * r,
+    };
+  };
+
+  const userPoints = metrics.map((m, i) => pointFor(i, m.value / 100));
+  const userPath = userPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ') + ' Z';
+
+  const proPoints = metrics.map((m, i) => pointFor(i, m.benchmark / 100));
+  const proPath = proPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ') + ' Z';
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-28" preserveAspectRatio="none">
-      {log.map((r, i) => {
-        const barHeight = Math.max(2, (r.peakVelocity / maxVelocity) * (height - 18));
-        const x = padding + i * barWidth;
-        const y = height - barHeight - 12;
-        return (
-          <rect
-            key={r.index}
-            x={x + barGap / 2}
-            y={y}
-            width={Math.max(1.5, barWidth - barGap)}
-            height={barHeight}
-            rx={1.5}
-            fill={r.hit ? '#e2ff3b' : '#ef4444'}
-            opacity={r.hit ? 0.9 : 0.5}
+    <div className="flex flex-col items-center select-none">
+      <div className="relative w-full max-w-[320px] aspect-square flex items-center justify-center">
+        <svg viewBox={`0 0 ${size} ${size}`} className="w-full h-full overflow-visible">
+          <defs>
+            <radialGradient id="radar-user-glow" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="#e2ff3b" stopOpacity="0.45" />
+              <stop offset="70%" stopColor="#e2ff3b" stopOpacity="0.15" />
+              <stop offset="100%" stopColor="#e2ff3b" stopOpacity="0.02" />
+            </radialGradient>
+            <filter id="radar-glow" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="3" result="blur" />
+              <feComposite in="SourceGraphic" in2="blur" operator="over" />
+            </filter>
+          </defs>
+
+          {/* Web rings */}
+          {[0.33, 0.66, 1.0].map((scale) => {
+            const ringPts = Array.from({ length: count }, (_, i) => pointFor(i, scale))
+              .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
+              .join(' ') + ' Z';
+            return (
+              <path
+                key={scale}
+                d={ringPts}
+                fill="none"
+                stroke="rgba(255,255,255,0.08)"
+                strokeWidth={scale === 1.0 ? "1.5" : "1"}
+                strokeDasharray={scale === 1.0 ? "none" : "3 3"}
+              />
+            );
+          })}
+
+          {/* Axis lines */}
+          {metrics.map((_, i) => {
+            const end = pointFor(i, 1.05);
+            return (
+              <line
+                key={i}
+                x1={center}
+                y1={center}
+                x2={end.x}
+                y2={end.y}
+                stroke="rgba(255,255,255,0.12)"
+                strokeWidth="1"
+              />
+            );
+          })}
+
+          {/* Pro Athlete Benchmark Polygon */}
+          <path
+            d={proPath}
+            fill="rgba(34, 211, 238, 0.05)"
+            stroke="#22d3ee"
+            strokeWidth="1.5"
+            strokeDasharray="4 4"
+            opacity={0.7}
           />
-        );
-      })}
-      <line x1={0} y1={height - 12} x2={width} y2={height - 12} stroke="rgba(255,255,255,0.1)" strokeWidth={1} />
-    </svg>
+
+          {/* User Kinetic Envelope Polygon */}
+          <path
+            d={userPath}
+            fill="url(#radar-user-glow)"
+            stroke="#e2ff3b"
+            strokeWidth="2.5"
+            filter="url(#radar-glow)"
+          />
+
+          {/* User Vertex Nodes */}
+          {userPoints.map((p, i) => (
+            <circle
+              key={i}
+              cx={p.x}
+              cy={p.y}
+              r={activeIdx === i ? 6 : 4}
+              fill={activeIdx === i ? '#ffffff' : '#e2ff3b'}
+              stroke="#000"
+              strokeWidth="2"
+              className="cursor-pointer transition-all duration-200"
+              onClick={() => setActiveIdx(i)}
+            />
+          ))}
+
+          {/* Labels positioned around the chart */}
+          {metrics.map((m, i) => {
+            const labelPos = pointFor(i, 1.26);
+            const isLeft = labelPos.x < center - 10;
+            const isRight = labelPos.x > center + 10;
+            const anchor = isLeft ? 'end' : isRight ? 'start' : 'middle';
+            const isActive = activeIdx === i;
+
+            return (
+              <g
+                key={i}
+                className="cursor-pointer select-none"
+                onClick={() => setActiveIdx(i)}
+              >
+                <text
+                  x={labelPos.x}
+                  y={labelPos.y - 4}
+                  textAnchor={anchor}
+                  className={`text-[8px] font-black uppercase tracking-wider transition-colors ${
+                    isActive ? 'fill-primary' : 'fill-white/80'
+                  }`}
+                >
+                  {m.label}
+                </text>
+                <text
+                  x={labelPos.x}
+                  y={labelPos.y + 7}
+                  textAnchor={anchor}
+                  className="text-[9px] font-mono font-bold fill-primary"
+                >
+                  {Math.round(m.value)}%
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+
+      {/* Benchmark Legend & Active Metric Explainer */}
+      <div className="flex items-center justify-between w-full mt-2 pt-2 border-t border-white/5 px-2 text-[8px] font-mono">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-sm bg-primary/40 border border-primary" />
+            <span className="text-white/70 uppercase">You ({Math.round(metrics.reduce((a, b) => a + b.value, 0) / Math.max(1, metrics.length))}% Avg)</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-0.5 border-b border-dashed border-cyan-400" />
+            <span className="text-cyan-400/80 uppercase">Target (85%)</span>
+          </div>
+        </div>
+        <span className="text-white/40 uppercase">Tap axis for details</span>
+      </div>
+
+      {activeIdx !== null && (
+        <motion.div
+          initial={{ opacity: 0, y: 5 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-3 w-full p-3 rounded-xl bg-primary/5 border border-primary/20 text-left flex justify-between items-center"
+        >
+          <div>
+            <span className="text-[9px] font-black uppercase text-primary tracking-wider block">
+              {metrics[activeIdx].label} Analysis
+            </span>
+            <p className="text-[10px] text-white/70 font-semibold mt-0.5">
+              {metrics[activeIdx].sub}
+            </p>
+          </div>
+          <div className="text-right pl-3 shrink-0">
+            <span className="text-xs font-black font-mono text-white block">
+              {Math.round(metrics[activeIdx].value)}%
+            </span>
+            <span className={`text-[8px] font-bold ${metrics[activeIdx].value >= 80 ? 'text-emerald-400' : metrics[activeIdx].value >= 60 ? 'text-cyan-400' : 'text-amber-400'}`}>
+              {metrics[activeIdx].value >= 80 ? 'Optimal' : metrics[activeIdx].value >= 60 ? 'Developing' : 'Deficit'}
+            </span>
+          </div>
+        </motion.div>
+      )}
+    </div>
   );
 }
 
-// Reaction-time trend across hit reps only (misses have no reaction time to
-// plot). Lower on the chart = slower response, matching intuitive reading.
-function ReactionTrendChart({ log }: { log: RepLogEntry[] }) {
+function InteractiveSpeedPowerChart({ log }: { log: RepLogEntry[] }) {
+  const [selectedRep, setSelectedRep] = useState<RepLogEntry | null>(null);
+  if (log.length === 0) return null;
+
+  const width = 360;
+  const height = 130;
+  const padX = 12;
+  const padY = 16;
+  const maxVel = Math.max(...log.map((r) => r.peakVelocity), 120);
+  const avgVel = Math.round(log.reduce((s, r) => s + r.peakVelocity, 0) / log.length);
+  const peakRep = log.reduce((a, b) => (a.peakVelocity > b.peakVelocity ? a : b), log[0]);
+
+  const points = log.map((r, i) => {
+    const x = padX + (i / Math.max(1, log.length - 1)) * (width - padX * 2);
+    const y = height - padY - (r.peakVelocity / maxVel) * (height - padY * 2);
+    return { x, y, rep: r };
+  });
+
+  const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+  const areaD = `${pathD} L ${points[points.length - 1].x.toFixed(1)} ${height - padY} L ${points[0].x.toFixed(1)} ${height - padY} Z`;
+  const avgY = height - padY - (avgVel / maxVel) * (height - padY * 2);
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex justify-between items-center text-[8px] font-mono text-white/50 px-1">
+        <span className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-primary" /> Strike Velocity ({maxVel}°/s Max)
+        </span>
+        <span className="text-primary font-bold">Avg: {avgVel}°/s</span>
+      </div>
+
+      <div className="relative w-full overflow-hidden rounded-2xl bg-black/40 border border-white/5 p-2.5">
+        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-32 overflow-visible select-none">
+          <defs>
+            <linearGradient id="speed-wave-grad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#e2ff3b" stopOpacity="0.4" />
+              <stop offset="75%" stopColor="#e2ff3b" stopOpacity="0.08" />
+              <stop offset="100%" stopColor="#e2ff3b" stopOpacity="0.0" />
+            </linearGradient>
+          </defs>
+
+          {/* Average speed reference dashed line */}
+          <line
+            x1={padX}
+            y1={avgY}
+            x2={width - padX}
+            y2={avgY}
+            stroke="rgba(255,255,255,0.2)"
+            strokeDasharray="3 3"
+            strokeWidth="1"
+          />
+
+          {/* Area gradient */}
+          <path d={areaD} fill="url(#speed-wave-grad)" />
+
+          {/* Velocity curve */}
+          <path
+            d={pathD}
+            fill="none"
+            stroke="#e2ff3b"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            filter="drop-shadow(0 0 5px rgba(226,255,59,0.5))"
+          />
+
+          {/* Interactive Rep Bars and Nodes */}
+          {points.map((p, i) => {
+            const isPeak = p.rep.index === peakRep.index;
+            const isSelected = selectedRep?.index === p.rep.index;
+            return (
+              <g
+                key={i}
+                className="cursor-pointer"
+                onClick={() => setSelectedRep(p.rep)}
+              >
+                <rect
+                  x={p.x - 2}
+                  y={p.y}
+                  width={4}
+                  height={Math.max(2, height - padY - p.y)}
+                  fill={p.rep.hit ? '#e2ff3b' : '#ef4444'}
+                  opacity={isSelected ? 1 : p.rep.hit ? 0.5 : 0.7}
+                  rx={1.5}
+                />
+                <circle
+                  cx={p.x}
+                  cy={p.y}
+                  r={isSelected ? 5 : isPeak ? 4 : 3}
+                  fill={isSelected ? '#ffffff' : isPeak ? '#e2ff3b' : p.rep.hit ? '#e2ff3b' : '#ef4444'}
+                  stroke="#000"
+                  strokeWidth="1.5"
+                />
+              </g>
+            );
+          })}
+
+          <line
+            x1={padX}
+            y1={height - padY}
+            x2={width - padX}
+            y2={height - padY}
+            stroke="rgba(255,255,255,0.15)"
+            strokeWidth="1"
+          />
+        </svg>
+
+        {/* Selected or Peak Rep Inspector Bar */}
+        {(selectedRep || peakRep) && (
+          <div className="mt-2.5 p-2.5 rounded-xl bg-white/[0.03] border border-white/10 flex items-center justify-between text-[9px] font-mono">
+            <div className="flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+              <span className="text-white font-black uppercase">
+                REP #{(selectedRep || peakRep).index} · {(selectedRep || peakRep).command}
+              </span>
+              <span className={`px-1.5 py-0.5 rounded-full text-[7px] font-black uppercase ${
+                (selectedRep || peakRep).hit ? 'bg-primary/20 text-primary' : 'bg-red-500/20 text-red-400'
+              }`}>
+                {(selectedRep || peakRep).hit ? 'HIT' : 'MISS'}
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-white/60">Speed: <b className="text-primary">{(selectedRep || peakRep).peakVelocity}°/s</b></span>
+              <span className="text-white/60">Power: <b className="text-white">{(selectedRep || peakRep).estimatedPower}%</b></span>
+              {(selectedRep || peakRep).reactionMs !== null && (
+                <span className="text-white/60">Reflex: <b className="text-cyan-400">{(selectedRep || peakRep).reactionMs}ms</b></span>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function InteractiveReactionTrendChart({ log }: { log: RepLogEntry[] }) {
   const hits = log.filter((r) => r.hit && r.reactionMs !== null);
   if (hits.length < 2) return null;
 
-  const width = 300;
-  const height = 90;
-  const padX = 10;
-  const padY = 12;
+  const width = 360;
+  const height = 100;
+  const padX = 12;
+  const padY = 14;
   const values = hits.map((r) => r.reactionMs as number);
-  const maxReaction = Math.max(...values);
-  const minReaction = Math.min(...values);
+  const maxReaction = Math.max(...values, 600);
+  const minReaction = Math.min(...values, 200);
   const range = maxReaction - minReaction || 1;
 
   const points = hits.map((r, i) => {
     const x = padX + (i / (hits.length - 1)) * (width - padX * 2);
-    const norm = (((r.reactionMs as number) - minReaction) / range);
+    const norm = (r.reactionMs as number - minReaction) / range;
     const y = padY + norm * (height - padY * 2);
-    return { x, y };
+    return { x, y, rep: r };
   });
+
   const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+  const avgMs = Math.round(values.reduce((a, b) => a + b, 0) / values.length);
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-24" preserveAspectRatio="none">
-      <path d={pathD} fill="none" stroke="#06b6d4" strokeWidth={2} />
-      {points.map((p, i) => (
-        <circle key={i} cx={p.x} cy={p.y} r={2.5} fill="#06b6d4" />
-      ))}
-    </svg>
+    <div className="flex flex-col gap-2">
+      <div className="flex justify-between items-center text-[8px] font-mono text-white/50 px-1">
+        <span className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-cyan-400" /> Reaction Latency Trend
+        </span>
+        <span className="text-cyan-400 font-bold">Avg Response: {avgMs}ms</span>
+      </div>
+
+      <div className="w-full overflow-hidden rounded-2xl bg-black/40 border border-white/5 p-2.5">
+        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-24 overflow-visible select-none">
+          <path
+            d={pathD}
+            fill="none"
+            stroke="#22d3ee"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            filter="drop-shadow(0 0 5px rgba(34,211,238,0.4))"
+          />
+
+          {points.map((p, i) => (
+            <circle
+              key={i}
+              cx={p.x}
+              cy={p.y}
+              r={3}
+              fill="#22d3ee"
+              stroke="#000"
+              strokeWidth="1.5"
+            />
+          ))}
+        </svg>
+        <div className="flex justify-between text-[7px] font-mono text-white/40 uppercase px-1 mt-1">
+          <span>First Reps ({values[0]}ms)</span>
+          <span className="text-cyan-400">Target: &lt;300ms</span>
+          <span>Final Reps ({values[values.length - 1]}ms)</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InteractiveFlawTeller({
+  hasFlaw,
+  headlineFlaw,
+  advice,
+  detailedFlaws,
+}: {
+  hasFlaw: boolean;
+  headlineFlaw: string;
+  advice: string;
+  detailedFlaws?: DetectedFlaw[];
+}) {
+  const flaws = detailedFlaws || [];
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Flaw Hero Banner */}
+      <div
+        className={`relative overflow-hidden rounded-3xl border p-5 ${
+          hasFlaw
+            ? 'bg-gradient-to-br from-red-500/10 via-black/80 to-black border-red-500/30 shadow-[0_0_25px_rgba(239,68,68,0.15)]'
+            : 'bg-gradient-to-br from-emerald-500/10 via-black/80 to-black border-emerald-500/30 shadow-[0_0_25px_rgba(16,185,129,0.15)]'
+        }`}
+      >
+        <div className="flex items-start gap-3.5">
+          <div
+            className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border ${
+              hasFlaw
+                ? 'bg-red-500/20 border-red-500/40 text-red-400'
+                : 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
+            }`}
+          >
+            {hasFlaw ? <ShieldAlert className="w-5 h-5 animate-pulse" /> : <Shield className="w-5 h-5" />}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between mb-1">
+              <span
+                className={`text-[8px] font-black uppercase tracking-[0.2em] ${
+                  hasFlaw ? 'text-red-400' : 'text-emerald-400'
+                }`}
+              >
+                {hasFlaw ? 'BIOMECHANICAL FLAW DETECTED' : 'CLEAN SESSION CONFIRMED'}
+              </span>
+              <span
+                className={`text-[7px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${
+                  hasFlaw
+                    ? 'bg-red-500/15 border-red-500/30 text-red-400'
+                    : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                }`}
+              >
+                {hasFlaw ? `${flaws.length || 1} ISSUE${flaws.length > 1 ? 'S' : ''}` : 'NO DEFICITS'}
+              </span>
+            </div>
+            <h4 className="text-sm font-black text-white uppercase leading-snug tracking-wide">
+              {headlineFlaw}
+            </h4>
+            <p className="text-[10px] text-white/60 font-semibold mt-1.5 leading-relaxed italic">
+              &ldquo;{advice}&rdquo;
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Evidenced Flaw Deficit Breakdown Cards */}
+      {flaws.length > 0 && (
+        <GlassCard className="p-5 border-white/10 bg-black/45">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <span className="text-[9px] font-black text-primary tracking-widest uppercase block">
+                EVIDENCED FLAW TELLER DIAGNOSTICS
+              </span>
+              <span className="text-[8px] text-white/40 uppercase tracking-wider">
+                Target vs Measured Biomechanics
+              </span>
+            </div>
+            <span className="px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-[7px] font-mono font-black">
+              {flaws.length} MEASURED
+            </span>
+          </div>
+
+          <div className="flex flex-col gap-3.5">
+            {flaws.map((f, idx) => {
+              const deficit = Math.max(0, f.targetValue - f.measuredValue);
+              const deficitPct = f.targetValue > 0 ? Math.round((deficit / f.targetValue) * 100) : 0;
+              const severityColor =
+                f.severity === 'major'
+                  ? 'bg-red-500/15 text-red-400 border-red-500/30'
+                  : f.severity === 'moderate'
+                  ? 'bg-orange-500/15 text-orange-400 border-orange-500/30'
+                  : 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30';
+
+              return (
+                <div
+                  key={`${f.techniqueLabel}-${idx}`}
+                  className="rounded-2xl border border-white/5 bg-white/[0.02] p-4 flex flex-col gap-2.5 transition-all hover:border-white/10"
+                >
+                  {/* Flaw Card Header */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black text-white uppercase tracking-wide">
+                        {f.techniqueLabel}
+                      </span>
+                      <span className="text-[8px] text-white/40 font-mono">
+                        ({f.sampleSize} rep{f.sampleSize !== 1 ? 's' : ''})
+                      </span>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest border ${severityColor}`}>
+                      {f.severity}
+                    </span>
+                  </div>
+
+                  {/* Deficit Comparison Bar */}
+                  <div className="bg-black/60 rounded-xl p-3 border border-white/5 flex flex-col gap-1.5">
+                    <div className="flex justify-between items-center text-[8px] font-mono">
+                      <span className="text-white/60">
+                        Measured: <b className="text-white font-black">{f.measuredValue}%</b>
+                      </span>
+                      <span className="text-cyan-400">
+                        Target Standard: <b className="font-black">{f.targetValue}%</b>
+                      </span>
+                      {deficit > 0 && (
+                        <span className="text-red-400 font-bold">
+                          -{deficitPct}% Deficit
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="relative h-2.5 w-full bg-white/5 rounded-full overflow-hidden">
+                      {/* Target Indicator line */}
+                      <div
+                        className="absolute top-0 bottom-0 w-0.5 bg-cyan-400 z-10"
+                        style={{ left: `${Math.min(100, f.targetValue)}%` }}
+                        title={`Target: ${f.targetValue}%`}
+                      />
+                      {/* User measured bar */}
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          f.measuredValue >= f.targetValue
+                            ? 'bg-emerald-400'
+                            : f.severity === 'major'
+                            ? 'bg-gradient-to-r from-red-600 to-rose-400'
+                            : 'bg-gradient-to-r from-amber-500 to-yellow-400'
+                        }`}
+                        style={{ width: `${Math.min(100, f.measuredValue)}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Mechanical Cause */}
+                  <p className="text-[10px] text-white/70 font-semibold leading-relaxed">
+                    {f.cause}
+                  </p>
+
+                  {/* Tactical Prescription Box */}
+                  <div className="rounded-xl bg-primary/[0.04] border border-primary/20 p-2.5 flex flex-col gap-1 text-[9px]">
+                    <div className="flex items-center gap-1.5 text-primary font-black uppercase tracking-wider">
+                      <Zap className="w-3 h-3 shrink-0" /> FIX: {f.coachingTip}
+                    </div>
+                    <div className="text-white/60 font-semibold">
+                      <b className="text-white">DRILL:</b> {f.correctiveExercise} · <span className="text-white/40">{f.recommendedFrequency}</span>
+                    </div>
+                    <div className="text-white/40 text-[8px]">
+                      <b className="text-white/60">GOAL:</b> {f.progressionTarget}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </GlassCard>
+      )}
+    </div>
+  );
+}
+
+function DiagnosticFaultMatrix({ mistakes }: { mistakes: string[] }) {
+  if (!mistakes || mistakes.length === 0) return null;
+
+  return (
+    <GlassCard className="p-5 border-white/5 bg-black/40">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-[9px] font-black text-primary tracking-widest uppercase block">
+          Session Fault Telemetry
+        </span>
+        <span className="text-[8px] text-white/40 uppercase tracking-wider">
+          {mistakes.length} Items Identified
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        {mistakes.map((m: string, i: number) => {
+          const isMiss = m.toLowerCase().includes('missed');
+          const isSlow = m.toLowerCase().includes('slowest') || m.toLowerCase().includes('reaction');
+          const isTorso = m.toLowerCase().includes('rotation') || m.toLowerCase().includes('shoulder');
+          const isKnee = m.toLowerCase().includes('knee') || m.toLowerCase().includes('leg');
+          const isWeight = m.toLowerCase().includes('weight') || m.toLowerCase().includes('pivot');
+          const isTrajectory = m.toLowerCase().includes('trajectory') || m.toLowerCase().includes('wrong shape');
+
+          const category = isMiss
+            ? 'MISSED CALL'
+            : isSlow
+            ? 'TIMING DELAY'
+            : isTorso
+            ? 'TORSO ROTATION'
+            : isKnee
+            ? 'KNEE DRIVE'
+            : isWeight
+            ? 'WEIGHT SHIFT'
+            : isTrajectory
+            ? 'TRAJECTORY PATH'
+            : 'TECHNIQUE GAP';
+
+          return (
+            <div
+              key={i}
+              className="p-3 rounded-xl border border-white/5 bg-white/[0.02] flex items-start gap-2.5"
+            >
+              <div className="w-2 h-2 rounded-full bg-red-400 mt-1 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <span className="text-[7px] font-black uppercase text-red-400 tracking-wider block mb-0.5">
+                  {category}
+                </span>
+                <p className="text-[10px] text-white/70 font-semibold leading-snug">
+                  {m}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </GlassCard>
+  );
+}
+
+function TechniqueComparisonMatrix({
+  techniqueSummaries,
+}: {
+  techniqueSummaries?: Array<{ label: string; avgScore: number; sampleSize: number }>;
+}) {
+  if (!techniqueSummaries || techniqueSummaries.length === 0) return null;
+
+  return (
+    <GlassCard className="p-5 border-white/5 bg-black/40">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-[9px] font-black text-primary tracking-widest uppercase block">
+          Technique Attainment Matrix
+        </span>
+        <span className="text-[8px] text-white/40 uppercase tracking-wider">
+          Biomechanics by Weapon
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-2.5">
+        {techniqueSummaries.map((t, idx) => {
+          const score = Math.round(t.avgScore);
+          const isTop = idx === 0 && score >= 75;
+          const isBottom = idx === techniqueSummaries.length - 1 && score < 60;
+
+          return (
+            <div
+              key={idx}
+              className="p-3 rounded-xl bg-white/[0.02] border border-white/5 flex flex-col gap-1.5"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-black text-white uppercase tracking-wide">
+                    {t.label}
+                  </span>
+                  <span className="text-[7px] font-mono text-white/40">
+                    ({t.sampleSize} rep{t.sampleSize !== 1 ? 's' : ''})
+                  </span>
+                  {isTop && (
+                    <span className="px-1.5 py-0.5 rounded-full text-[6px] font-black uppercase bg-emerald-500/15 text-emerald-400">
+                      LEAD WEAPON
+                    </span>
+                  )}
+                  {isBottom && (
+                    <span className="px-1.5 py-0.5 rounded-full text-[6px] font-black uppercase bg-orange-500/15 text-orange-400">
+                      ATTENTION
+                    </span>
+                  )}
+                </div>
+                <span className="text-[10px] font-mono font-black text-primary">
+                  {score}%
+                </span>
+              </div>
+
+              <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${
+                    score >= 75 ? 'bg-primary' : score >= 50 ? 'bg-cyan-400' : 'bg-red-400'
+                  }`}
+                  style={{ width: `${Math.min(100, Math.max(0, score))}%` }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </GlassCard>
+  );
+}
+
+function InteractiveRepLog({ log }: { log: RepLogEntry[] }) {
+  const [filter, setFilter] = useState<'all' | 'hits' | 'misses' | 'wrong'>('all');
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+
+  if (log.length === 0) return null;
+
+  const hits = log.filter((r) => r.hit);
+  const misses = log.filter((r) => !r.hit);
+  const wrongPaths = log.filter((r) => r.hit && r.kind === 'punch' && !r.trajectoryMatch);
+
+  const filtered = filter === 'hits'
+    ? hits
+    : filter === 'misses'
+    ? misses
+    : filter === 'wrong'
+    ? wrongPaths
+    : log;
+
+  return (
+    <GlassCard className="p-5 border-white/5 bg-black/40">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-[9px] font-black text-primary tracking-widest uppercase block">
+          Telemetry Rep Inspector
+        </span>
+        <span className="text-[8px] text-white/40 uppercase tracking-wider">
+          {log.length} Total Reps Logged
+        </span>
+      </div>
+
+      {/* Filter Tabs */}
+      <div className="flex gap-1.5 mb-3 overflow-x-auto pb-1">
+        {[
+          { id: 'all', label: `ALL (${log.length})` },
+          { id: 'hits', label: `HITS (${hits.length})` },
+          { id: 'misses', label: `MISSES (${misses.length})` },
+          { id: 'wrong', label: `WRONG PATH (${wrongPaths.length})` },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setFilter(tab.id as any)}
+            className={`px-2.5 py-1 rounded-full text-[8px] font-black uppercase tracking-wider transition-all whitespace-nowrap ${
+              filter === tab.id
+                ? 'bg-primary text-black font-black'
+                : 'bg-white/5 text-white/50 hover:text-white'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Rep List */}
+      <div className="flex flex-col gap-1.5 max-h-[320px] overflow-y-auto pr-1">
+        {filtered.map((r: RepLogEntry) => {
+          const isExpanded = expandedIndex === r.index;
+          return (
+            <div
+              key={r.index}
+              onClick={() => setExpandedIndex(isExpanded ? null : r.index)}
+              className={`p-3 rounded-xl border text-[10px] font-bold cursor-pointer transition-all ${
+                r.hit ? 'bg-white/[0.02] border-white/5 hover:border-white/15' : 'bg-red-500/[0.03] border-red-500/10'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-white/30 font-mono w-5">{r.index}.</span>
+                  <span className="text-white/80 uppercase tracking-wide">{r.command}</span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded-full text-[7px] uppercase tracking-widest ${
+                      r.hit ? 'bg-primary/15 text-primary' : 'bg-red-500/15 text-red-400'
+                    }`}
+                  >
+                    {r.hit ? 'HIT' : 'MISS'}
+                  </span>
+                  {r.hit && r.kind === 'punch' && !r.trajectoryMatch && (
+                    <span className="px-1.5 py-0.5 rounded-full text-[7px] uppercase tracking-widest bg-orange-500/15 text-orange-400">
+                      WRONG PATH
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3 text-white/50 font-mono text-[9px]">
+                  <span>{r.peakVelocity}°/s</span>
+                  <span>{r.estimatedPower}% pwr</span>
+                  <span>{r.reactionMs !== null ? `${r.reactionMs}ms` : '—'}</span>
+                  {isExpanded ? <ChevronUp className="w-3.5 h-3.5 text-primary" /> : <ChevronDown className="w-3.5 h-3.5 text-white/30" />}
+                </div>
+              </div>
+
+              {/* Expanded Kinetic Detail Drawer */}
+              {isExpanded && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  className="mt-2.5 pt-2.5 border-t border-white/5 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[8px] font-mono"
+                >
+                  <div className="bg-black/40 p-2 rounded-lg">
+                    <span className="text-white/40 uppercase block">Torso Rotation</span>
+                    <span className="text-primary font-black text-[10px]">{r.torsoRotationScore}%</span>
+                  </div>
+                  <div className="bg-black/40 p-2 rounded-lg">
+                    <span className="text-white/40 uppercase block">Hip Rotation</span>
+                    <span className="text-primary font-black text-[10px]">{r.hipRotationScore}%</span>
+                  </div>
+                  <div className="bg-black/40 p-2 rounded-lg">
+                    <span className="text-white/40 uppercase block">Knee Drive</span>
+                    <span className="text-white font-black text-[10px]">{r.kneeDriveScore}%</span>
+                  </div>
+                  <div className="bg-black/40 p-2 rounded-lg">
+                    <span className="text-white/40 uppercase block">Rear Foot Pivot</span>
+                    <span className="text-white font-black text-[10px]">{r.footPivotScore}%</span>
+                  </div>
+                </motion.div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </GlassCard>
   );
 }
 
@@ -1792,6 +2553,7 @@ export default function VisionPage() {
     // through), so they're computed over punchHits, not all hits.
     let avgKneeDrive = 0, avgWeightTransfer = 0, avgFootPivot = 0, avgRotation = 0, trajectoryAccuracy = 0;
     let avgHipRotation = 0, avgTorsoRotation = 0;
+    let findings: Array<{ metric: FlawMetric; msg: string; flaw: string; advice: string; att: ReturnType<typeof targetAttainment> }> = [];
     if (punchHits.length > 0) {
       const weakestStrike = punchHits.reduce((a, b) => (a.peakVelocity < b.peakVelocity ? a : b));
       if (weakestStrike.peakVelocity < POWER_REFERENCE_VELOCITY * 0.35) {
@@ -1820,7 +2582,7 @@ export default function VisionPage() {
         { metric: 'footPivotScore', msg: 'Rear foot barely pivoted — let your back heel rotate so your hips can fully turn into the punch.', flaw: 'Rear foot pivot was minimal.', advice: 'Let your back heel rotate so your hips can fully turn into the punch.' },
         { metric: 'estimatedPower', msg: 'Strike speed stayed on the slow side for your power punches — snap through the extension.', flaw: 'Strike speed stayed on the slower side throughout.', advice: 'Snap through the extension instead of pushing the arm out.' },
       ];
-      const findings = chainChecks
+      findings = chainChecks
         .map((c) => ({ ...c, att: targetAttainment(chainRepsForAttainment, c.metric) }))
         .filter((c) => c.att !== null && c.att.ratio < CHAIN_WEAK_RATIO)
         .sort((a, b) => (a.att!.ratio - b.att!.ratio))
@@ -1880,6 +2642,82 @@ export default function VisionPage() {
     // engine has too little data — e.g. under MIN_SAMPLE_SIZE reps per
     // technique — to make a confident call).
     const detailedFlaws: DetectedFlaw[] = topSessionFlaws(chainRepsForAttainment, 5);
+
+    // Merge session-wide kinetic chain findings if not already captured
+    if (findings.length > 0) {
+      for (const f of findings) {
+        const alreadyCovered = detailedFlaws.some((df) => df.metric === f.metric);
+        if (!alreadyCovered) {
+          const ratio = f.att ? f.att.ratio : 0.45;
+          const measuredVal = Math.round(ratio * (f.metric === 'footPivotScore' ? 40 : f.metric === 'kneeDriveScore' ? 55 : 55));
+          const targetVal = f.metric === 'footPivotScore' ? 40 : f.metric === 'kneeDriveScore' ? 55 : 55;
+          detailedFlaws.push({
+            techniqueLabel: f.metric === 'torsoRotationScore' ? 'Torso Rotation'
+              : f.metric === 'hipRotationScore' ? 'Hip Rotation'
+              : f.metric === 'kneeDriveScore' ? 'Knee Drive'
+              : f.metric === 'weightTransferScore' ? 'Weight Transfer'
+              : f.metric === 'footPivotScore' ? 'Rear Foot Pivot'
+              : 'Strike Power',
+            metric: f.metric,
+            measuredValue: measuredVal,
+            targetValue: targetVal,
+            severity: ratio < 0.45 ? 'major' : 'moderate',
+            cause: f.msg,
+            coachingTip: f.advice,
+            correctiveExercise: f.metric === 'hipRotationScore' ? 'Rear Hip-Lead Power Cross Drill'
+              : f.metric === 'torsoRotationScore' ? 'Torso Rotation & Pivot Hook Drill'
+              : f.metric === 'kneeDriveScore' ? 'Leg-Drive Dip-and-Push Uppercut Drill'
+              : f.metric === 'weightTransferScore' ? 'Weight Transfer Stepping Drill'
+              : f.metric === 'footPivotScore' ? 'Rear Heel Rotation & Pivot Drill'
+              : 'Speed Snap & Extension Drill',
+            recommendedFrequency: '3 sets x 15 reps, 3x/week',
+            progressionTarget: `Reach target of ${targetVal}%+ across all combinations`,
+            sampleSize: f.att ? f.att.samples : punchHits.length,
+          });
+        }
+      }
+    }
+
+    // Check for missed commands or reaction delays if kinetic chain was clean
+    if (!isFreestyle) {
+      if (missCountRef.current > 0 && accuracy < 75) {
+        const missedPill = detailedFlaws.some((df) => df.techniqueLabel === 'Command Cadence');
+        if (!missedPill) {
+          detailedFlaws.push({
+            techniqueLabel: 'Command Cadence',
+            metric: 'trajectoryMatchRate',
+            measuredValue: accuracy,
+            targetValue: 85,
+            severity: accuracy < 55 ? 'major' : 'moderate',
+            cause: `${missCountRef.current} called strike${missCountRef.current !== 1 ? 's' : ''} went unanswered inside the reaction window.`,
+            coachingTip: 'Commit immediately to each call without second-guessing your stance.',
+            correctiveExercise: 'Fast-Call Reaction Drill',
+            recommendedFrequency: '3 sets x 20 reps, 3x/week',
+            progressionTarget: 'Reach 85%+ command accuracy on coached rounds',
+            sampleSize: totalAttempts,
+          });
+        }
+      }
+      if (avgReaction && avgReaction > 520) {
+        const reflexPill = detailedFlaws.some((df) => df.techniqueLabel === 'Reflex Latency');
+        if (!reflexPill) {
+          detailedFlaws.push({
+            techniqueLabel: 'Reflex Latency',
+            metric: 'estimatedPower',
+            measuredValue: reflexScore,
+            targetValue: 80,
+            severity: avgReaction > 650 ? 'major' : 'moderate',
+            cause: `Average reaction time ran high at ${avgReaction}ms relative to call cadence.`,
+            coachingTip: 'Keep your hands in a high, relaxed guard to release immediately on audio cues.',
+            correctiveExercise: 'Audio-Cue Snap Drill',
+            recommendedFrequency: '3 sets x 15 reps, 3x/week',
+            progressionTarget: 'Lower average reaction time under 350ms',
+            sampleSize: reactionTimesRef.current.length,
+          });
+        }
+      }
+    }
+
     const techniqueSummaries = summarizeTechniques(chainRepsForAttainment);
 
     // --- New merits (Overall/Power/Reflex above keep their existing formulas)
@@ -1905,6 +2743,10 @@ export default function VisionPage() {
       flawFound = true;
       flaw = `${top.techniqueLabel}: ${top.cause}`;
       advice = top.coachingTip;
+    } else {
+      flawFound = false;
+      flaw = 'Clean session across all metrics — tracking, kinetic chain, and response times were solid.';
+      advice = 'Keep this level of consistency and push for higher speed next session.';
     }
 
     setResultsData({
@@ -2768,23 +3610,39 @@ export default function VisionPage() {
                 <span className="text-[9px] font-black text-primary tracking-[3px] uppercase block mb-1">
                   SESSION SUMMARY
                 </span>
-                <h1 className="text-xl font-black italic uppercase text-white leading-none">
+                <h1 className="text-xl sm:text-2xl font-black italic uppercase text-white leading-none">
                   BIOMECHANICAL INTEL
                 </h1>
               </div>
-              <div className="px-3.5 py-1.5 rounded-full bg-primary/10 border border-primary/30 text-primary text-[9px] font-black tracking-widest uppercase">
-                ON-DEVICE
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-white/60 text-[8px] font-mono font-bold uppercase">
+                  {resultsData.isFreestyle ? 'FREESTYLE' : modeRef.current.toUpperCase()}
+                </span>
+                <div className="px-3 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[8px] font-black tracking-widest uppercase">
+                  ON-DEVICE
+                </div>
               </div>
             </header>
 
+            {/* ── 1. Overall Performance GlassCard ── */}
             <GlassCard className="p-6 border-primary/20 bg-black/40">
-              <div className="text-left mb-4 pb-4 border-b border-white/5">
-                <span className="text-[9px] font-black text-primary tracking-widest uppercase block mb-1">
-                  Overall Performance
-                </span>
-                <h3 className="text-2xl font-black uppercase text-white leading-none italic">
-                  {resultsData.overallScore >= 80 ? 'STRONG SESSION' : resultsData.overallScore >= 55 ? 'SOLID EFFORT' : 'NEEDS WORK'}
-                </h3>
+              <div className="text-left mb-4 pb-4 border-b border-white/5 flex items-end justify-between">
+                <div>
+                  <span className="text-[9px] font-black text-primary tracking-widest uppercase block mb-1">
+                    Overall Performance
+                  </span>
+                  <h3 className="text-2xl sm:text-3xl font-black uppercase text-white leading-none italic">
+                    {resultsData.overallScore >= 80 ? 'STRONG SESSION' : resultsData.overallScore >= 55 ? 'SOLID EFFORT' : 'NEEDS WORK'}
+                  </h3>
+                </div>
+                <div className="text-right">
+                  <span className="text-3xl font-black font-mono text-primary leading-none">
+                    {resultsData.overallScore}%
+                  </span>
+                  <span className="text-[7px] text-white/40 uppercase tracking-widest block mt-0.5">
+                    COMBAT RATING
+                  </span>
+                </div>
               </div>
 
               <div className="grid grid-cols-3 sm:grid-cols-5 gap-2.5 mt-2">
@@ -2808,7 +3666,7 @@ export default function VisionPage() {
                   ? [
                       { val: `${resultsData.hits}`, label: 'Punches Thrown' },
                       { val: `${resultsData.kneeDriveScore}%`, label: 'Knee Drive' },
-                      { val: `${resultsData.weightTransferScore}%`, label: 'Weight Transfer' },
+                      { val: `${resultsData.weightTransferScore}%`, label: 'Weight Shift' },
                       { val: `${resultsData.stanceScore}%`, label: 'Tracking' },
                     ]
                   : [
@@ -2819,7 +3677,7 @@ export default function VisionPage() {
                     ]
                 ).map((pill, idx) => (
                   <div key={idx} className="bg-white/[0.01] border border-white/5 rounded-2xl py-2.5 text-center">
-                    <div className="text-xs font-black text-primary leading-none mb-0.5">
+                    <div className="text-xs font-black text-primary leading-none mb-0.5 font-mono">
                       {pill.val}
                     </div>
                     <span className="text-[6px] font-black text-white/40 uppercase tracking-widest block">
@@ -2830,127 +3688,136 @@ export default function VisionPage() {
               </div>
             </GlassCard>
 
-            <div
-              className={`flex items-center gap-3 p-4 rounded-2xl border ${
-                resultsData.hasFlaw ? 'bg-red-500/[0.02] border-red-500/10' : 'bg-emerald-500/[0.03] border-emerald-500/20'
-              }`}
-            >
-              <AlertTriangle className={`w-5 h-5 flex-shrink-0 ${resultsData.hasFlaw ? 'text-red-500' : 'text-emerald-500'}`} />
-              <div>
-                <span
-                  className={`text-[7px] font-black uppercase tracking-widest block mb-0.5 ${
-                    resultsData.hasFlaw ? 'text-red-500' : 'text-emerald-500'
-                  }`}
-                >
-                  {resultsData.hasFlaw ? 'BIGGEST OPPORTUNITY' : 'CLEAN SESSION'}
-                </span>
-                <p className="text-xs font-bold text-white/80 leading-normal">
-                  {resultsData.flaw}
-                </p>
+            {/* ── 2. Biomechanical Hexagon Radar Chart ── */}
+            <GlassCard className="p-5 border-primary/20 bg-black/45 overflow-hidden">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <span className="text-[9px] font-black text-primary tracking-widest uppercase block">
+                    KINETIC MOTION SIGNATURE
+                  </span>
+                  <span className="text-[8px] text-white/40 uppercase tracking-wider">
+                    6-Axis Pose Landmark Envelope vs 85% Pro Baseline
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/25 text-primary text-[7px] font-black uppercase tracking-wider">
+                  <Activity className="w-3 h-3" /> RADAR MATRIX
+                </div>
               </div>
-            </div>
 
+              <BiomechanicalRadarChart
+                metrics={[
+                  {
+                    label: 'Power',
+                    value: resultsData.powerScore,
+                    benchmark: 85,
+                    sub: 'Peak angular extension speed of the elbow joint',
+                  },
+                  {
+                    label: 'Torso',
+                    value: resultsData.torsoRotationScore ?? resultsData.rotationScore ?? 0,
+                    benchmark: 85,
+                    sub: 'Shoulder-line rotation angle turning into the strike',
+                  },
+                  {
+                    label: 'Hip',
+                    value: resultsData.hipRotationScore ?? resultsData.rotationScore ?? 0,
+                    benchmark: 85,
+                    sub: 'Rear hip opening & pelvic rotation carrying bodyweight',
+                  },
+                  {
+                    label: 'Knee',
+                    value: resultsData.kneeDriveScore ?? 0,
+                    benchmark: 80,
+                    sub: 'Lower limb spring and vertical push-off off back foot',
+                  },
+                  {
+                    label: 'Transfer',
+                    value: resultsData.weightTransferScore ?? 0,
+                    benchmark: 80,
+                    sub: 'Horizontal center-of-mass shift forward into strike',
+                  },
+                  {
+                    label: resultsData.isFreestyle ? 'Pivot' : 'Reflex',
+                    value: resultsData.isFreestyle
+                      ? (resultsData.footPivotScore ?? 0)
+                      : (resultsData.reflexScore ?? resultsData.footPivotScore ?? 0),
+                    benchmark: 85,
+                    sub: resultsData.isFreestyle
+                      ? 'Rear heel rotation allowing complete hip extension'
+                      : 'Response latency between audio trigger and strike launch',
+                  },
+                ]}
+              />
+            </GlassCard>
+
+            {/* ── 3. Evidenced Flaw Teller Diagnostic Suite ── */}
+            <InteractiveFlawTeller
+              hasFlaw={resultsData.hasFlaw}
+              headlineFlaw={resultsData.flaw}
+              advice={resultsData.advice}
+              detailedFlaws={resultsData.detailedFlaws}
+            />
+
+            {/* ── 4. Strike Speed Per Rep & Reaction Time Waveforms ── */}
+            {resultsData.log && resultsData.log.length > 0 && (
+              <GlassCard className="p-5 border-white/5 bg-black/40 flex flex-col gap-5">
+                <div>
+                  <span className="text-[9px] font-black text-primary tracking-widest uppercase block mb-0.5">
+                    Strike Velocity &amp; Power Waveform
+                  </span>
+                  <p className="text-[8px] text-white/40 uppercase tracking-wider mb-3">
+                    Every rep tracked from MediaPipe Landmark displacement · Tap any bar to inspect
+                  </p>
+                  <InteractiveSpeedPowerChart log={resultsData.log} />
+                </div>
+
+                {resultsData.log.filter((r: RepLogEntry) => r.hit && r.reactionMs !== null).length >= 2 && (
+                  <div className="pt-4 border-t border-white/5">
+                    <span className="text-[9px] font-black text-cyan-400 tracking-widest uppercase block mb-0.5">
+                      Reaction Cadence Response Curve
+                    </span>
+                    <p className="text-[8px] text-white/40 uppercase tracking-wider mb-3">
+                      Reaction time (ms) from audio command onset to full elbow extension
+                    </p>
+                    <InteractiveReactionTrendChart log={resultsData.log} />
+                  </div>
+                )}
+              </GlassCard>
+            )}
+
+            {/* ── 5. Technique Attainment Matrix ── */}
+            {resultsData.techniqueSummaries && resultsData.techniqueSummaries.length > 0 && (
+              <TechniqueComparisonMatrix techniqueSummaries={resultsData.techniqueSummaries} />
+            )}
+
+            {/* ── 6. Session Fault Telemetry (Replaces plain text bullet list) ── */}
             {resultsData.mistakes && resultsData.mistakes.length > 0 && (
-              <GlassCard className="p-5 border-white/5 bg-black/40">
-                <span className="text-[9px] font-black text-primary tracking-widest uppercase block mb-3">
-                  What Went Wrong
-                </span>
-                <ul className="flex flex-col gap-2.5">
-                  {resultsData.mistakes.map((m: string, i: number) => (
-                    <li key={i} className="flex items-start gap-2 text-[11px] text-white/60 font-semibold leading-snug">
-                      <span className="text-red-500 mt-0.5">•</span>
-                      <span>{m}</span>
-                    </li>
-                  ))}
-                </ul>
-              </GlassCard>
+              <DiagnosticFaultMatrix mistakes={resultsData.mistakes} />
             )}
 
-            {resultsData.detailedFlaws && resultsData.detailedFlaws.length > 0 && (
-              <GlassCard className="p-5 border-white/5 bg-black/40">
-                <span className="text-[9px] font-black text-primary tracking-widest uppercase block mb-1">
-                  Detailed Flaw Breakdown
-                </span>
-                <p className="text-[8px] text-white/30 uppercase tracking-wider mb-3">
-                  Ranked by severity — each one matched against measured technique, not guessed
-                </p>
-                <div className="flex flex-col gap-3">
-                  {resultsData.detailedFlaws.map((f: DetectedFlaw, idx: number) => (
-                    <div key={idx} className="bg-white/[0.02] border border-white/5 rounded-2xl p-3.5">
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-[10px] font-black text-white uppercase tracking-wide">
-                          {f.techniqueLabel}
-                        </span>
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest ${
-                            f.severity === 'major'
-                              ? 'bg-red-500/15 text-red-400'
-                              : f.severity === 'moderate'
-                              ? 'bg-orange-500/15 text-orange-400'
-                              : 'bg-yellow-500/15 text-yellow-400'
-                          }`}
-                        >
-                          {f.severity}
-                        </span>
-                      </div>
-                      <p className="text-[10px] text-white/60 leading-snug mb-2">
-                        {f.cause}{' '}
-                        <span className="text-white/30">
-                          (measured {f.measuredValue}% vs target {f.targetValue}%, over {f.sampleSize} reps)
-                        </span>
-                      </p>
-                      <p className="text-[10px] font-bold text-primary leading-snug mb-1">
-                        Fix: {f.coachingTip}
-                      </p>
-                      <p className="text-[9px] text-white/40 leading-snug">
-                        Drill: {f.correctiveExercise} — {f.recommendedFrequency}
-                      </p>
-                      <p className="text-[9px] text-white/30 leading-snug mt-0.5">
-                        Target: {f.progressionTarget}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </GlassCard>
-            )}
-
-            {resultsData.techniqueSummaries && resultsData.techniqueSummaries.length > 1 && (
-              <GlassCard className="p-5 border-white/5 bg-black/40">
-                <span className="text-[9px] font-black text-primary tracking-widest uppercase block mb-3">
-                  Strongest / Weakest Techniques
-                </span>
-                <div className="flex flex-col gap-1.5">
-                  {resultsData.techniqueSummaries.map((t: any, idx: number) => (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between px-3 py-2 rounded-xl bg-white/[0.02] border border-white/5"
-                    >
-                      <span className="text-[10px] font-bold text-white/80 uppercase tracking-wide">
-                        {idx === 0 ? '💪 ' : idx === resultsData.techniqueSummaries.length - 1 ? '⚠️ ' : ''}
-                        {t.label}
-                      </span>
-                      <span className="text-[10px] font-black text-primary">{t.avgScore}%</span>
-                    </div>
-                  ))}
-                </div>
-              </GlassCard>
-            )}
-
+            {/* ── 7. Full-Body Biomechanics Kinetic Gauges ── */}
             {resultsData.log && resultsData.log.length > 0 && (
               <GlassCard className="p-5 border-white/5 bg-black/40">
-                <span className="text-[9px] font-black text-primary tracking-widest uppercase block mb-1">
-                  Full-Body Biomechanics
-                </span>
-                <p className="text-[8px] text-white/30 uppercase tracking-wider mb-3">
-                  Measured from real landmark motion, not estimated
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[9px] font-black text-primary tracking-widest uppercase">
+                    Full-Body Biomechanics Gauges
+                  </span>
+                  <span className="text-[8px] font-mono text-white/40 uppercase">
+                    33-POINT SKELETON
+                  </span>
+                </div>
+                <p className="text-[8px] text-white/30 uppercase tracking-wider mb-3.5">
+                  Measured from real landmark coordinates, not synthetic estimations
                 </p>
+
                 <div className="grid grid-cols-2 gap-2.5">
                   {[
-                    { label: 'Hip Rotation', val: resultsData.hipRotationScore ?? resultsData.rotationScore },
                     { label: 'Torso Rotation', val: resultsData.torsoRotationScore ?? resultsData.rotationScore },
+                    { label: 'Hip Rotation', val: resultsData.hipRotationScore ?? resultsData.rotationScore },
                     { label: 'Knee Drive', val: resultsData.kneeDriveScore },
                     { label: 'Weight Transfer', val: resultsData.weightTransferScore },
                     { label: 'Rear Foot Pivot', val: resultsData.footPivotScore },
+                    { label: 'Strike Power', val: resultsData.powerScore },
                     ...(resultsData.headLateralScore || resultsData.headDropScore
                       ? [
                           { label: 'Head Lateral (Slip)', val: resultsData.headLateralScore ?? 0 },
@@ -2960,101 +3827,45 @@ export default function VisionPage() {
                   ].map((m, idx) => (
                     <div key={idx} className="bg-white/[0.02] border border-white/5 rounded-2xl p-3">
                       <div className="flex justify-between items-center mb-1.5">
-                        <span className="text-[7px] font-black text-white/40 uppercase tracking-wider">{m.label}</span>
-                        <span className="text-[10px] font-black text-white">{m.val}%</span>
+                        <span className="text-[8px] font-black text-white/50 uppercase tracking-wider">{m.label}</span>
+                        <span className="text-[10px] font-mono font-black text-white">{m.val}%</span>
                       </div>
                       <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-primary rounded-full"
-                          style={{ width: `${Math.min(100, m.val)}%` }}
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            m.val >= 75 ? 'bg-primary' : m.val >= 50 ? 'bg-cyan-400' : 'bg-red-400'
+                          }`}
+                          style={{ width: `${Math.min(100, Math.max(0, m.val))}%` }}
                         />
                       </div>
                     </div>
                   ))}
                 </div>
-                <div className="flex justify-between items-center mt-3 px-1">
-                  <span className="text-[7px] font-black text-white/30 uppercase tracking-wider">
-                    Punch Trajectory Accuracy
+
+                <div className="flex justify-between items-center mt-3 pt-2.5 border-t border-white/5 px-1">
+                  <span className="text-[7px] font-black text-white/35 uppercase tracking-wider">
+                    Punch Trajectory Matching
                   </span>
-                  <span className="text-[10px] font-black text-primary">{resultsData.trajectoryAccuracy}%</span>
+                  <span className="text-[10px] font-mono font-black text-primary">{resultsData.trajectoryAccuracy}%</span>
                 </div>
               </GlassCard>
             )}
 
+            {/* ── 8. Interactive Rep Inspector Drawer (Punch-By-Punch) ── */}
             {resultsData.log && resultsData.log.length > 0 && (
-              <GlassCard className="p-5 border-white/5 bg-black/40">
-                <span className="text-[9px] font-black text-primary tracking-widest uppercase block mb-1">
-                  Strike Speed Per Rep
-                </span>
-                <p className="text-[8px] text-white/30 uppercase tracking-wider mb-2">
-                  Yellow = hit · Red = missed · Height = elbow extension speed
-                </p>
-                <SpeedPowerChart log={resultsData.log} />
-
-                {resultsData.log.filter((r: RepLogEntry) => r.hit).length >= 2 && (
-                  <>
-                    <span className="text-[9px] font-black text-primary tracking-widest uppercase block mt-5 mb-1">
-                      Reaction Time Trend
-                    </span>
-                    <p className="text-[8px] text-white/30 uppercase tracking-wider mb-2">
-                      Lower point = slower response that rep
-                    </p>
-                    <ReactionTrendChart log={resultsData.log} />
-                  </>
-                )}
-              </GlassCard>
+              <InteractiveRepLog log={resultsData.log} />
             )}
 
-            {resultsData.log && resultsData.log.length > 0 && (
-              <GlassCard className="p-5 border-white/5 bg-black/40">
-                <span className="text-[9px] font-black text-primary tracking-widest uppercase block mb-3">
-                  Punch-By-Punch Log
-                </span>
-                <div className="flex flex-col gap-1.5 max-h-[280px] overflow-y-auto pr-1">
-                  {resultsData.log.map((r: RepLogEntry) => (
-                    <div
-                      key={r.index}
-                      className={`flex items-center justify-between px-3 py-2 rounded-xl border text-[10px] font-bold ${r.hit ? 'bg-white/[0.02] border-white/5' : 'bg-red-500/[0.03] border-red-500/10'
-                        }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <span className="text-white/30 font-mono w-5">{r.index}.</span>
-                        <span className="text-white/80 uppercase tracking-wide">{r.command}</span>
-                        <span
-                          className={`px-1.5 py-0.5 rounded-full text-[7px] uppercase tracking-widest ${r.hit ? 'bg-primary/15 text-primary' : 'bg-red-500/15 text-red-400'
-                            }`}
-                        >
-                          {r.hit ? 'HIT' : 'MISS'}
-                        </span>
-                        {r.hit && r.kind === 'punch' && !r.trajectoryMatch && (
-                          <span
-                            title={`Thrown as a ${r.trajectory} path`}
-                            className="px-1.5 py-0.5 rounded-full text-[7px] uppercase tracking-widest bg-orange-500/15 text-orange-400"
-                          >
-                            WRONG PATH
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3 text-white/40 font-mono text-[9px]">
-                        <span title="Elbow extension speed">{r.peakVelocity}°/s</span>
-                        <span title="Estimated power (derived from speed)">{r.estimatedPower}% pwr</span>
-                        <span title="Reaction time">{r.reactionMs !== null ? `${r.reactionMs}ms` : '—'}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </GlassCard>
-            )}
-
+            {/* ── 9. Coach Feedback Card ── */}
             <div className="glass-card p-5 border-white/5 bg-black/40 flex items-start gap-4 rounded-3xl">
-              <div className="w-11 h-11 rounded-full border border-red-500/30 bg-red-500/5 text-red-500 flex items-center justify-center text-lg flex-shrink-0">
+              <div className="w-11 h-11 rounded-2xl border border-primary/30 bg-primary/10 text-primary flex items-center justify-center text-lg shrink-0 shadow-[0_0_15px_rgba(226,255,59,0.2)]">
                 🤖
               </div>
-              <div className="text-left flex-1">
-                <span className="text-[7px] font-black text-red-500 tracking-wider uppercase block mb-1">
-                  COACH FEEDBACK
+              <div className="text-left flex-1 min-w-0">
+                <span className="text-[7px] font-black text-primary tracking-widest uppercase block mb-1">
+                  TACTICAL AI COACH PRESCRIPTION
                 </span>
-                <p className="text-xs font-semibold text-white/60 leading-relaxed italic">
+                <p className="text-xs font-semibold text-white/80 leading-relaxed italic">
                   &ldquo;{resultsData.advice}&rdquo;
                 </p>
               </div>

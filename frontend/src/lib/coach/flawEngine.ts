@@ -43,21 +43,12 @@ export interface DetectedFlaw {
 
 const SEVERITY_WEIGHT: Record<Severity, number> = { major: 3, moderate: 2, minor: 1 };
 
-// Require a minimum sample size before trusting an averaged flaw — one bad
-// rep shouldn't produce a confident session-level diagnosis.
-const MIN_SAMPLE_SIZE = 3;
+// Require at least 1 rep to evaluate technique mechanics, with adaptive
+// thresholds for smaller sample sizes (1-2 reps) vs larger samples (3+ reps).
+const MIN_SAMPLE_SIZE = 1;
 
-// A flaw is only "confirmed" when it is consistent, not just when an
-// average dips: at least this share of the individual reps of that
-// technique must themselves fall on the wrong side of the rule's
-// threshold. This stops one or two bad reps (or tracking noise) from
-// dragging an average under the line and flagging a flaw the user doesn't
-// actually have.
-const MIN_FAILING_REP_RATIO = 0.6;
-
-// Only the single worst confirmed flaw is reported per technique, so the
-// report shows what to fix first instead of every rule that happens to trip.
-const MAX_FLAWS_PER_TECHNIQUE = 1;
+// Only report up to 2 top flaws per technique so report is focused.
+const MAX_FLAWS_PER_TECHNIQUE = 2;
 
 function compareFlaws(a: DetectedFlaw, b: DetectedFlaw): number {
   const sevDiff = SEVERITY_WEIGHT[b.severity] - SEVERITY_WEIGHT[a.severity];
@@ -116,7 +107,8 @@ export function evaluateSessionFlaws(reps: FlawEngineRep[]): DetectedFlaw[] {
       if (!averageTriggered) continue;
 
       const failingReps = values.filter((v) => (rule.comparator === 'below' ? v < rule.threshold : v > rule.threshold)).length;
-      if (failingReps / values.length < MIN_FAILING_REP_RATIO) continue;
+      const minRatio = techReps.length <= 2 ? 0.5 : 0.55;
+      if (failingReps / values.length < minRatio) continue;
 
       techniqueFlaws.push({
         techniqueLabel: mechanics.label,

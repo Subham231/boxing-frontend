@@ -170,7 +170,7 @@ export function computeSwiftnessScore(
 export function targetAttainment(
   reps: FlawEngineRep[],
   metric: FlawMetric,
-  minSamples = 3
+  minSamples = 1
 ): { ratio: number; samples: number } | null {
   const ratios: number[] = [];
   for (const r of reps) {
