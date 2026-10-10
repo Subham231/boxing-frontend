@@ -3,8 +3,6 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Swords, Crown, Zap, Sparkles, Trophy, Play } from 'lucide-react';
-import { NeonButton } from '@/components/ui/NeonButton';
 import { useFirebaseUser } from '@/lib/useFirebaseUser';
 
 const PROMO_STORAGE_KEY = 'sparai_free_spar_modal_v1';
@@ -16,7 +14,7 @@ export function SparFreePromoModal() {
 
   useEffect(() => {
     // Only show once when user enters the home page
-    // Also don't show if user is already authenticated (they can access spar directly)
+    // Also don't show if user is already authenticated
     const hasSeen = localStorage.getItem(PROMO_STORAGE_KEY);
     if (!hasSeen && !loading && !user) {
       const timer = setTimeout(() => {
@@ -53,173 +51,268 @@ export function SparFreePromoModal() {
     }
   };
 
+  // Keyboard shortcut for ESC button
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
+
   return (
     <AnimatePresence>
       {isOpen && (
-        <div data-free-promo-active="true" className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+        <div
+          data-free-promo-active="true"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto"
+        >
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={handleClose}
-            className="fixed inset-0 bg-black/90 backdrop-blur-md"
+            className="fixed inset-0 bg-black/85 backdrop-blur-md"
           />
 
-          {/* Modal Card - Rich, Visual, Cyber-Boxer Aesthetic */}
+          {/* Modal Container matching exact tactical HUD design */}
           <motion.div
-            initial={{ scale: 0.92, opacity: 0, y: 30 }}
+            initial={{ scale: 0.94, opacity: 0, y: 20 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.92, opacity: 0, y: 30 }}
-            transition={{ type: 'spring', damping: 22, stiffness: 280 }}
-            className="relative w-full max-w-lg max-h-[calc(100dvh-1rem)] overflow-y-auto bg-gradient-to-b from-[#1a1f14] via-[#0e1109] to-[#070806] border-2 border-primary/60 rounded-[24px] sm:rounded-[32px] p-4 sm:p-7 shadow-[0_0_60px_rgba(226,255,59,0.35)] z-10 custom-scrollbar"
+            exit={{ scale: 0.94, opacity: 0, y: 20 }}
+            transition={{ type: 'spring', damping: 24, stiffness: 300 }}
+            className="relative w-full max-w-[460px] max-h-[calc(100dvh-1rem)] overflow-y-auto bg-[#070707] border border-[#222222] p-3.5 sm:p-5 shadow-[0_0_50px_rgba(0,0,0,0.85)] z-10 custom-scrollbar select-none"
           >
-            {/* Background Glow */}
-            <div className="absolute top-0 right-0 w-64 h-64 bg-primary/20 rounded-full blur-3xl pointer-events-none" />
-            <div className="absolute bottom-0 left-0 w-64 h-64 bg-amber-500/15 rounded-full blur-3xl pointer-events-none" />
+            {/* Top Tactical Status Bar */}
+            <div className="flex items-center justify-between text-[10px] sm:text-[11px] font-mono tracking-wider border-b border-[#1c1c1c] pb-2.5 mb-3">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 bg-[#d4ff00] inline-block shadow-[0_0_8px_#d4ff00]" />
+                <span className="font-bold text-white tracking-widest uppercase">
+                  COMBAT DIVISION
+                </span>
+                <span className="text-neutral-600">//</span>
+                <span className="text-neutral-400 uppercase text-[9px] sm:text-[10px]">
+                  INTAKE PROTOCOL
+                </span>
+              </div>
+              <span className="text-neutral-500 uppercase">SYS.VER 4.8.2</span>
+            </div>
 
-            {/* Close Button */}
+            {/* Subheader: Apex Combat + ESC Button */}
+            <div className="flex items-center justify-between mb-3.5">
+              <div className="flex items-center gap-2.5">
+                {/* Shield with lightning logo */}
+                <div className="w-9 h-9 border border-[#262626] bg-[#0f0f10] flex items-center justify-center shrink-0">
+                  <svg
+                    className="w-5 h-5 text-[#d4ff00]"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.75"
+                  >
+                    <path
+                      d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"
+                      stroke="currentColor"
+                    />
+                    <path
+                      d="M13 7l-3.5 5h3l-1.5 5 4.5-6h-3l1.5-4z"
+                      fill="currentColor"
+                      stroke="none"
+                    />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-white tracking-wider uppercase font-sans leading-none">
+                    APEX COMBAT
+                  </h3>
+                  <p className="text-[9px] font-mono text-neutral-400 tracking-widest uppercase mt-1">
+                    PERFORMANCE INSTITUTE
+                  </p>
+                </div>
+              </div>
+
+              {/* ESC Button */}
+              <button
+                onClick={handleClose}
+                className="flex items-center gap-1.5 px-2.5 py-1 border border-[#262626] bg-[#111112] hover:bg-[#1c1c1e] text-neutral-300 hover:text-white font-mono text-xs tracking-wider transition-colors"
+                title="Press Escape to close"
+              >
+                <span>ESC</span>
+                <span className="text-sm leading-none">&times;</span>
+              </button>
+            </div>
+
+            {/* Hero Image Card */}
+            <div className="relative border border-[#222222] bg-black overflow-hidden mb-3.5">
+              <img
+                src="/images/promos/combat-pass-hero.jpg"
+                alt="Live Peer Matchmaking"
+                className="w-full h-44 sm:h-52 object-cover object-center brightness-95"
+              />
+
+              {/* Top-Left: Live Peer Matchmaking Badge */}
+              <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 px-2 py-0.5 bg-black/85 backdrop-blur-sm border border-neutral-800">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#d4ff00] shadow-[0_0_6px_#d4ff00] animate-pulse" />
+                <span className="text-[9px] sm:text-[10px] font-mono font-bold text-white tracking-wider uppercase">
+                  LIVE PEER MATCHMAKING // ACTIVE ARENA
+                </span>
+              </div>
+
+              {/* Bottom-Left: Sync Badge */}
+              <div className="absolute bottom-2.5 left-2.5 px-2 py-0.5 bg-black/85 backdrop-blur-sm border border-neutral-800">
+                <span className="text-[9px] font-mono text-neutral-300 tracking-wider">
+                  SYNC: 18ms
+                </span>
+              </div>
+
+              {/* Bottom-Right: Division Badge */}
+              <div className="absolute bottom-2.5 right-2.5 px-2 py-0.5 bg-black/85 backdrop-blur-sm border border-neutral-800">
+                <span className="text-[9px] font-mono text-neutral-300 tracking-wider uppercase">
+                  DIVISION: PRO-SERIES
+                </span>
+              </div>
+            </div>
+
+            {/* Protocol Badge & Headline */}
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="bg-[#d4ff00] text-black font-black font-mono text-[9px] sm:text-[10px] px-2 py-0.5 tracking-wider uppercase">
+                PROTOCOL // 01
+              </span>
+              <span className="text-[10px] sm:text-[11px] font-mono font-bold text-neutral-400 tracking-wider uppercase">
+                NEW ATHLETE ONBOARDING ACCESS
+              </span>
+            </div>
+
+            <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight uppercase leading-tight mb-2">
+              CLAIM YOUR 30-DAY COMBAT PASS
+            </h2>
+
+            <p className="text-neutral-300 text-xs sm:text-[13px] leading-relaxed mb-3.5">
+              Welcome to Apex. Access ranked peer-to-peer sparring, computer vision punch telemetry, and sub-second AI corner coaching.{' '}
+              <span className="text-white font-bold">
+                100% complimentary for your first month.
+              </span>
+            </p>
+
+            {/* 3 Technical Feature Cards */}
+            <div className="flex flex-col gap-2 mb-4">
+              {/* Feature 01 */}
+              <div className="border border-[#202020] bg-[#0c0c0d] p-2.5 sm:p-3 transition-colors hover:border-neutral-700">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[#d4ff00] font-mono font-bold text-xs">
+                      [01]
+                    </span>
+                    <span className="text-white font-black text-xs uppercase tracking-wider">
+                      REAL-TIME PEER SPARRING
+                    </span>
+                  </div>
+                  <span className="text-neutral-500 font-mono text-[9px] tracking-wider uppercase">
+                    GLOBAL MESH
+                  </span>
+                </div>
+                <p className="text-neutral-400 text-[11px] sm:text-xs leading-normal pl-6 sm:pl-7">
+                  Low-latency sync matching fighters precisely by weight, stance, and division ranking.
+                </p>
+              </div>
+
+              {/* Feature 02 */}
+              <div className="border border-[#202020] bg-[#0c0c0d] p-2.5 sm:p-3 transition-colors hover:border-neutral-700">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[#d4ff00] font-mono font-bold text-xs">
+                      [02]
+                    </span>
+                    <span className="text-white font-black text-xs uppercase tracking-wider">
+                      VISION AI TELEMETRY
+                    </span>
+                  </div>
+                  <span className="text-neutral-500 font-mono text-[9px] tracking-wider uppercase">
+                    CV PROTOCOL
+                  </span>
+                </div>
+                <p className="text-neutral-400 text-[11px] sm:text-xs leading-normal pl-6 sm:pl-7">
+                  Automatic impact velocity, guard recovery rate, and punch volume tracking in real time.
+                </p>
+              </div>
+
+              {/* Feature 03 */}
+              <div className="border border-[#202020] bg-[#0c0c0d] p-2.5 sm:p-3 transition-colors hover:border-neutral-700">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[#d4ff00] font-mono font-bold text-xs">
+                      [03]
+                    </span>
+                    <span className="text-white font-black text-xs uppercase tracking-wider">
+                      ADAPTIVE CORNER COACH
+                    </span>
+                  </div>
+                  <span className="text-neutral-500 font-mono text-[9px] tracking-wider uppercase">
+                    SUB-SECOND
+                  </span>
+                </div>
+                <p className="text-neutral-400 text-[11px] sm:text-xs leading-normal pl-6 sm:pl-7">
+                  Haptic and live vocal audio cues during rounds for slips, counters, and output cadence.
+                </p>
+              </div>
+            </div>
+
+            {/* Separator */}
+            <div className="border-t border-[#1f1f1f] pt-3.5 mb-2.5" />
+
+            {/* Primary CTA */}
             <button
-              onClick={handleClose}
-              className="absolute top-4 right-4 w-10 h-10 rounded-full border border-white/10 bg-black/60 backdrop-blur-md flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-all z-20 active:scale-95"
+              onClick={handleEnterSpar}
+              className="w-full bg-[#d4ff00] hover:bg-[#c2ea00] active:scale-[0.99] text-black font-black uppercase text-xs sm:text-sm tracking-wider py-3.5 px-4 flex items-center justify-center gap-2 transition-all shadow-[0_0_20px_rgba(212,255,0,0.25)]"
             >
-              <X className="w-5 h-5" />
+              <span>ACTIVATE 30-DAY FREE ACCESS</span>
+              <span className="text-base font-bold">→</span>
             </button>
 
-            {/* Main Visual - Cinematic Cyber Sparring Arena Image */}
-            <div className="relative mb-3 sm:mb-4 overflow-hidden rounded-2xl sm:rounded-3xl border border-primary/40 shadow-[0_0_35px_rgba(226,255,59,0.25)] group">
-              <img
-                src="/images/promos/spar-arena-banner.jpg"
-                alt="SPAR AI Free 1v1 Arena"
-                className="w-full h-40 sm:h-52 object-cover object-center group-hover:scale-105 transition-transform duration-700"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#0e1109] via-transparent to-black/40" />
-
-              {/* Badges on image */}
-              <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/75 backdrop-blur-md border border-primary/50 text-[9px] font-black uppercase text-primary shadow-[0_0_12px_rgba(226,255,59,0.4)]">
-                <Sparkles className="w-3 h-3 text-primary animate-pulse" />
-                <span>SPAR AI ARENA PASS</span>
-              </div>
-              <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-[9px] font-bold text-white/90">
-                <span className="px-2.5 py-0.5 rounded-full bg-primary text-black font-black uppercase text-[8px] tracking-wider shadow-[0_0_10px_rgba(226,255,59,0.7)]">
-                  1 MONTH FREE TRIAL
-                </span>
-                <span className="text-[8px] font-black uppercase text-white/80 bg-black/70 px-2 py-0.5 rounded-full backdrop-blur-sm border border-white/15">
-                  REALTIME 1V1 AI
-                </span>
-              </div>
+            {/* Microcopy under CTA */}
+            <div className="flex items-center justify-center gap-2 text-[10px] sm:text-[11px] font-mono text-neutral-400 my-2.5">
+              <span>Zero commitment</span>
+              <span className="text-neutral-600">·</span>
+              <span className="text-white font-bold">$0.00 due today</span>
+              <span className="text-neutral-600">·</span>
+              <span>Cancel anytime in Settings</span>
             </div>
 
-            {/* Title - Large, impactful, minimal text */}
-            <div className="text-center mb-3 sm:mb-4">
-              <motion.h2
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1, duration: 0.4 }}
-                className="text-xl sm:text-3xl font-black italic uppercase leading-tight text-white tracking-wide"
-              >
-                SPARRING IS
-                <br />
-                <span className="text-primary drop-shadow-[0_0_20px_rgba(226,255,59,0.9)]">100% FREE FOR 1 MONTH</span>
-              </motion.h2>
-              <motion.p
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2, duration: 0.4 }}
-                className="text-[11px] sm:text-sm font-medium text-white/70 mt-1 sm:mt-1.5 leading-relaxed max-w-xs mx-auto"
-              >
-                Live 1v1 matchmaking. Real-time AI coaching calls. Zero subscription required to get started.
-              </motion.p>
-            </div>
-
-            {/* Visual Feature Highlights - Icon-focused, minimal text */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3, duration: 0.5 }}
-              className="grid grid-cols-2 gap-2 sm:gap-3 mb-4 sm:mb-6"
+            {/* Secondary Button: Explore App First */}
+            <button
+              onClick={handleClose}
+              className="w-full border border-[#242424] bg-[#0e0e0f] hover:bg-[#18181a] text-neutral-300 hover:text-white font-mono text-xs uppercase tracking-widest py-3 px-4 transition-colors mb-3"
             >
-              {/* Feature 1: Live Spar */}
-              <div className="group relative p-3 sm:p-4 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-primary/40 hover:bg-primary/5 transition-all duration-300">
-                <div className="w-9 h-9 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-primary/15 border border-primary/30 flex items-center justify-center mx-auto mb-2 sm:mb-3 group-hover:scale-110 transition-transform">
-                  <Swords className="w-5 h-5 sm:w-7 sm:h-7 text-primary" />
-                </div>
-                <div className="text-center">
-                  <div className="text-[11px] sm:text-sm font-black text-white uppercase tracking-wide">Live 1v1</div>
-                  <div className="text-[8px] sm:text-[10px] text-white/50 font-bold uppercase mt-0.5">Realtime PvP</div>
-                </div>
-              </div>
+              EXPLORE APP FIRST
+            </button>
 
-              {/* Feature 2: AI Coach */}
-              <div className="group relative p-3 sm:p-4 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-cyan-400/40 hover:bg-cyan-400/5 transition-all duration-300">
-                <div className="w-9 h-9 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-cyan-400/15 border border-cyan-400/30 flex items-center justify-center mx-auto mb-2 sm:mb-3 group-hover:scale-110 transition-transform">
-                  <Zap className="w-5 h-5 sm:w-7 sm:h-7 text-cyan-400" />
-                </div>
-                <div className="text-center">
-                  <div className="text-[11px] sm:text-sm font-black text-white uppercase tracking-wide">AI Coach</div>
-                  <div className="text-[8px] sm:text-[10px] text-white/50 font-bold uppercase mt-0.5">40–70 Calls</div>
-                </div>
-              </div>
-
-              {/* Feature 3: Leaderboard */}
-              <div className="group relative p-3 sm:p-4 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-amber-400/40 hover:bg-amber-400/5 transition-all duration-300">
-                <div className="w-9 h-9 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-amber-400/15 border border-amber-400/30 flex items-center justify-center mx-auto mb-2 sm:mb-3 group-hover:scale-110 transition-transform">
-                  <Trophy className="w-5 h-5 sm:w-7 sm:h-7 text-amber-400" />
-                </div>
-                <div className="text-center">
-                  <div className="text-[11px] sm:text-sm font-black text-white uppercase tracking-wide">Rankings</div>
-                  <div className="text-[8px] sm:text-[10px] text-white/50 font-bold uppercase mt-0.5">Weekly Seasons</div>
-                </div>
-              </div>
-
-              {/* Feature 4: Deals */}
-              <div className="group relative p-3 sm:p-4 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-purple-400/40 hover:bg-purple-400/5 transition-all duration-300">
-                <div className="w-9 h-9 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-purple-400/15 border border-purple-400/30 flex items-center justify-center mx-auto mb-2 sm:mb-3 group-hover:scale-110 transition-transform">
-                  <Crown className="w-5 h-5 sm:w-7 sm:h-7 text-purple-400" />
-                </div>
-                <div className="text-center">
-                  <div className="text-[11px] sm:text-sm font-black text-white uppercase tracking-wide">Deals</div>
-                  <div className="text-[8px] sm:text-[10px] text-white/50 font-bold uppercase mt-0.5">Up to 40% Off</div>
-                </div>
-              </div>
-            </motion.div>
-
-            {/* Actions - Large, prominent buttons */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4, duration: 0.5 }}
-              className="flex flex-col gap-2 sm:gap-3"
-            >
-              {/* Primary CTA - Enter Sparring */}
-              <NeonButton
-                onClick={handleEnterSpar}
-                className="w-full h-12 sm:h-14 text-xs sm:text-sm font-black italic tracking-widest text-black uppercase flex items-center justify-center gap-2.5 shadow-[0_0_30px_rgba(226,255,59,0.5)]"
-              >
-                <Play className="w-5 h-5" />
-                ENTER SPARRING ARENA
-                <Swords className="w-5 h-5" />
-              </NeonButton>
-
-              {/* Secondary CTA - View Deals */}
+            {/* Footer Links: Restore Purchase / Terms / Privacy */}
+            <div className="flex items-center justify-center gap-2.5 text-[10px] font-mono text-neutral-500 pb-0.5">
               <button
                 onClick={handleViewDeals}
-                className="w-full h-10 sm:h-12 rounded-xl border-2 border-primary/30 bg-primary/10 text-xs sm:text-sm font-black uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-primary/20 transition-all"
+                className="hover:text-neutral-300 transition-colors uppercase tracking-wider"
               >
-                <Crown className="w-5 h-5" />
-                VIEW DEALS & FREE TRIALS
+                Restore Purchase
               </button>
-
-              {/* Dismiss - subtle */}
-              <motion.button
-                onClick={handleClose}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                className="text-[11px] font-black text-white/40 hover:text-white/70 uppercase tracking-widest text-center py-2"
+              <span>/</span>
+              <button
+                onClick={() => router.push('/terms')}
+                className="hover:text-neutral-300 transition-colors uppercase tracking-wider"
               >
-                Not now
-              </motion.button>
-            </motion.div>
+                Terms
+              </button>
+              <span>/</span>
+              <button
+                onClick={() => router.push('/privacy')}
+                className="hover:text-neutral-300 transition-colors uppercase tracking-wider"
+              >
+                Privacy
+              </button>
+            </div>
           </motion.div>
         </div>
       )}
