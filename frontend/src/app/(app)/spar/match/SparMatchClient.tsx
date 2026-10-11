@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Swords, Flag, Mic, MicOff, Settings, Volume2, VolumeX } from 'lucide-react';
 import { firebaseAuth } from '@/lib/firebase';
 import { supabase } from '@/lib/supabase';
+import { computePowerIndex } from '@/lib/power/powerIndex';
+import { extensionCredit } from '@/lib/vision/repVerdict';
 import { playVoiceEvent, preloadVoicePack, unlockVoicePack, stopVoicePack } from '@/lib/voice-pack';
 
 type SparCommand = { command: string; kind: 'punch' | 'defense'; callAtMs: number };
@@ -787,10 +789,14 @@ export default function SparMatchClient() {
     // has landed yet (manual/fallback path).
     const observedAt = lastPoseFrameAtRef.current || performance.now();
     const reactionMs = Math.max(0, Math.round(observedAt - cur.atPerf));
-    const power = Math.round(Math.min(100, (peakWristSpeedForCmdRef.current / FULL_WRIST_SPEED_FOR_FULL_POWER) * 100));
-    const form = Math.round(
-      Math.min(100, Math.max(0, ((elbowAtLastStrikeRef.current - PUNCH_EXTEND_DEG) / (180 - PUNCH_EXTEND_DEG)) * 100))
-    );
+    // Same lenient elbow-extension credit as AI Video Analysis (not the strict
+    // hit threshold), then the shared Power Index: speed + form, with a lift so
+    // clean punches read as strong.
+    const form = extensionCredit(elbowAtLastStrikeRef.current);
+    const power = computePowerIndex({
+      speedRatio: peakWristSpeedForCmdRef.current / FULL_WRIST_SPEED_FOR_FULL_POWER,
+      form,
+    });
     resultsRef.current.push({
       index: cur.index,
       command: cur.cmd.command,
