@@ -7,6 +7,8 @@ import { firebaseAuth } from '@/lib/firebase';
 import { supabase } from '@/lib/supabase';
 import { computePowerIndex } from '@/lib/power/powerIndex';
 import { extensionCredit } from '@/lib/vision/repVerdict';
+import SparIntro from '@/components/spar/SparIntro';
+import type { FighterCardData } from '@/components/spar/FighterBadge';
 import { playVoiceEvent, preloadVoicePack, unlockVoicePack, stopVoicePack } from '@/lib/voice-pack';
 
 type SparCommand = { command: string; kind: 'punch' | 'defense'; callAtMs: number };
@@ -100,7 +102,18 @@ export default function SparMatchClient() {
   const [showSettings, setShowSettings] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const voiceEnabledRef = useRef(true);
+  const phaseRef = useRef<'setup' | 'live' | 'submitting' | 'done'>('setup');
+  const serverOffsetRef = useRef(0); // serverClock - localClock, so both devices agree on one start instant
+  const statsTimerRef = useRef<number | null>(null);
+  const helloTimerRef = useRef<number | null>(null);
+  const goTimerRef = useRef<number | null>(null);
+  const [cards, setCards] = useState<{ you: FighterCardData; opponent: FighterCardData } | null>(null);
+  const [startAtLocal, setStartAtLocal] = useState<number | null>(null);
+  const [introVisible, setIntroVisible] = useState(true);
+  const [poseWarm, setPoseWarm] = useState(false);
+  const [connQuality, setConnQuality] = useState<'good' | 'fair' | 'poor' | null>(null);
 
+  phaseRef.current = phase;
   const totalCalls = hits + misses;
   const accuracyPct = totalCalls ? Math.round((hits / totalCalls) * 100) : 0;
   const formatClock = (ms: number) => {
@@ -147,6 +160,9 @@ export default function SparMatchClient() {
         });
       }
     } catch { /* ignore */ }
+    if (statsTimerRef.current !== null) { window.clearInterval(statsTimerRef.current); statsTimerRef.current = null; }
+    if (helloTimerRef.current !== null) { window.clearInterval(helloTimerRef.current); helloTimerRef.current = null; }
+    if (goTimerRef.current !== null) { window.clearTimeout(goTimerRef.current); goTimerRef.current = null; }
     try { channelRef.current?.unsubscribe(); } catch { /* ignore */ }
     channelRef.current = null;
     try { pcRef.current?.close(); } catch { /* ignore */ }
@@ -217,6 +233,22 @@ export default function SparMatchClient() {
       }
     })();
   }, [matchId, authHeaders]);
+
+  // Public cards (name, picture, streak rank, plan) for the intro screen.
+  useEffect(() => {
+    if (!match) return;
+    let alive = true;
+    (async () => {
+      try {
+        const headers = await authHeaders();
+        const res = await fetch(`/api/spar/match/${match.matchId}/intro`, { headers });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (alive && data?.you && data?.opponent) setCards({ you: data.you, opponent: data.opponent });
+      } catch { /* intro still works without cards */ }
+    })();
+    return () => { alive = false; };
+  }, [match, authHeaders]);
 
   const submitResults = useCallback(async () => {
     if (!match || submittedRef.current) return;
@@ -332,19 +364,24 @@ export default function SparMatchClient() {
 
     const overallTimeout = window.setTimeout(() => {
       if (!connected) failAndExit('Connection timed out. Your opponent may have lost signal.', 'Connection timed out');
-    }, 20000);
+    }, 45000);
 
     const run = async () => {
       try {
         const headers = await authHeaders();
+        const t0 = Date.now();
         const readyRes = await fetch(`/api/spar/match/${match.matchId}/ready`, {
           method: 'POST',
           headers,
         });
+        const t1 = Date.now();
         const readyData = await readyRes.json();
         const iceServers = readyData.iceServers || [{ urls: 'stun:stun.l.google.com:19302' }];
-        const matchStartedAtMs: number =
-          typeof readyData.matchStartedAtMs === 'number' ? readyData.matchStartedAtMs : Date.now();
+        if (typeof readyData.serverNowMs === 'number') {
+          // Midpoint of the request approximates the instant the server stamped its clock.
+          serverOffsetRef.current = readyData.serverNowMs - (t0 + t1) / 2;
+        }
+        const serverNow = () => Date.now() + serverOffsetRef.current;
 
         // Fail fast with an accurate message instead of letting the browser
         // throw an opaque error deep inside getUserMedia. Both of these are
@@ -358,31 +395,97 @@ export default function SparMatchClient() {
           throw Object.assign(new Error(), { name: 'SecurityError' });
         }
 
+        // Echo cancellation matters here: the coach voice plays through the
+        // speaker and would otherwise be picked up by the mic and sent to the
+        // opponent. Frame rate is capped so a phone isn't encoding 60 fps.
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
-          audio: true,
+          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30, max: 30 } },
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
         });
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop());
           return;
         }
         localStreamRef.current = stream;
+        try { (stream.getVideoTracks()[0] as any).contentHint = 'motion'; } catch { /* optional */ }
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
           localVideoRef.current.muted = true;
           await localVideoRef.current.play().catch(() => {});
         }
+        // Camera is live: start loading the pose model now, during the intro,
+        // so the first command isn't missed while it downloads.
+        setPoseWarm(true);
 
-        const pc = new RTCPeerConnection({ iceServers });
+        const pc = new RTCPeerConnection({ iceServers, iceCandidatePoolSize: 4, bundlePolicy: 'max-bundle' });
         pcRef.current = pc;
         stream.getTracks().forEach((t) => pc.addTrack(t, stream));
 
-        // 'disconnected' is usually TRANSIENT (a brief network blip, a
-        // handover between wifi and cellular) and WebRTC often recovers on
-        // its own or after an ICE restart. Treating it the same as 'failed'
-        // is what ended live matches on a momentary blip and reported the
-        // opponent as having left. Only a terminal state, or a blip that
-        // doesn't recover inside RECONNECT_GRACE_MS, ends the match.
+        const signal = (event: string, payload: Record<string, unknown> = {}) => {
+          try {
+            channelRef.current?.send({ type: 'broadcast', event, payload: { ...payload, from: match.role } });
+          } catch { /* retried by the hello loop */ }
+        };
+
+        // Cap video bitrate/fps and let the encoder drop resolution, never
+        // frames: smooth motion matters more than sharpness for sparring.
+        const tuneSenders = async (bitrate: number, fps: number) => {
+          for (const sender of pc.getSenders()) {
+            if (sender.track?.kind !== 'video') continue;
+            try {
+              const params = sender.getParameters();
+              if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
+              params.encodings[0].maxBitrate = bitrate;
+              params.encodings[0].maxFramerate = fps;
+              (params as any).degradationPreference = 'maintain-framerate';
+              await sender.setParameters(params);
+            } catch { /* not supported — browser defaults apply */ }
+          }
+        };
+
+        // Offerer-driven ICE restart (also used when the answerer asks for one).
+        let restartAttempts = 0;
+        const restartIce = async () => {
+          if (match.role !== 'offer' || restartAttempts >= 3 || cancelled) return;
+          restartAttempts += 1;
+          try {
+            const restart = await pc.createOffer({ iceRestart: true });
+            await pc.setLocalDescription(restart);
+            signal('sdp', { sdp: pc.localDescription });
+          } catch { /* grace timer below still covers us */ }
+        };
+
+        // Shared start: the offerer picks ONE instant (in server time) and both
+        // devices count down to it, so the coach's commands line up for both.
+        let startApplied = false;
+        let startAtServerMs: number | null = null;
+        const applyStart = (serverMs: number) => {
+          if (startApplied || cancelled) return;
+          startApplied = true;
+          startAtServerMs = serverMs;
+          const localStart = Math.max(serverMs - serverOffsetRef.current, Date.now() + 1200);
+          connected = true;
+          window.clearTimeout(overallTimeout);
+          matchStartRef.current = localStart;
+          setStartAtLocal(localStart);
+          setStatusLine('Match starting…');
+          goTimerRef.current = window.setTimeout(() => {
+            if (cancelled) return;
+            setPhase('live');
+            phaseRef.current = 'live';
+            speak('Fight');
+          }, Math.max(0, localStart - Date.now()));
+        };
+
+        let peerSeenAt = 0;
+        const maybeStart = () => {
+          if (match.role !== 'offer' || startApplied || !peerSeenAt) return;
+          const linked = pc.connectionState === 'connected';
+          // If media can't link up within 7 s we still start: scoring is local,
+          // so a weak video link must not cancel the match.
+          if (linked || Date.now() - peerSeenAt > 7000) applyStart(serverNow() + 6000);
+        };
+
         pc.onconnectionstatechange = () => {
           const state = pc.connectionState;
           if (state === 'connected') {
@@ -393,36 +496,27 @@ export default function SparMatchClient() {
             setStatusLine('Opponent connected');
             setError(null);
             setOpponentLeft(false);
+            void tuneSenders(700_000, 24);
+            maybeStart();
             return;
           }
-          if (state === 'disconnected') {
+          if (state === 'disconnected' || state === 'failed') {
             setStatusLine('Connection unstable — reconnecting…');
             // Only the offerer drives the ICE restart, so both peers don't
-            // renegotiate against each other at the same time.
-            if (match.role === 'offer') {
-              (async () => {
-                try {
-                  const restart = await pc.createOffer({ iceRestart: true });
-                  await pc.setLocalDescription(restart);
-                  channelRef.current?.send({
-                    type: 'broadcast',
-                    event: 'sdp',
-                    payload: { sdp: pc.localDescription, from: match.role },
-                  });
-                } catch { /* grace timer below still covers us */ }
-              })();
-            }
+            // renegotiate against each other. The answerer asks for one.
+            if (match.role === 'offer') void restartIce();
+            else signal('need-restart');
             if (reconnectTimerRef.current === null) {
               reconnectTimerRef.current = window.setTimeout(() => {
                 reconnectTimerRef.current = null;
                 if (pc.connectionState !== 'connected') {
                   handleOpponentExit('Connection lost. Your opponent left the match.');
                 }
-              }, RECONNECT_GRACE_MS);
+              }, state === 'failed' ? RECONNECT_GRACE_MS + 4000 : RECONNECT_GRACE_MS);
             }
             return;
           }
-          if (state === 'failed' || state === 'closed') {
+          if (state === 'closed') {
             handleOpponentExit('Connection lost. Your opponent left the match.');
           }
         };
@@ -452,13 +546,7 @@ export default function SparMatchClient() {
         };
 
         pc.onicecandidate = (ev) => {
-          if (ev.candidate) {
-            channel.send({
-              type: 'broadcast',
-              event: 'ice',
-              payload: { candidate: ev.candidate.toJSON(), from: match.role },
-            });
-          }
+          if (ev.candidate) signal('ice', { candidate: ev.candidate.toJSON() });
         };
 
         channel.on('broadcast', { event: 'ice' }, async ({ payload }) => {
@@ -466,9 +554,32 @@ export default function SparMatchClient() {
           await addIceCandidate(payload.candidate);
         });
 
+        // The offer is only (re)sent once the other fighter has said hello, so
+        // it can't be lost while they're still on the camera-permission prompt.
+        const sendOffer = async () => {
+          if (match.role !== 'offer' || cancelled) return;
+          try {
+            if (!pc.localDescription || pc.localDescription.type !== 'offer') {
+              const offer = await pc.createOffer();
+              await pc.setLocalDescription(offer);
+              void tuneSenders(700_000, 24);
+            }
+            if (pc.signalingState === 'have-local-offer' && pc.localDescription) {
+              signal('sdp', { sdp: pc.localDescription });
+            }
+          } catch { /* retried on the next hello */ }
+        };
+
+        let lastOfferSdp = '';
         channel.on('broadcast', { event: 'sdp' }, async ({ payload }) => {
           if (!payload?.sdp || payload.from === match.role) return;
           try {
+            if (payload.sdp.type === 'offer') {
+              if (payload.sdp.sdp === lastOfferSdp) return; // duplicate retry of an offer we already answered
+              lastOfferSdp = payload.sdp.sdp;
+            } else if (pc.signalingState !== 'have-local-offer') {
+              return; // stale/duplicate answer
+            }
             await pc.setRemoteDescription(payload.sdp);
             while (pendingIceCandidates.length) {
               const candidate = pendingIceCandidates.shift();
@@ -477,15 +588,28 @@ export default function SparMatchClient() {
             if (payload.sdp.type === 'offer') {
               const answer = await pc.createAnswer();
               await pc.setLocalDescription(answer);
-              channel.send({
-                type: 'broadcast',
-                event: 'sdp',
-                payload: { sdp: pc.localDescription, from: match.role },
-              });
+              signal('sdp', { sdp: pc.localDescription });
+              void tuneSenders(700_000, 24);
             }
           } catch {
             /* ignore */
           }
+        });
+
+        channel.on('broadcast', { event: 'hello' }, ({ payload }) => {
+          if (!payload || payload.from === match.role) return;
+          if (!peerSeenAt) peerSeenAt = Date.now();
+          if (match.role === 'offer') {
+            if (!pc.remoteDescription) void sendOffer();
+            maybeStart();
+          } else if (typeof payload.startAtServerMs === 'number') {
+            applyStart(payload.startAtServerMs);
+          }
+        });
+
+        channel.on('broadcast', { event: 'need-restart' }, ({ payload }) => {
+          if (payload?.from === match.role) return;
+          void restartIce();
         });
 
         channel.on('broadcast', { event: 'peer-left' }, ({ payload }) => {
@@ -526,24 +650,54 @@ export default function SparMatchClient() {
           });
         });
 
-        await new Promise((r) => setTimeout(r, 800));
+        // Say hello now and keep saying it until the match starts. Both sides
+        // do this, so whichever fighter finishes the permission prompt last is
+        // still found, and any lost message is simply repeated 1 s later.
+        const hello = () => {
+          signal('hello', startAtServerMs !== null ? { startAtServerMs } : {});
+          if (match.role === 'offer' && peerSeenAt && !pc.remoteDescription) void sendOffer();
+          maybeStart();
+        };
+        hello();
+        helloTimerRef.current = window.setInterval(hello, 1000);
 
-        if (match.role === 'offer') {
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          channel.send({
-            type: 'broadcast',
-            event: 'sdp',
-            payload: { sdp: pc.localDescription, from: match.role },
-          });
-        }
+        setStatusLine('Waiting for opponent…');
 
-        setStatusLine('Match starting…');
-        setPhase('live');
-        connected = true;
-        window.clearTimeout(overallTimeout);
-        matchStartRef.current = matchStartedAtMs;
-        speak('Fight');
+        // Light connection monitor: round-trip + packet loss -> Good/Fair/Poor,
+        // and the encoder is stepped down on a bad link / back up on a good one.
+        let lastLost = 0;
+        let lastRecv = 0;
+        let level: 'good' | 'fair' | 'poor' = 'good';
+        statsTimerRef.current = window.setInterval(async () => {
+          if (pc.connectionState !== 'connected') return;
+          try {
+            const stats = await pc.getStats();
+            let rtt: number | null = null;
+            let lost = 0;
+            let recv = 0;
+            stats.forEach((r: any) => {
+              if (r.type === 'candidate-pair' && r.nominated && typeof r.currentRoundTripTime === 'number') rtt = r.currentRoundTripTime;
+              if (r.type === 'inbound-rtp' && r.kind === 'video') {
+                lost += r.packetsLost || 0;
+                recv += r.packetsReceived || 0;
+              }
+            });
+            const dLost = Math.max(0, lost - lastLost);
+            const dRecv = Math.max(0, recv - lastRecv);
+            lastLost = lost;
+            lastRecv = recv;
+            const lossPct = dLost + dRecv > 0 ? (dLost / (dLost + dRecv)) * 100 : 0;
+            const r = rtt ?? 0;
+            const next: 'good' | 'fair' | 'poor' = r > 0.35 || lossPct > 6 ? 'poor' : r > 0.15 || lossPct > 2 ? 'fair' : 'good';
+            setConnQuality(next);
+            if (next !== level) {
+              level = next;
+              if (next === 'poor') await tuneSenders(300_000, 15);
+              else if (next === 'fair') await tuneSenders(500_000, 20);
+              else await tuneSenders(700_000, 24);
+            }
+          } catch { /* stats unavailable */ }
+        }, 3000);
       } catch (e: any) {
         window.clearTimeout(overallTimeout);
         const name = e?.name || '';
@@ -571,7 +725,7 @@ export default function SparMatchClient() {
   }, [match, authHeaders, handleOpponentExit, cleanup, router, connectAttempt]);
 
   useEffect(() => {
-    if (phase !== 'live' || !match || typeof window === 'undefined') return;
+    if (!poseWarm || !match || typeof window === 'undefined') return;
     let cancelled = false;
 
     const startPunchTracking = async () => {
@@ -604,7 +758,7 @@ export default function SparMatchClient() {
         pose.setOptions({ modelComplexity: 0, smoothLandmarks: false, enableSegmentation: false, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
         pose.onResults((results: any) => {
           const landmarks = results.poseLandmarks;
-          if (!landmarks || landmarks.length < 17 || phase !== 'live') return;
+          if (!landmarks || landmarks.length < 17) return;
           const leftShoulder = landmarks[11], rightShoulder = landmarks[12];
           const leftElbow = landmarks[13], rightElbow = landmarks[14];
           const leftWrist = landmarks[15], rightWrist = landmarks[16];
@@ -691,7 +845,7 @@ export default function SparMatchClient() {
       try { poseRef.current?.close(); } catch { /* ignore */ }
       poseRef.current = null;
     };
-  }, [match, phase]);
+  }, [match, poseWarm]);
 
   useEffect(() => {
     if (phase !== 'live' || !match) return;
@@ -835,6 +989,11 @@ export default function SparMatchClient() {
     setMicEnabled(next);
   };
 
+  const qualityLabel =
+    connQuality === 'good' ? 'Strong signal' : connQuality === 'fair' ? 'Fair signal' : connQuality === 'poor' ? 'Weak signal' : 'HD Live';
+  const qualityDot =
+    connQuality === 'poor' ? 'bg-red-400' : connQuality === 'fair' ? 'bg-amber-400' : 'bg-emerald-400';
+
   const commandMeta = [
     { label: 'JAB', match: 'JAB', tag: 'Speed' },
     { label: 'CROSS', match: 'CROSS', tag: 'Right hand' },
@@ -868,8 +1027,8 @@ export default function SparMatchClient() {
               </span>
             </div>
             <div className="flex items-center gap-1.5 text-[8px] font-semibold uppercase tracking-widest text-white/45 truncate">
-              <span className={`h-1.5 w-1.5 rounded-full ${phase === 'live' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-              <span className="truncate">{phase === 'live' ? 'HD Live' : statusLine}</span>
+              <span className={`h-1.5 w-1.5 rounded-full ${phase === 'live' ? qualityDot : 'bg-amber-400'}`} />
+              <span className="truncate">{phase === 'live' ? qualityLabel : statusLine}</span>
             </div>
           </div>
 
@@ -902,6 +1061,19 @@ export default function SparMatchClient() {
         <section className="relative mt-2 flex-1 min-h-0 overflow-hidden rounded-[28px] border border-white/10 bg-black shadow-[0_0_45px_rgba(0,0,0,0.7)]">
           <video ref={remoteVideoRef} playsInline className="absolute inset-0 h-full w-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-b from-black/35 via-transparent to-black/65 pointer-events-none" />
+          {/* Tactical grid over the live opponent feed (same look as AI Analysis) */}
+          <svg className="pointer-events-none absolute inset-0 z-[5] h-full w-full opacity-[0.22]" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+            <defs>
+              <pattern id="spar-grid" width="48" height="48" patternUnits="userSpaceOnUse">
+                <path d="M 48 0 L 0 0 0 48" fill="none" stroke="#e2ff3b" strokeWidth="0.7" />
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#spar-grid)" />
+            <line x1="33.33%" y1="0" x2="33.33%" y2="100%" stroke="#e2ff3b" strokeWidth="0.8" strokeDasharray="4 6" opacity="0.7" />
+            <line x1="66.66%" y1="0" x2="66.66%" y2="100%" stroke="#e2ff3b" strokeWidth="0.8" strokeDasharray="4 6" opacity="0.7" />
+            <line x1="0" y1="33.33%" x2="100%" y2="33.33%" stroke="#e2ff3b" strokeWidth="0.8" strokeDasharray="4 6" opacity="0.7" />
+            <line x1="0" y1="66.66%" x2="100%" y2="66.66%" stroke="#e2ff3b" strokeWidth="0.8" strokeDasharray="4 6" opacity="0.7" />
+          </svg>
 
           {phase === 'live' && !opponentLeft && (
             <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
@@ -918,11 +1090,19 @@ export default function SparMatchClient() {
 
           <div className="absolute bottom-3 right-3 h-[31%] w-[31%] min-h-[120px] min-w-[96px] overflow-hidden rounded-2xl border-2 border-primary bg-black shadow-[0_0_22px_rgba(226,255,59,0.28)]">
             <video ref={localVideoRef} playsInline muted className="h-full w-full object-cover scale-x-[-1]" />
+            <svg className="pointer-events-none absolute inset-0 h-full w-full opacity-35" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+              <defs>
+                <pattern id="spar-grid-me" width="24" height="24" patternUnits="userSpaceOnUse">
+                  <path d="M 24 0 L 0 0 0 24" fill="none" stroke="#e2ff3b" strokeWidth="0.6" />
+                </pattern>
+              </defs>
+              <rect width="100%" height="100%" fill="url(#spar-grid-me)" />
+            </svg>
             <div className="absolute inset-x-0 top-0 flex items-center gap-1 bg-gradient-to-b from-black/75 to-transparent px-2 pb-3 pt-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-primary" />
               <span className="text-[7px] font-black uppercase tracking-widest text-primary">You</span>
             </div>
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-1.5 pt-5 text-[7px] font-black uppercase tracking-widest text-white/60">HD Live</div>
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-1.5 pt-5 text-[7px] font-black uppercase tracking-widest text-white/60">{qualityLabel}</div>
             <div className={`absolute right-1.5 top-1.5 rounded-full p-1 ${micEnabled ? 'bg-black/65 text-white/70' : 'bg-red-500/80 text-white'}`}>
               <span className="sr-only">Microphone {micEnabled ? 'on' : 'off'}</span>
               {micEnabled ? <Mic className="h-3 w-3" /> : <MicOff className="h-3 w-3" />}
@@ -942,6 +1122,10 @@ export default function SparMatchClient() {
                       exitHandledRef.current = false;
                       setStatusLine('Reconnecting…');
                       setPhase('setup');
+                      setStartAtLocal(null);
+                      setIntroVisible(true);
+                      setPoseWarm(false);
+                      setConnQuality(null);
                       setConnectAttempt((n) => n + 1);
                     }}
                     className="rounded-full bg-red-500/20 border border-red-500/50 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-red-200"
@@ -1004,6 +1188,16 @@ export default function SparMatchClient() {
         </footer>
         {showSettings && <div className="absolute bottom-20 right-3 z-30 rounded-xl border border-white/15 bg-[#161a18] p-3 text-[9px] font-black uppercase tracking-widest text-white/70 shadow-2xl"><button onClick={() => { const next = !voiceEnabledRef.current; voiceEnabledRef.current = next; setVoiceEnabled(next); if (!next) window.speechSynthesis?.cancel(); }} className="flex items-center gap-2">{voiceEnabled ? <Volume2 className="h-3.5 w-3.5 text-primary" /> : <VolumeX className="h-3.5 w-3.5 text-red-400" />} Coach voice {voiceEnabled ? 'on' : 'off'}</button></div>}
       </main>
+
+      {introVisible && !error && !opponentLeft && phase !== 'done' && (
+        <SparIntro
+          you={cards?.you ?? null}
+          opponent={cards?.opponent ?? null}
+          startAtMs={startAtLocal}
+          statusLine={statusLine}
+          onFinished={() => setIntroVisible(false)}
+        />
+      )}
     </div>
   );
 }

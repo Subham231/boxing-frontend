@@ -3,6 +3,7 @@ import { requireFirebaseUid } from '@/lib/server/require-firebase';
 import { getEntitlement } from '@/lib/server/entitlements';
 import { supabaseAdmin } from '@/lib/server/supabase-admin';
 import { shouldGateResultReveal } from '@/lib/server/spar';
+import { getFighterCard } from '@/lib/server/fighterCard';
 
 export const runtime = 'nodejs';
 
@@ -48,18 +49,37 @@ export async function GET(
     });
   }
 
+  const isA = match.player_a_uid === uid;
+  const opponentUid = isA ? match.player_b_uid : match.player_a_uid;
+  const mine = (isA ? match.player_a_result : match.player_b_result) || null;
+  const theirs = (isA ? match.player_b_result : match.player_a_result) || null;
+  const [youCard, oppCard] = await Promise.all([getFighterCard(uid), getFighterCard(opponentUid)]);
+  const { uid: _omit, ...opponent } = oppCard;
+  void _omit;
+
+  const locked = !entitlement.active;
+
+  // Server-side gate: a free fighter only ever receives the scoreboard
+  // (winner, overall score, landed count). The merit breakdown — accuracy,
+  // reflex, power, stability, form, reaction time, per-command detail — is
+  // simply not sent, so it can't be unlocked by editing the page.
+  const scoreboard = (r: any) =>
+    r ? { score: r.score ?? null, hits: r.hits ?? null, misses: r.misses ?? null, commandsResponded: r.commandsResponded ?? null } : null;
+
   return NextResponse.json({
     status: 'completed',
     gated: false,
     winnerUid: match.winner_uid,
     youWon: match.winner_uid === uid,
-    yourResult: match.player_a_uid === uid ? match.player_a_result : match.player_b_result,
-    opponentResult: match.player_a_uid === uid ? match.player_b_result : match.player_a_result,
+    yourScore: mine?.score ?? null,
+    opponentScore: theirs?.score ?? null,
+    yourResult: locked ? scoreboard(mine) : mine,
+    opponentResult: locked ? scoreboard(theirs) : theirs,
     isPaidMatch: match.is_paid_match,
     // Whether the VIEWER has an active subscription — separate from
-    // isPaidMatch (which describes the match tier both fighters were
-    // paired at). This is what actually gates the detailed merits
-    // (power/reflex/form breakdown) on the results screen.
-    isPremiumLocked: !entitlement.active,
+    // isPaidMatch (the tier both fighters were paired at). Gates the merits.
+    isPremiumLocked: locked,
+    you: youCard,
+    opponent,
   });
 }

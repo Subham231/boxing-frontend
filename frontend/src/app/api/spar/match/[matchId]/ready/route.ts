@@ -91,31 +91,40 @@ export async function POST(
   // TURN_SERVER_URL=turn:your-turn-server.com:3478
   // TURN_USERNAME=your-username
   // TURN_CREDENTIAL=your-password
+  // Each *_URL variable may hold several comma-separated URLs. For plain
+  // `turn:` URLs we also offer the TCP transport, which is what gets through
+  // mobile carriers and strict Wi-Fi that block UDP.
+  const addTurn = (urlsRaw: string, username: string, credential: string) => {
+    const base = urlsRaw.split(',').map((u) => u.trim()).filter(Boolean);
+    const urls = new Set<string>();
+    for (const u of base) {
+      urls.add(u);
+      if (/^turn:/i.test(u) && !/transport=/i.test(u)) urls.add(`${u}?transport=tcp`);
+    }
+    if (urls.size) iceServers.push({ urls: Array.from(urls), username, credential });
+  };
   const turnUrl = (process.env.TURN_SERVER_URL || '').trim();
   const turnUser = (process.env.TURN_USERNAME || '').trim();
   const turnCred = (process.env.TURN_CREDENTIAL || '').trim();
-  if (turnUrl && turnUser && turnCred) {
-    iceServers.push({
-      urls: turnUrl,
-      username: turnUser,
-      credential: turnCred,
-    });
-  }
+  if (turnUrl && turnUser && turnCred) addTurn(turnUrl, turnUser, turnCred);
 
   const turnsUrl = (process.env.TURNS_SERVER_URL || '').trim();
-  const turnsUser = (process.env.TURNS_USERNAME || '').trim();
-  const turnsCred = (process.env.TURNS_CREDENTIAL || '').trim();
-  if (turnsUrl && turnsUser && turnsCred) {
-    iceServers.push({
-      urls: turnsUrl,
-      username: turnsUser,
-      credential: turnsCred,
-    });
+  const turnsUser = (process.env.TURNS_USERNAME || turnUser).trim();
+  const turnsCred = (process.env.TURNS_CREDENTIAL || turnCred).trim();
+  if (turnsUrl && turnsUser && turnsCred) addTurn(turnsUrl, turnsUser, turnsCred);
+
+  const hasTurn = iceServers.some((s) => JSON.stringify(s.urls).includes('turn'));
+  if (!hasTurn) {
+    console.warn('[spar/ready] No TURN server configured — players behind strict NAT/mobile data will fail to connect.');
   }
 
   return NextResponse.json({
     ok: true,
     iceServers,
+    hasTurn,
+    // Server clock, so both fighters can agree on one start instant even
+    // when their device clocks differ by seconds.
+    serverNowMs: Date.now(),
     matchStartedAtMs: matchStartedAt ? new Date(matchStartedAt).getTime() : Date.now(),
   });
 }
