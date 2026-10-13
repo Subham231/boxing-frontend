@@ -14,9 +14,9 @@ export const VISION_CONFIG = {
     /** Elbow angle (deg) below which an extended arm counts as retracted. */
     elbowRetractDeg: 118,
     /** Minimum wrist speed in shoulder-widths per second to count as a strike. */
-    minWristSpeed: 0.18,
+    minWristSpeed: 0.14,
     /** Minimum elbow angular velocity (deg/s) to count as a strike. */
-    minAngularVelocity: 95,
+    minAngularVelocity: 75,
     /** Time window (ms) over which velocity/angle peaks are considered. */
     windowMs: 350,
     /** Minimum ms between two punches on the same arm. */
@@ -24,9 +24,9 @@ export const VISION_CONFIG = {
     /** Maximum ms an arm can linger in strike before auto-recovering to guard. */
     maxStrikeDwellMs: 380,
     /** Angular velocity (deg/s) threshold that marks movement initiation for true reflex timing. */
-    reflexOnsetAngularVel: 60,
+    reflexOnsetAngularVel: 50,
     /** Wrist speed (sw/s) threshold that marks movement initiation for true reflex timing. */
-    reflexOnsetWristSpeed: 0.12,
+    reflexOnsetWristSpeed: 0.10,
     /** A hook keeps the elbow bent below this angle (deg). */
     hookMaxElbowDeg: 138,
     /** Minimum lateral wrist travel (shoulder-widths) to call a hook. */

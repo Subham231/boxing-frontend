@@ -1584,7 +1584,8 @@ export default function VisionPage() {
       arm.prevAngleTs = now;
 
       // Isolated motion check: only arm's OWN kinematics trigger motion memory
-      if (arm.angularVel >= MIN_PUNCH_ANGULAR_VELOCITY || arm.wristSpeed >= MIN_WRIST_SPEED) {
+      // Accommodates punches around the boundary and subtle delivery styles
+      if (arm.angularVel >= MIN_PUNCH_ANGULAR_VELOCITY * 0.85 || arm.wristSpeed >= MIN_WRIST_SPEED * 0.85) {
         arm.lastMotionAt = now;
         lastPunchMotionAtRef.current = now;
       }
@@ -1950,8 +1951,8 @@ export default function VisionPage() {
       const dwelledInGuard = now - arm.guardEnteredAt >= Math.max(GUARD_REARM_MS, VISION_CONFIG.detection.cooldownMs);
       const windowPeak = arm.recent.reduce((m, r) => (r.angle > m ? r.angle : m), 0);
       const armHasPunchMotion =
-        (now - arm.lastMotionAt <= MOTION_MEMORY_MS) &&
-        (arm.angularVel >= MIN_PUNCH_ANGULAR_VELOCITY || arm.wristSpeed >= MIN_WRIST_SPEED);
+        (now - arm.lastMotionAt <= MOTION_MEMORY_MS) ||
+        (arm.angularVel >= MIN_PUNCH_ANGULAR_VELOCITY * 0.85 || arm.wristSpeed >= MIN_WRIST_SPEED * 0.85);
 
       if (arm.state === 'guard' && dwelledInGuard && Math.max(arm.smoothedAngle, windowPeak) > ELBOW_EXTEND_THRESHOLD) {
         if (armHasPunchMotion) {
