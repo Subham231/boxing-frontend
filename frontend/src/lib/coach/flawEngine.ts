@@ -39,6 +39,7 @@ export interface DetectedFlaw {
   recommendedFrequency: string;
   progressionTarget: string;
   sampleSize: number; // how many reps of this technique this flaw is based on
+  confidence?: number;
 }
 
 const SEVERITY_WEIGHT: Record<Severity, number> = { major: 3, moderate: 2, minor: 1 };
@@ -187,4 +188,83 @@ export function summarizeTechniques(reps: FlawEngineRep[]): TechniqueSummary[] {
   });
 
   return summaries.sort((a, b) => b.avgScore - a.avgScore);
+}
+
+export interface RootCauseDiagnosis {
+  rootCause: string;
+  label: string;
+  primaryFix: string;
+  drill: string;
+  severity: Severity;
+  confidence: number;
+  indicators: Array<{ techniqueLabel: string; metric: FlawMetric | string; measuredValue: number }>;
+}
+
+export function diagnoseRootCauses(reps: FlawEngineRep[]): RootCauseDiagnosis[] {
+  const flaws = topSessionFlaws(reps, 10);
+  if (flaws.length === 0) return [];
+
+  const diagnoses: RootCauseDiagnosis[] = [];
+
+  // Check 1: Kinetic Chain / Lower Body Initiation
+  const lowerBodyFlaws = flaws.filter((f) =>
+    f.metric === 'hipRotationScore' || f.metric === 'torsoRotationScore' || f.metric === 'footPivotScore'
+  );
+  if (lowerBodyFlaws.length > 0) {
+    diagnoses.push({
+      rootCause: 'lower_body_disconnection',
+      label: 'Arm-Dominant Punching (No Lower Body Drive)',
+      primaryFix: 'Initiate strikes from the rear ball of your foot and turn the hips before releasing the arm.',
+      drill: 'Pivot & Rotate Heavy Bag Drill — 3 sets of 20 reps',
+      severity: lowerBodyFlaws.some((f) => f.severity === 'major') ? 'major' : 'moderate',
+      confidence: Math.min(95, 70 + lowerBodyFlaws.length * 10),
+      indicators: lowerBodyFlaws.map((f) => ({
+        techniqueLabel: f.techniqueLabel,
+        metric: f.metric,
+        measuredValue: f.measuredValue,
+      })),
+    });
+  }
+
+  // Check 2: Weight Transfer & Knee Drive
+  const groundForceFlaws = flaws.filter((f) =>
+    f.metric === 'kneeDriveScore' || f.metric === 'weightTransferScore'
+  );
+  if (groundForceFlaws.length > 0) {
+    diagnoses.push({
+      rootCause: 'static_base',
+      label: 'Static Center of Mass (Weak Ground Force)',
+      primaryFix: 'Sink into your boxing stance with soft knees and push off the ground into your target.',
+      drill: 'Step & Slide Push-Off Shadowboxing — 3 rounds',
+      severity: groundForceFlaws.some((f) => f.severity === 'major') ? 'major' : 'moderate',
+      confidence: Math.min(90, 68 + groundForceFlaws.length * 10),
+      indicators: groundForceFlaws.map((f) => ({
+        techniqueLabel: f.techniqueLabel,
+        metric: f.metric,
+        measuredValue: f.measuredValue,
+      })),
+    });
+  }
+
+  // Check 3: Defense Head Displacement
+  const defenseFlaws = flaws.filter((f) =>
+    f.metric === 'headLateralScore' || f.metric === 'headDropScore'
+  );
+  if (defenseFlaws.length > 0) {
+    diagnoses.push({
+      rootCause: 'head_on_centerline',
+      label: 'Head Stuck on Centerline',
+      primaryFix: 'Keep your chin tucked and bend through your waist and knees to slip off the line of fire.',
+      drill: 'Slip Rope & Bob-and-Weave Line Drill — 3 rounds',
+      severity: defenseFlaws.some((f) => f.severity === 'major') ? 'major' : 'moderate',
+      confidence: Math.min(92, 72 + defenseFlaws.length * 10),
+      indicators: defenseFlaws.map((f) => ({
+        techniqueLabel: f.techniqueLabel,
+        metric: f.metric,
+        measuredValue: f.measuredValue,
+      })),
+    });
+  }
+
+  return diagnoses;
 }

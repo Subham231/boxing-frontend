@@ -59,16 +59,17 @@ export interface FilteredLandmark {
 }
 
 /** Below this, a landmark is treated as not genuinely observed this frame. */
-export const VISIBILITY_FLOOR = 0.4;
+export const VISIBILITY_FLOOR = VISION_CONFIG.tracking.generalVisibilityFloor;
+export const FAST_VISIBILITY_FLOOR = VISION_CONFIG.tracking.fastVisibilityFloor;
 
 /**
  * Max plausible per-second travel for a landmark, in normalized image units
- * (frame height = 1). A fast punch moves a wrist roughly 0.6-1.2 units/sec
- * on a 640x480 webcam framing; 6.0 is far above anything anatomically real,
+ * (frame height = 1). A fast punch moves a wrist roughly 0.6-1.8 units/sec
+ * on a 640x480 webcam framing; 6.5 is far above anything anatomically real,
  * so anything past it is a tracker snap (usually left/right limb swap, or
  * the model latching onto a background object), not motion.
  */
-const MAX_PLAUSIBLE_SPEED = 6.0;
+const MAX_PLAUSIBLE_SPEED = 6.5;
 
 /**
  * How long a landmark may be coasted through an occlusion before we stop
@@ -173,7 +174,11 @@ export class LandmarkFilter {
       const state = this.stateFor(i);
       const visibility = point?.visibility ?? (point ? 1 : 0);
 
-      const observed = !!point && visibility >= VISIBILITY_FLOOR &&
+      const isFastLimb = FAST_LANDMARKS.has(i);
+      const hasSpeed = Math.hypot(state.velocity.x, state.velocity.y) > 0.25;
+      const effectiveFloor = (isFastLimb && hasSpeed) ? FAST_VISIBILITY_FLOOR : VISIBILITY_FLOOR;
+
+      const observed = !!point && visibility >= effectiveFloor &&
         Number.isFinite(point.x) && Number.isFinite(point.y);
 
       if (observed && point) {
@@ -212,7 +217,7 @@ export class LandmarkFilter {
           y: smoothed.y,
           z: smoothed.z,
           visibility,
-          confidence: Math.min(1, visibility),
+          confidence: Math.min(1, Math.max(0.2, visibility)),
           predicted: false,
           stale: false,
           vx: state.velocity.x,
@@ -286,7 +291,13 @@ export class LandmarkFilter {
     }
 
     const dtSec = elapsedMs / 1000;
-    const damping = 0.55;
+    const isFastLimb = FAST_LANDMARKS.has(index);
+    const hasSpeed = Math.hypot(state.velocity.x, state.velocity.y) > 0.25;
+    // For fast moving punches during brief occlusion/motion blur (< 120ms),
+    // maintain forward momentum (damping ~0.92) so strike extension peaks aren't clipped short.
+    const damping = (isFastLimb && hasSpeed && elapsedMs < 120)
+      ? Math.max(0.65, 0.92 - (elapsedMs / 120) * 0.27)
+      : Math.max(0.35, 0.65 - (elapsedMs / MAX_PREDICTION_MS) * 0.3);
     const decay = Math.max(0, 1 - elapsedMs / MAX_PREDICTION_MS);
 
     return {
@@ -294,7 +305,7 @@ export class LandmarkFilter {
       y: state.lastGood.y + state.velocity.y * dtSec * damping,
       z: state.lastGood.z + state.velocity.z * dtSec * damping,
       visibility: Math.max(visibility, decay * 0.6),
-      confidence: Math.round(decay * 0.65 * 100) / 100,
+      confidence: Math.round(decay * (isFastLimb ? 0.75 : 0.65) * 100) / 100,
       predicted: true,
       stale: false,
       vx: state.velocity.x * damping,

@@ -766,9 +766,10 @@ export class PoseEngine {
     }
 
     // Second: drop the inference rate before dropping model quality —
-    // fewer good landmarks beats more bad ones for biomechanics.
-    if (this.profile.inferenceFps > 12) {
-      const next = Math.max(12, Math.round(this.profile.inferenceFps * 0.75));
+    // but never below minInferenceFps (20 fps), so fast jabs always have samples.
+    const minFps = VISION_CONFIG.engine.minInferenceFps;
+    if (this.profile.inferenceFps > minFps) {
+      const next = Math.max(minFps, Math.round(this.profile.inferenceFps * 0.8));
       console.warn(`[poseEngine] reducing inference rate ${this.profile.inferenceFps} -> ${next}fps`);
       this.profile = { ...this.profile, inferenceFps: next };
       this.inferenceTimes = [];

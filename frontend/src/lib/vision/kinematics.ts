@@ -71,6 +71,30 @@ export function angle2D(a: Point2D, b: Point2D, c: Point2D): number | null {
 }
 
 /**
+ * Compute joint angle, preferring 3D metric world landmarks when available and valid,
+ * falling back smoothly to 2D image plane coordinates if 3D points are degenerate or missing.
+ */
+export function jointAngleHybrid(
+  worldA?: Vec3 | null,
+  worldB?: Vec3 | null,
+  worldC?: Vec3 | null,
+  imgA?: Point2D | null,
+  imgB?: Point2D | null,
+  imgC?: Point2D | null
+): number | null {
+  if (worldA && worldB && worldC) {
+    const a3d = angle3D(worldA, worldB, worldC);
+    if (a3d !== null && Number.isFinite(a3d) && a3d >= 20 && a3d <= 178) {
+      return a3d;
+    }
+  }
+  if (imgA && imgB && imgC) {
+    return angle2D(imgA, imgB, imgC);
+  }
+  return null;
+}
+
+/**
  * Rotation of a body line (shoulders or hips) about the vertical axis, in
  * degrees, measured in the horizontal plane from world landmarks.
  *

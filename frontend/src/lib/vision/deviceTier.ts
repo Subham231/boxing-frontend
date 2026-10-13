@@ -154,7 +154,7 @@ export function profileFor(tier: DeviceTier, reason: string): TierProfile {
       return {
         tier,
         model: 'lite',
-        inferenceFps: 18,
+        inferenceFps: 22,
         enableHands: false,
         captureWidth: 480,
         captureHeight: 360,
@@ -163,7 +163,7 @@ export function profileFor(tier: DeviceTier, reason: string): TierProfile {
     case 'high':
       return {
         tier,
-        model: 'heavy',
+        model: 'full',
         inferenceFps: 30,
         enableHands: true,
         captureWidth: 960,
@@ -175,8 +175,8 @@ export function profileFor(tier: DeviceTier, reason: string): TierProfile {
       return {
         tier: 'mid',
         model: 'full',
-        inferenceFps: 24,
-        enableHands: true,
+        inferenceFps: 25,
+        enableHands: false,
         captureWidth: 640,
         captureHeight: 480,
         reason,
