@@ -593,14 +593,6 @@ export class PoseEngine {
     const now = performance.now();
     this.renderFrames++;
 
-    // Render tick fires every frame regardless of inference — this is the
-    // decoupling that keeps the overlay smooth while inference runs slower.
-    try {
-      this.opts.onRenderTick?.();
-    } catch (err) {
-      console.warn('[poseEngine] render tick threw:', err);
-    }
-
     // Rate accounting, once per second.
     if (now - this.rateWindowStart >= 1000) {
       const elapsed = (now - this.rateWindowStart) / 1000;
@@ -612,6 +604,23 @@ export class PoseEngine {
       this.emitStatus();
     }
 
+    // Inference first, THEN draw. The model call is synchronous, so drawing
+    // before it (the old order) meant a fresh pose waited a whole extra tick
+    // — 16ms on a fast phone, 60ms+ on a slow one — before it reached the
+    // screen. Gating and frames delivered to the analysis are unchanged.
+    this.maybeInfer(now);
+
+    // Render tick fires every frame regardless of inference — this is the
+    // decoupling that keeps the overlay smooth while inference runs slower.
+    try {
+      this.opts.onRenderTick?.();
+    } catch (err) {
+      console.warn('[poseEngine] render tick threw:', err);
+    }
+  };
+
+  /** Decide whether this animation frame should start an inference (unchanged gating). */
+  private maybeInfer(now: number): void {
     if (this.paused || this.recovering) return;
 
     // Watchdog: a session must never silently stop analysing. If nothing has
@@ -638,7 +647,7 @@ export class PoseEngine {
 
     this.lastInferenceAt = now;
     void this.infer(video, now);
-  };
+  }
 
   private async infer(video: HTMLVideoElement, now: number): Promise<void> {
     this.inflight = true;

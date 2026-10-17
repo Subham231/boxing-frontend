@@ -48,7 +48,8 @@ import {
 } from '@/lib/vision/kinematics';
 import { powerForRep } from '@/lib/power/powerIndex';
 import { GuardTracker, measureWristAlignment, matchHandToWrist, HAND_LM } from '@/lib/vision/guardTracker';
-import { syncCanvasToVideo, buildDrawablePose, drawOverlay, resetOverlaySmoothing } from '@/lib/vision/overlayRenderer';
+import { syncCanvasToVideo, updateCoverMap, drawOverlay, DisplayRig } from '@/lib/vision/overlayRenderer';
+import { PowerWatcher } from '@/lib/vision/powerSaver';
 import { VISION_CONFIG } from '@/lib/vision/visionConfig';
 import {
   isVerified,
@@ -646,9 +647,16 @@ export default function VisionPage() {
   // advertises biomechanical analysis.
   const [detectedStance, setDetectedStance] = useState<'ORTHODOX' | 'SOUTHPAW' | null>(null);
   const stanceVotesRef = useRef({ orthodox: 0, southpaw: 0 });
-  // Latest filtered frame, kept so the render tick can redraw the skeleton
-  // at full camera rate while inference runs slower.
+  // Latest analysis-filtered frame. No longer used for drawing (the overlay
+  // has its own low-latency path, see displayRigRef) — kept as-is so nothing
+  // on the analysis side changes.
   const latestFrameRef = useRef<{ landmarks: FilteredLandmark[]; ts: number } | null>(null);
+  // Display path: low-latency tracker + renderer memory. DISPLAY ONLY — the
+  // analysis never reads from it. See lib/vision/displayTracker.ts.
+  const displayRigRef = useRef<DisplayRig>(new DisplayRig());
+  // Battery / Save-Data watcher: makes the overlay draw cheaper (analysis unaffected).
+  const powerRef = useRef<PowerWatcher | null>(null);
+  const lastDrawAtRef = useRef(0);
   // `?debug=1` on the URL turns on the tuning HUD drawn over the video.
   const debugHudRef = useRef<boolean | null>(null);
 
@@ -830,7 +838,9 @@ export default function VisionPage() {
     // previous one's baselines, velocities or filter state.
     landmarkFilterRef.current.reset();
     guardTrackerRef.current.reset();
-    resetOverlaySmoothing();
+    displayRigRef.current.hardReset();
+    powerRef.current?.dispose();
+    powerRef.current = null;
     latestFrameRef.current = null;
     latestHandsRef.current = [];
     worldLandmarksRef.current = [];
@@ -1028,8 +1038,11 @@ export default function VisionPage() {
     }
     landmarkFilterRef.current.reset();
     guardTrackerRef.current.reset();
-    resetOverlaySmoothing();
+    displayRigRef.current.hardReset();
     latestFrameRef.current = null;
+    powerRef.current?.dispose();
+    powerRef.current = new PowerWatcher();
+    powerRef.current.start();
 
     const engine = new PoseEngine({
       onFrame: (frame) => handleEngineFrame(frame),
@@ -1144,7 +1157,7 @@ export default function VisionPage() {
     };
     movementOnsetRef.current = null;
     noseOffsetsHistoryRef.current = [];
-    resetOverlaySmoothing();
+    displayRigRef.current.hardReset();
     noseYBaselineRef.current = 0;
     peakHeadLateralRef.current = 0;
     peakHeadDropRef.current = 0;
@@ -1324,21 +1337,32 @@ export default function VisionPage() {
   const renderTick = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    const rig = displayRigRef.current;
+    const saver = powerRef.current?.saver ?? false;
+    const nowMs = performance.now();
+
+    // Power saver: repaint at ~30fps instead of every display refresh.
+    if (saver && nowMs - lastDrawAtRef.current < VISION_CONFIG.display.saverDrawIntervalMs) return;
+    lastDrawAtRef.current = nowMs;
+
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Keep the canvas backing store locked to the video's intrinsic size
-    // (camera switches, orientation changes, late metadata).
-    syncCanvasToVideo(canvas, videoRef.current);
+    // Keep the canvas backing store matched to its on-screen box (crisp, and
+    // capped for low-end GPUs), then recompute the exact video->canvas mapping
+    // that mirrors CSS object-cover (camera switches, rotation, late metadata).
+    syncCanvasToVideo(canvas, videoRef.current, saver);
+    updateCoverMap(rig.overlay, canvas, videoRef.current);
 
-    const frame = latestFrameRef.current;
-    if (!frame) {
+    // Time of the last frame that actually contained a person.
+    const lastMeasured = rig.tracker.lastMeasuredAt;
+    if (lastMeasured === 0) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       return;
     }
 
     // Hold the last pose through brief tracking loss and fade it out.
-    const ageMs = Math.max(0, performance.now() - frame.ts);
+    const ageMs = Math.max(0, nowMs - lastMeasured);
     const holdMs = VISION_CONFIG.tracking.holdPoseMs;
     if (ageMs > holdMs + 200) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1346,7 +1370,8 @@ export default function VisionPage() {
     }
     const alpha = ageMs <= holdMs ? 1 : Math.max(0, 1 - (ageMs - holdMs) / 200);
 
-    const pose = buildDrawablePose(frame.landmarks, ageMs + VISION_CONFIG.tracking.overlayLeadMs);
+    // All 33 joints, predicted to THIS instant by the low-latency tracker.
+    const pose = rig.tracker.sample(nowMs);
 
     let debugLines: string[] | undefined;
     if (debugHudRef.current === null && typeof window !== 'undefined') {
@@ -1355,21 +1380,25 @@ export default function VisionPage() {
     if (debugHudRef.current) {
       const L = armStatesRef.current.L;
       const R = armStatesRef.current.R;
+      const m = rig.overlay.map;
       debugLines = [
         `L ${L.state} ${Math.round(L.smoothedAngle)}deg ${Math.round(L.angularVel)}d/s`,
         `R ${R.state} ${Math.round(R.smoothedAngle)}deg ${Math.round(R.angularVel)}d/s`,
-        `wrist ${wristSpeedRef.current.toFixed(2)} sw/s  age ${Math.round(ageMs)}ms`,
-        `canvas ${canvas.width}x${canvas.height}  video ${videoRef.current?.videoWidth ?? 0}x${videoRef.current?.videoHeight ?? 0}`,
+        `wrist ${wristSpeedRef.current.toFixed(2)} sw/s  pose age ${Math.round(ageMs)}ms`,
+        `canvas ${canvas.width}x${canvas.height}  video ${m.vw}x${m.vh}  ui x${m.ui.toFixed(2)}`,
+        `overlay ${saver ? 'SAVER' : 'full'}  pts ${pose.filter(Boolean).length}/33`,
       ];
     }
 
-    drawOverlay(ctx, pose, canvas.width, canvas.height, {
+    drawOverlay(ctx, pose, rig.overlay, {
       striking: {
         L: armStatesRef.current.L.state === 'strike',
         R: armStatesRef.current.R.state === 'strike',
       },
       mirrored: true, // canvas and video both carry -scale-x-100
       alpha,
+      nowMs,
+      saver,
       debugLines,
     });
   };
@@ -1384,6 +1413,9 @@ export default function VisionPage() {
    */
   const handleEngineFrame = (frame: EngineFrame) => {
     const now = frame.timestampMs;
+    // Display path: raw landmarks -> low-latency tracker. Display only; the
+    // analysis below reads none of this and is unchanged.
+    displayRigRef.current.tracker.update(frame.landmarks, now);
     const dt = lastFrameTsRef.current ? now - lastFrameTsRef.current : 33;
     const rawLandmarks = frame.landmarks && frame.landmarks.length > 0 ? frame.landmarks : [];
     const { landmarks, quality } = landmarkFilterRef.current.process(rawLandmarks, now);
@@ -2992,7 +3024,7 @@ export default function VisionPage() {
     };
     movementOnsetRef.current = null;
     noseOffsetsHistoryRef.current = [];
-    resetOverlaySmoothing();
+    displayRigRef.current.reset(); // soft: camera keeps running, skeleton must not blank
     elbowStateRef.current = 'guard';
     hookValidatedThisBurstRef.current = false;
     uppercutValidatedThisBurstRef.current = false;

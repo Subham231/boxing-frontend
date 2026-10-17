@@ -94,6 +94,53 @@ export const VISION_CONFIG = {
     /** Landmarks below this confidence are drawn as faint ghosts, never totally dropped. */
     drawConfidenceFloor: 0.12,
   },
+
+  // ── Display path (skeleton + grid) ────────────────────────────────────────
+  // DISPLAY ONLY. Nothing here is read by the analysis pipeline: the analysis
+  // keeps using the heavily-smoothed LandmarkFilter stream, while the overlay
+  // uses its own low-latency tracker (see displayTracker.ts). Tuned in a
+  // simulation for: grid lag ~15-60ms (was 135-230ms), wrist overshoot ~5-6%
+  // of frame width (was 10-15%), rest jitter < 1px on the torso.
+  display: {
+    /** Torso, legs, head: calm at rest, responsive when moving. */
+    body: { gMin: 0.35, gMax: 0.95, vRef: 0.4, tauMs: 80, visFloor: 0.25, easeMs: 45, easeMix: 0.3 },
+    /** Elbows, wrists, hand points: almost no smoothing, short bounded prediction. */
+    arm: { gMin: 0.85, gMax: 1.0, vRef: 1.0, tauMs: 40, visFloor: 0.6, easeMs: 20, easeMix: 0.2 },
+    /** Visibility at/above which a measurement gets its full gain. */
+    visFullAt: 0.4,
+    /** Longest forward prediction (ms) when drawing between/after inferences. */
+    maxLeadMs: 120,
+    /** Velocity clamp (frame-heights / s) so a bad sample can't fling a joint. */
+    maxSpeed: 8,
+    /** Innovation speed above which a sample is treated as a limb swap/glitch. */
+    outlierSpeed: 9,
+    /** Consecutive outliers after which the tracker re-anchors instead of rejecting. */
+    reacquireAfterRejects: 3,
+    /** Point ages (ms): <= liveMs is live, <= predictedMs predicted, else ghost. */
+    liveMs: 130,
+    predictedMs: 350,
+    /**
+     * Each class also has easeMs: when a new inference lands, the correction
+     * between where the joint was being drawn and where it should now be is
+     * spread over ~easeMs instead of applied in one frame (no visible snap).
+     * easeMix is the fraction of that correction that is eased (the rest is
+     * shown at once, so fresh data is never hidden). Arms use a short, light
+     * one so fists stay responsive.
+     */
+    /** Time constant (ms) of the pop-free blend when a joint is re-acquired. */
+    easeOutMs: 80,
+    /** Time constant (ms) for the grid SIZE only; its position is never smoothed. */
+    gridSizeTauMs: 150,
+    /** Canvas backing-store limits: crisp on phones without a huge fill cost. */
+    dprCap: 2,
+    dprCapSaver: 1,
+    maxCanvasPixels: 1_000_000,
+    maxCanvasPixelsSaver: 450_000,
+    /** Power saver: battery at/below this level and not charging (or Save-Data). */
+    saverBatteryLevel: 0.2,
+    /** Overlay repaint interval (ms) while the power saver is active (~30fps). */
+    saverDrawIntervalMs: 33,
+  },
 } as const;
 
 export type VisionConfig = typeof VISION_CONFIG;
